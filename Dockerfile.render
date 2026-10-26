@@ -7,7 +7,11 @@
 FROM caddy:2 AS caddy
 
 FROM orthancteam/orthanc:latest
-COPY --from=caddy /usr/bin/caddy /usr/bin/caddy
+# El binario de la imagen oficial de Caddy trae un "permiso especial" (capability) para usar
+# los puertos 80/443. Render no permite ejecutar binarios con capabilities ("Operation not
+# permitted"), así que se copia el contenido sin ese permiso. Usamos el puerto 10000, no hace falta.
+COPY --from=caddy /usr/bin/caddy /tmp/caddy
+RUN cat /tmp/caddy > /usr/local/bin/caddy && chmod 755 /usr/local/bin/caddy && rm /tmp/caddy
 
 COPY informes/requirements.txt /app/informes/requirements.txt
 RUN (python3 -m pip --version || (apt-get update && apt-get install -y --no-install-recommends python3-pip)) \
