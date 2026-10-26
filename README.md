@@ -7,7 +7,12 @@ Sistema para centros de imágenes (TC, rayos X, ecografía):
 - **Informes**: plantillas por modalidad, dictado por voz o tipeo, guardado automático, firma del radiólogo, PDF con QR.
 - **Entrega al paciente con link**: el paciente ve el informe, descarga el PDF y recorre las imágenes desde el celular. Opcional: clave de 6 dígitos. Botón para enviar por WhatsApp.
 - **Rectificaciones con historial** y **auditoría** de accesos.
-- **Cinco niveles de acceso** con un solo usuario por persona para la app y el visor: administrador, radiólogo, tecnólogo, secretaría y médico derivador. Cualquiera se puede limitar a ciertos centros.
+- **Flujo con transcripcionista**: el radiólogo graba un dictado de audio, la transcripcionista lo escucha (con atajos de teclado y velocidad ajustable) y lo envía a validación, y el radiólogo valida, uno a uno o en lote.
+- **Radiólogo asignado y tiempo sin informar**, con estudios urgentes y alertas de color.
+- **Frases de hallazgos y conclusiones** con atajos (`.normal` + espacio).
+- **Correo al paciente** con el PDF adjunto (manual o automático al validar) y **registro de entregas**: retiro, CD, placas, informe impreso.
+- **Notas con adjuntos**, historial del paciente, filtros guardados, actualización automática, exportar a Excel y estadísticas.
+- **Perfiles de permisos editables** (30 permisos), con un solo usuario por persona para la app y el visor. Vienen 10 perfiles listos, iguales a los de pacs4me. Cualquier usuario se puede limitar a ciertos centros.
 
 ```
 Equipos (CT/RX/US) ──DICOM:4242──▶ Orthanc ◀── OHIF / Stone (pacs.tucentro.cl)
@@ -38,21 +43,29 @@ docker compose up -d --build
 Luego, en **Usuarios**, crea a cada persona con su rol. A los radiólogos agrégales título, registro y una imagen PNG de su firma.
 Para poner el logo en el PDF, deja un archivo `data/informes/logo.png`.
 
-## Niveles de acceso
+## Perfiles y permisos
 
-| Rol | Estudios que ve | Informa y firma | Links a pacientes | Visor (OHIF/Stone) | Subir al PACS |
-|---|---|---|---|---|---|
-| Administrador | Todos | Sí | Sí | Sí | Sí, y puede borrar |
-| Radiólogo | Todos o sus centros | Sí | Sí | Sí | No |
-| Tecnólogo | Todos o sus centros | No | No | Sí | Sí, sin borrar |
-| Secretaría | Todos o sus centros | No | Sí | No | No |
-| Médico derivador | Solo los que él solicitó | No | No | Solo sus estudios | No |
+Cada usuario tiene un **perfil** y cada perfil es una lista de permisos que el administrador edita en
+*Administración → Perfiles y permisos*. Vienen estos perfiles iniciales:
+
+| Perfil | Qué hace |
+|---|---|
+| Administradores | Todo (siempre tiene todos los permisos) |
+| Radiólogos | Dictan, informan, validan (también en lote), rectifican los suyos, entregan |
+| Transcripcionistas | Escuchan dictados, redactan y envían a validación |
+| Transcripcionistas - Avanzado | Lo anterior + asignar radiólogos, plantillas, frases, entrega |
+| Tecnólogos | Visor, descargar, subir al PACS, notas |
+| Tecnólogos de Ecografías | Como tecnólogos + dejar mediciones en borrador |
+| Técnico | Notas y datos de contacto |
+| Secretarias de Recepción | Links, correo, registro de entregas, exportar |
+| Entrega de Exámenes | Como secretarias + anular entregas |
+| Médicos de Consultas | Solo los exámenes que ellos solicitaron, ya validados, con visor |
 
 - **Centros**: en cada usuario puedes indicar qué centros ve (según el nombre de institución que envía el equipo). Vacío = todos.
-- **Médico derivador**: se indica su nombre tal como aparece en el campo "médico solicitante" de los exámenes (ej. `ROJAS CAROLINA`). Ve solo esos estudios, y el informe solo cuando está firmado.
-- Borradores: solo administradores y radiólogos ven informes no firmados.
-- Un solo login: Caddy consulta a la app antes de cada acceso al PACS, así que el visor respeta los mismos permisos. Para que funcione, `COOKIE_DOMAIN` debe ser el dominio común (ej. `.tucentro.cl`).
-- Todo acceso al visor de un usuario restringido, permitido o denegado, queda en Auditoría.
+- **Médicos de consulta**: se indica su nombre como aparece en el campo «médico solicitante» de los exámenes (ej. `CAROLINA ROJAS`).
+- Solo quien tiene «Ver informes no validados» ve borradores; el resto ve el informe recién cuando está validado.
+- El visor (OHIF/Stone) usa el mismo login y respeta estos permisos. `COOKIE_DOMAIN` debe ser el dominio común (ej. `.tucentro.cl`).
+
 
 ## Instalación en la nube
 
@@ -79,17 +92,31 @@ de su centro; casi todos los equipos lo tienen en su configuración.
 
 ## Uso diario
 
-1. El estudio llega solo a **Estudios** (estado *Pendiente*). Se puede filtrar por fecha, modalidad y estado, o buscar por nombre, RUT (con o sin puntos) o N° de examen.
-2. El radiólogo abre el estudio, mira las imágenes (visor rápido u OHIF), inserta una plantilla y **dicta (F2)** o escribe. Se guarda solo.
-3. **Firmar y validar** bloquea el informe, genera el PDF y crea el link del paciente.
-4. Secretaría copia el link o lo envía por WhatsApp. Puede desactivarlo o generar uno nuevo.
-5. Para corregir un informe firmado: **Rectificar informe** (con motivo). La versión anterior queda en el historial y el PDF indica la nueva versión.
+1. El estudio llega solo a **Estudios** (*Pendiente*). Quien tiene el permiso lo **asigna** a un radiólogo y puede marcarlo **urgente** (uno a uno o seleccionando varios).
+2. El radiólogo abre el estudio y **graba un dictado** (botón «● Grabar dictado»), o escribe o dicta directamente el texto.
+3. La transcripcionista ve el dictado en **Dictados**, lo toma y lo transcribe. Usa F4 para reproducir o pausar, F3 y F6 para retroceder o adelantar 3 segundos, la velocidad ajustable, plantillas y frases. Luego lo **envía a validación**.
+4. El radiólogo ve sus pendientes en **Por validar**, revisa y **valida**. También puede validar varios a la vez desde la lista.
+5. Al validar se bloquea el informe, se genera el PDF (con firma e iniciales de transcripción) y el link del paciente. Si está activado y el paciente tiene correo, se envía automáticamente.
+6. Secretaría entrega: link, WhatsApp, correo con PDF y registro de retiro, CD o placas.
+7. Para corregir un informe validado: **Rectificar** (queda en el historial). Para retirarlo por error grave: **Invalidar** (desactiva el link).
 
-## Dictado por voz
+Los tiempos en rojo indican estudios que llevan más horas sin informar que lo configurado en *Administración → Correo y ajustes*.
 
-- **Por defecto** usa el reconocimiento de voz de Chrome/Edge (gratis, sin instalar nada). Ojo: el audio lo procesa el servicio de voz del navegador (Google/Microsoft).
-- **Recomendado para producción**: un servidor Whisper propio (mejor con vocabulario médico y el audio no sale de tu servidor). Cualquier servidor con API compatible con OpenAI sirve (por ejemplo *faster-whisper* / *speaches*). Configura `WHISPER_URL` en `.env`.
-- Comandos: "punto", "coma", "dos puntos", "punto y coma", "punto aparte", "nueva línea", "abrir/cerrar paréntesis".
+## Correo a pacientes
+
+Configura en `.env` el servidor de correo saliente (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`,
+`SMTP_FROM`). Con Gmail o Google Workspace usa `smtp.gmail.com`, puerto 587 y una *contraseña de aplicación*.
+El asunto y el texto del correo se editan en *Administración → Correo y ajustes*, y ahí se activa el envío automático al validar.
+
+
+## Dictado
+
+Hay dos formas, y se pueden usar juntas:
+
+- **Dictado de audio para transcripción** (como en pacs4me): se graba en el navegador y queda guardado en el estudio. Funciona en Chrome, Edge, Firefox y Safari.
+- **Voz a texto** (F2): el texto aparece mientras hablas. Por defecto usa el reconocimiento de Chrome/Edge (el audio lo procesa Google/Microsoft). Comandos: "punto", "coma", "dos puntos", "punto aparte", "nueva línea".
+- **Servidor Whisper propio (opcional, recomendado)**: si configuras `WHISPER_URL`, la voz a texto se procesa en tu servidor y además cada dictado de audio trae un **borrador automático** que la transcripcionista solo corrige (botón «Usar texto automático»).
+
 
 ## Respaldos (importante)
 
@@ -136,15 +163,21 @@ docker-compose.yml   Orthanc + PostgreSQL + app + Caddy
 Caddyfile            HTTPS
 .env.example         Configuración
 informes/            App de informes (Flask + SQLite)
-  app.py             Rutas y lógica
+  app.py             Punto de entrada
+  core.py            Configuración, sesión y utilidades
+  permisos.py        Catálogo de permisos y perfiles iniciales
+  servicios.py       Validar, enviar correo, entregas, asignación
+  rutas_*.py         Pantallas (trabajo, estudio, público, PACS, administración)
   orthanc.py         Cliente del PACS
-  pdf.py             PDF del informe
-  db.py              Base de datos y plantillas iniciales
+  pdf.py / correo.py PDF del informe y envío por correo
+  db.py              Base de datos, migraciones, plantillas y frases iniciales
   templates/ static/ Interfaz
 dev/mock_orthanc.py  PACS simulado para pruebas
+dev/prueba_completa.py  Prueba automática de todo el flujo (97 verificaciones)
+dev/smtp_falso.py    Servidor de correo falso para las pruebas
 ```
 
 ## Próximos pasos posibles
 
 Agendamiento y admisión con worklist DICOM (los equipos toman los datos del paciente), firma electrónica avanzada,
-envío automático del link por correo/WhatsApp, frases rápidas y macros de dictado, informes comparativos con estudios previos.
+envío automático por WhatsApp Business, informes comparativos lado a lado, visores de escritorio (Weasis/RadiAnt).

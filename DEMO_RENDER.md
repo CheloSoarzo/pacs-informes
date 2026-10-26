@@ -28,18 +28,22 @@ ficticios) y un usuario de prueba por cada rol.
 
 Todos usan la **misma clave que pusiste en ADMIN_PASSWORD**:
 
-| Usuario | Rol | Qué verás |
+| Usuario | Perfil | Qué verás |
 |---|---|---|
-| `admin` | Administrador | Todo, más Usuarios, Auditoría y el explorador del PACS |
-| `radiologo` | Radiólogo | Informar, dictar, firmar y generar links |
-| `radiologo_insi` | Radiólogo limitado a INSI | Solo los estudios del centro INSI |
-| `tecnologo` | Tecnólogo | Ver estudios y subir DICOM desde "PACS / subir estudios" |
-| `secretaria` | Secretaría | Informes firmados, PDF y links, sin visor |
-| `derivador` | Médico derivador (Dra. Rojas) | Solo los 2 exámenes que ella solicitó, cuando estén firmados |
+| `admin` | Administradores | Todo: Administración (usuarios, perfiles, plantillas, frases, ajustes, auditoría) |
+| `radiologo` | Radiólogos | Grabar dictados, informar, validar (también en lote), entregar |
+| `radiologo_insi` | Radiólogos, solo INSI | Solo los estudios del centro INSI |
+| `transcripcionista` | Transcripcionistas | Cola de dictados, reproductor con atajos, enviar a validación |
+| `tecnologo` | Tecnólogos | Ver estudios, notas y subir DICOM desde «PACS / subir» |
+| `secretaria` | Secretarias de Recepción | Informes validados, PDF, link, correo y registro de entregas |
+| `derivador` | Médicos de Consultas (Dra. Rojas) | Solo los exámenes que ella solicitó, cuando están validados |
 
-Prueba sugerida: entra como `radiologo`, informa la TC de cerebro dictando con F2 (usa Chrome),
-fírmala, copia el link del paciente y ábrelo en tu celular. Luego entra como `derivador` y revisa
-que solo ve sus exámenes.
+Prueba sugerida del flujo completo:
+1. `admin`: en Estudios selecciona la TC de cerebro, asígnala a Dr. Andrés López y márcala urgente.
+2. `radiologo`: abre la TC, presiona «● Grabar dictado», habla unos segundos, termina y envíala a transcripción.
+3. `transcripcionista`: en **Dictados** toma el dictado, escúchalo (F4), inserta una plantilla y frases (`.normal` + espacio) y envíalo a validación.
+4. `radiologo`: en **Por validar** revisa y valida. Abre el link del paciente en tu celular.
+5. `secretaria`: registra la entrega (retiro, CD). `derivador`: comprueba que solo ve lo suyo.
 
 ## 4. Subir tus propios estudios de prueba
 
