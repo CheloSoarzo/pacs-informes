@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block titulo %}Frases{% endblock %}
+{% macro form_frase(f=None) %}
+{% set k = f.id if f else 'n' %}
+<form method="post">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  {% if f %}<input type="hidden" name="id" value="{{ f.id }}">{% endif %}
+  <div class="grid3">
+    <div><label for="f-tipo-{{ k }}">Tipo</label>
+      <select id="f-tipo-{{ k }}" name="tipo">
+        <option value="hallazgo" {{ 'selected' if not f or f.tipo == 'hallazgo' }}>Hallazgo</option>
+        <option value="conclusion" {{ 'selected' if f and f.tipo == 'conclusion' }}>Conclusión</option>
+      </select></div>
+    <div><label for="f-titulo-{{ k }}">Título (cómo aparece en la lista)</label><input type="text" id="f-titulo-{{ k }}" name="titulo" value="{{ f.titulo if f }}" required></div>
+    <div><label for="f-atajo-{{ k }}">Atajo (se escribe con punto: .atajo)</label><input type="text" id="f-atajo-{{ k }}" name="atajo" value="{{ f.atajo if f }}" maxlength="20" placeholder="ej: quiste"></div>
+  </div>
+  <label>Modalidades (sin marcar = todas)</label>
+  {% set sel = (f.modalidad.split(',') if f and f.modalidad else []) %}
+  <div class="checks">{% for m in mods_disp %}<label><input type="checkbox" name="modalidad" value="{{ m }}" {{ 'checked' if m in sel }}> {{ m }}</label>{% endfor %}</div>
+  <label for="f-texto-{{ k }}">Texto</label>
+  <textarea id="f-texto-{{ k }}" name="texto" rows="3" required>{{ f.texto if f }}</textarea>
+  <p class="peq suave">Usa ___ para los datos a completar (medidas, segmento, lado). Al insertar la frase, el cursor queda en el primero.</p>
+  <button class="btn prim" type="submit">{{ 'Guardar' if f else 'Crear frase' }}</button>
+</form>
+{% if f %}
+<form method="post" onsubmit="return confirm('¿Eliminar esta frase?')" class="mt">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="borrar" value="{{ f.id }}">
+  <button class="btn peligro" type="submit">Eliminar</button>
+</form>
+{% endif %}
+{% endmacro %}
+{% block contenido %}
+<h1>Frases de hallazgos y conclusiones</h1>
+<p class="suave">Aparecen en el botón «Frases» del editor, filtradas por la modalidad del estudio. Con el atajo, basta escribir por ejemplo <b>.normal</b> y un espacio.</p>
+{% for f in frases %}
+  <details class="edit">
+    <summary>{{ 'Conclusión' if f.tipo == 'conclusion' else 'Hallazgo' }} · {{ f.titulo }}
+      <span class="suave peq">{% if f.atajo %}· .{{ f.atajo }}{% endif %} · {{ f.modalidad or 'todas' }}</span></summary>
+    {{ form_frase(f) }}
+  </details>
+{% endfor %}
+<details class="edit">
+  <summary>+ Nueva frase</summary>
+  {{ form_frase() }}
+</details>
+{% endblock %}

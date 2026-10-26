@@ -8,24 +8,41 @@
 </head>
 <body>
 {% if usuario %}
+{% set ep = request.endpoint %}
 <header class="barra">
   <a class="marca" href="{{ url_for('lista') }}">{{ centro }}</a>
   <nav>
-    <a href="{{ url_for('lista') }}" class="{{ 'activo' if request.endpoint in ('lista','estudio') }}">Estudios</a>
-    {% if puede('plantillas') %}
-    <a href="{{ url_for('admin_plantillas') }}" class="{{ 'activo' if request.endpoint == 'admin_plantillas' }}">Plantillas</a>
+    <a href="{{ url_for('lista') }}" class="{{ 'activo' if ep in ('lista','estudio') and request.args.get('estado') != 'por_validar' }}">Estudios</a>
+    {% if puede('transcribir') or puede('dictar') or puede('dictados_escuchar') %}
+      {% set nd = n_dictados() %}
+      <a href="{{ url_for('cola_dictados') }}" class="{{ 'activo' if ep == 'cola_dictados' }}">Dictados{% if nd %} <span class="contador">{{ nd }}</span>{% endif %}</a>
     {% endif %}
-    {% if puede('explorador_pacs') %}
-    <a href="{{ PACS_PUBLIC_URL }}/ui/app/" target="_blank" rel="noopener">PACS / subir estudios ↗</a>
+    {% if puede('firmar') %}
+      <a href="{{ url_for('lista', estado='por_validar', asignado='mio', desde='2000-01-01') }}" class="{{ 'activo' if ep == 'lista' and request.args.get('estado') == 'por_validar' }}">Por validar</a>
     {% endif %}
-    {% if puede('usuarios') %}
-    <a href="{{ url_for('admin_usuarios') }}" class="{{ 'activo' if request.endpoint == 'admin_usuarios' }}">Usuarios</a>
-    <a href="{{ url_for('admin_auditoria') }}" class="{{ 'activo' if request.endpoint == 'admin_auditoria' }}">Auditoría</a>
+    {% if puede('estadisticas') %}
+      <a href="{{ url_for('estadisticas') }}" class="{{ 'activo' if ep == 'estadisticas' }}">Estadísticas</a>
+    {% endif %}
+    {% if puede('pacs_subir') %}
+      <a href="{{ PACS_PUBLIC_URL }}/ui/app/" target="_blank" rel="noopener">PACS / subir ↗</a>
+    {% endif %}
+    {% if puede('usuarios') or puede('plantillas') or puede('frases') or puede('ajustes') or puede('auditoria') %}
+    <details class="menu {{ 'activo' if ep and ep.startswith('admin_') }}">
+      <summary>Administración</summary>
+      <div class="menu-lista">
+        {% if puede('usuarios') %}<a href="{{ url_for('admin_usuarios') }}">Usuarios</a>
+        <a href="{{ url_for('admin_perfiles') }}">Perfiles y permisos</a>{% endif %}
+        {% if puede('plantillas') %}<a href="{{ url_for('admin_plantillas') }}">Plantillas de informe</a>{% endif %}
+        {% if puede('frases') %}<a href="{{ url_for('admin_frases') }}">Frases (hallazgos y conclusiones)</a>{% endif %}
+        {% if puede('ajustes') %}<a href="{{ url_for('admin_ajustes') }}">Correo y ajustes</a>{% endif %}
+        {% if puede('auditoria') %}<a href="{{ url_for('admin_auditoria') }}">Auditoría</a>{% endif %}
+      </div>
+    </details>
     {% endif %}
   </nav>
   <div class="quien">
-    <a href="{{ url_for('cuenta') }}" style="color:inherit">{{ usuario.nombre }} · {{ ROLES[usuario.rol] }}</a>
-    <form method="post" action="{{ url_for('logout') }}" style="margin:0">
+    <a href="{{ url_for('cuenta') }}">{{ usuario.nombre }} <span class="perfil">{{ usuario.perfil_nombre }}</span></a>
+    <form method="post" action="{{ url_for('logout') }}">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
       <button type="submit">Salir</button>
     </form>
@@ -34,10 +51,14 @@
 {% endif %}
 <main class="contenido">
   {% for cat, msg in get_flashed_messages(with_categories=true) %}
-    <div class="flash {{ cat }}">{{ msg }}</div>
+    <div class="flash {{ cat }}" role="status">{{ msg }}</div>
   {% endfor %}
   {% block contenido %}{% endblock %}
 </main>
+<script>
+  // Cierra el menú de administración al hacer clic fuera
+  document.addEventListener('click', e => document.querySelectorAll('details.menu[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; }));
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

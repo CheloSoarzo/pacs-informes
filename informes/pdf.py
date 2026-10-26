@@ -129,10 +129,12 @@ def generar_pdf(informe, firmante, centro, url_verificacion=None, logo_path=None
         validado = f"Informe validado electrónicamente el {informe.get('firmado_en_txt', '')}"
         if informe.get("version", 1) > 1:
             validado += f" · Versión {informe['version']} (rectifica versiones anteriores)"
+        if informe.get("transcriptor_iniciales"):
+            validado += f" · Transcripción: {informe['transcriptor_iniciales']}"
         bloque_firma.append(Spacer(1, 2))
         bloque_firma.append(Paragraph(escape(validado), ESTILOS["pie"]))
     else:
-        bloque_firma.append(Paragraph("<b>BORRADOR — informe no validado</b>", ESTILOS["firma"]))
+        bloque_firma.append(Paragraph("<b>BORRADOR · informe no validado</b>", ESTILOS["firma"]))
 
     celdas = [[bloque_firma, ""]]
     if url_verificacion:

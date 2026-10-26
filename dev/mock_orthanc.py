@@ -39,6 +39,12 @@ ESTUDIOS = {
                    paciente=dict(PatientName="MUÑOZ^CATALINA", PatientID="21.111.222-K",
                                  PatientBirthDate="20230105", PatientSex="F"),
                    series=[("CR", "PA", 1), ("CR", "LAT", 1)]),
+    "est-ct-previo": dict(StudyInstanceUID="1.2.826.0.1.4", StudyDate=d(200), StudyTime="080000",
+                   StudyDescription="TC CEREBRO SIN CONTRASTE", AccessionNumber="A0900",
+                   InstitutionName="CENTRO NORTE", ReferringPhysicianName="ROJAS^CAROLINA",
+                   paciente=dict(PatientName="PEREZ SOTO^JUAN ANDRES", PatientID="12.345.678-5",
+                                 PatientBirthDate="19700312", PatientSex="M"),
+                   series=[("CT", "Axial 5mm", 10)]),
 }
 
 SERIES, INSTANCIAS = {}, {}

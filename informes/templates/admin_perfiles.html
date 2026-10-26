@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block titulo %}Perfiles y permisos{% endblock %}
+{% macro form_perfil(p=None) %}
+{% set actuales = (p.permisos.split(',') if p else []) %}
+{% set es_admin = p and p.clave == 'admin' %}
+<form method="post">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  {% if p %}<input type="hidden" name="id" value="{{ p.id }}">{% endif %}
+  <div class="grid2">
+    <div><label for="p-nombre-{{ p.id if p else 'n' }}">Nombre</label><input type="text" id="p-nombre-{{ p.id if p else 'n' }}" name="nombre" value="{{ p.nombre if p }}" required></div>
+    <div><label for="p-desc-{{ p.id if p else 'n' }}">Descripción</label><input type="text" id="p-desc-{{ p.id if p else 'n' }}" name="descripcion" value="{{ p.descripcion if p }}"></div>
+  </div>
+  {% if es_admin %}
+    <p class="peq aviso-info">El perfil de administradores siempre tiene todos los permisos.</p>
+  {% else %}
+  <div class="permisos">
+    {% for grupo, items in grupos %}
+      <fieldset>
+        <legend>{{ grupo }}</legend>
+        {% for clave, desc in items %}
+          <label class="permiso"><input type="checkbox" name="permisos" value="{{ clave }}" {{ 'checked' if clave in actuales }}> {{ desc }}</label>
+        {% endfor %}
+      </fieldset>
+    {% endfor %}
+  </div>
+  <label class="permiso destacado"><input type="checkbox" name="solo_solicitados" {{ 'checked' if p and p.solo_solicitados }}>
+    Solo ve los exámenes que el usuario solicitó (médicos de consulta), y solo cuando el informe está validado</label>
+  {% endif %}
+  <div class="fila">
+    <button class="btn prim" type="submit">{{ 'Guardar perfil' if p else 'Crear perfil' }}</button>
+  </div>
+</form>
+{% if p %}
+<div class="fila acciones-perfil">
+  <form method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="duplicar" value="{{ p.id }}">
+    <button class="btn" type="submit">Duplicar</button></form>
+  {% if not es_admin %}
+  <form method="post" onsubmit="return confirm('¿Eliminar el perfil {{ p.nombre }}?')"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="borrar" value="{{ p.id }}">
+    <button class="btn peligro" type="submit">Eliminar</button></form>
+  {% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+{% block contenido %}
+<div class="cab-pagina">
+  <h1>Perfiles y permisos</h1>
+  <a class="btn" href="{{ url_for('admin_usuarios') }}">← Usuarios</a>
+</div>
+<p class="suave">Cada usuario tiene un perfil. Al cambiar los permisos de un perfil, cambian para todos sus usuarios.</p>
+{% for p in perfiles %}
+  <details class="edit">
+    <summary>{{ p.nombre }} <span class="suave peq">· {{ p.n_usuarios }} usuario(s) · {{ p.descripcion }}</span></summary>
+    {{ form_perfil(p) }}
+  </details>
+{% endfor %}
+<details class="edit">
+  <summary>+ Nuevo perfil</summary>
+  {{ form_perfil() }}
+</details>
+{% endblock %}

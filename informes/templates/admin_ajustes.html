@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block titulo %}Correo y ajustes{% endblock %}
+{% block contenido %}
+<h1>Correo y ajustes</h1>
+<form method="post" class="ajustes">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+
+  <div class="panel">
+    <h2>Correo al paciente</h2>
+    {% if correo_ok %}
+      <p class="peq aviso-ok">Correo saliente configurado ({{ smtp_host }}).</p>
+    {% else %}
+      <p class="peq aviso-info">El correo saliente aún no está configurado. Lo configura quien administra el servidor (variables SMTP_HOST, SMTP_USER, SMTP_PASSWORD y SMTP_FROM). Mientras tanto puedes dejar listo el texto.</p>
+    {% endif %}
+    <label for="correo_asunto">Asunto</label>
+    <input type="text" id="correo_asunto" name="correo_asunto" value="{{ v.correo_asunto }}">
+    <label for="correo_cuerpo">Mensaje</label>
+    <textarea id="correo_cuerpo" name="correo_cuerpo" rows="10">{{ v.correo_cuerpo }}</textarea>
+    <p class="peq suave">Campos disponibles: {paciente} {examen} {fecha} {link} {clave} {linea_clave} {centro} {telefono_centro}. El PDF del informe va adjunto.</p>
+    <label class="permiso"><input type="checkbox" name="envio_auto_email" {{ 'checked' if v.envio_auto_email == '1' }}>
+      Enviar el correo automáticamente al validar el informe, si el estudio tiene el correo del paciente</label>
+  </div>
+
+  <div class="panel">
+    <h2>Alertas de tiempo sin informar</h2>
+    <div class="grid2">
+      <div><label for="horas_alerta">Estudios normales: alerta en rojo después de (horas)</label>
+        <input type="number" id="horas_alerta" name="horas_alerta" min="1" max="720" value="{{ v.horas_alerta or 24 }}"></div>
+      <div><label for="horas_alerta_urgente">Estudios urgentes: alerta en rojo después de (horas)</label>
+        <input type="number" id="horas_alerta_urgente" name="horas_alerta_urgente" min="1" max="72" value="{{ v.horas_alerta_urgente or 2 }}"></div>
+    </div>
+    <p class="peq suave">Se cuenta desde que el estudio llega o desde que se asigna al radiólogo. Antes del rojo, a la mitad del plazo, se marca en amarillo.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Integración con otros sistemas</h2>
+    <label for="webhook_url">URL que recibe un aviso cada vez que se valida un informe (opcional)</label>
+    <input type="url" id="webhook_url" name="webhook_url" value="{{ v.webhook_url }}" placeholder="https://agenda.tucentro.cl/api/informe-validado">
+    <p class="peq suave">Se envía un POST con JSON: estudio_uid, accession, paciente_id, paciente_nombre, fecha_estudio, validado_en, version y link_paciente. Sirve para conectar tu agenda o sistema de caja.</p>
+  </div>
+
+  <button class="btn prim" type="submit">Guardar ajustes</button>
+</form>
+{% endblock %}

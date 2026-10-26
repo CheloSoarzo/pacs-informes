@@ -4,45 +4,47 @@
 <form method="post" enctype="multipart/form-data">
   <input type="hidden" name="csrf" value="{{ csrf_token() }}">
   {% if u %}<input type="hidden" name="id" value="{{ u.id }}">{% endif %}
-  <div class="grid2" style="margin:10px 0">
-    {% if not u %}<div><label>Usuario (para ingresar)</label><input type="text" name="usuario" required></div>{% endif %}
-    <div><label>Nombre completo (aparece en el informe)</label><input type="text" name="nombre" value="{{ u.nombre if u }}" required></div>
-    <div><label>Rol</label><select name="rol">
-      {% for k, v in ROLES.items() %}<option value="{{ k }}" {{ 'selected' if (u and u.rol == k) or (not u and k == 'radiologo') }}>{{ v }}</option>{% endfor %}
-    </select></div>
-    <div><label>Título</label><input type="text" name="titulo" value="{{ u.titulo if u }}" placeholder="Médico Radiólogo"></div>
-    <div><label>RUT / Registro profesional</label><input type="text" name="registro" value="{{ u.registro if u }}" placeholder="RUT 12.345.678-9 · Reg. SIS 123456"></div>
-    <div><label>{{ 'Nueva clave (dejar vacío para no cambiar)' if u else 'Clave (mínimo 10 caracteres)' }}</label>
-      <input type="password" name="clave" autocomplete="new-password" {{ '' if u else 'required' }}></div>
-    <div><label>Centros que puede ver (separados por coma; vacío = todos)</label>
-      <input type="text" name="centros" value="{{ u.centros if u }}" list="centros-conocidos" placeholder="Todos los centros"></div>
-    <div><label>Solo derivador: su nombre como aparece en los exámenes</label>
-      <input type="text" name="filtro_solicitante" value="{{ u.filtro_solicitante if u }}" placeholder="Ej: ROJAS CAROLINA"></div>
-    <div><label>Imagen de firma (solo radiólogos; PNG con fondo transparente)</label><input type="file" name="firma" accept=".png,.jpg,.jpeg">
+  <div class="grid2">
+    {% if not u %}<div><label for="u-usuario-n">Usuario (para ingresar)</label><input type="text" id="u-usuario-n" name="usuario" required pattern="[a-zA-Z0-9._\-]{3,40}" autocomplete="off"></div>{% endif %}
+    <div><label for="u-nombre-{{ u.id if u else 'n' }}">Nombre completo (aparece en el informe)</label>
+      <input type="text" id="u-nombre-{{ u.id if u else 'n' }}" name="nombre" value="{{ u.nombre if u }}" required></div>
+    <div><label for="u-perfil-{{ u.id if u else 'n' }}">Perfil</label>
+      <select id="u-perfil-{{ u.id if u else 'n' }}" name="perfil_id" required>
+        {% for p in perfiles %}<option value="{{ p.id }}" {{ 'selected' if (u and u.perfil_id == p.id) or (not u and p.clave == 'radiologos') }}>{{ p.nombre }}</option>{% endfor %}
+      </select></div>
+    <div><label for="u-titulo-{{ u.id if u else 'n' }}">Título</label>
+      <input type="text" id="u-titulo-{{ u.id if u else 'n' }}" name="titulo" value="{{ u.titulo if u }}" placeholder="Médico Radiólogo"></div>
+    <div><label for="u-reg-{{ u.id if u else 'n' }}">RUT / Registro profesional</label>
+      <input type="text" id="u-reg-{{ u.id if u else 'n' }}" name="registro" value="{{ u.registro if u }}" placeholder="RUT 12.345.678-9 · Reg. SIS 123456"></div>
+    <div><label for="u-clave-{{ u.id if u else 'n' }}">{{ 'Nueva clave (dejar vacío para no cambiar)' if u else 'Clave (mínimo 10 caracteres)' }}</label>
+      <input type="password" id="u-clave-{{ u.id if u else 'n' }}" name="clave" autocomplete="new-password" minlength="10" {{ '' if u else 'required' }}></div>
+    <div><label for="u-centros-{{ u.id if u else 'n' }}">Centros que puede ver (separados por coma; vacío = todos)</label>
+      <input type="text" id="u-centros-{{ u.id if u else 'n' }}" name="centros" value="{{ u.centros if u }}" list="centros-conocidos" placeholder="Todos los centros"></div>
+    <div><label for="u-sol-{{ u.id if u else 'n' }}">Médico de consulta: su nombre como aparece en los exámenes</label>
+      <input type="text" id="u-sol-{{ u.id if u else 'n' }}" name="filtro_solicitante" value="{{ u.filtro_solicitante if u }}" list="solicitantes-conocidos" placeholder="Ej: CAROLINA ROJAS"></div>
+    <div><label for="u-firma-{{ u.id if u else 'n' }}">Imagen de firma (radiólogos; PNG con fondo transparente)</label>
+      <input type="file" id="u-firma-{{ u.id if u else 'n' }}" name="firma" accept=".png,.jpg,.jpeg">
       {% if u and u.firma_png %}<span class="peq suave">Firma cargada ✓</span>{% endif %}</div>
   </div>
-  <div class="checks" style="margin-bottom:10px"><label><input type="checkbox" name="activo" {{ 'checked' if not u or u.activo }}> Activo</label></div>
+  <div class="checks"><label><input type="checkbox" name="activo" {{ 'checked' if not u or u.activo }}> Activo</label></div>
   <button class="btn prim" type="submit">{{ 'Guardar cambios' if u else 'Crear usuario' }}</button>
 </form>
 {% endmacro %}
 {% block contenido %}
-<h1>Usuarios</h1>
-<div class="panel" style="margin-bottom:14px">
-  <h2>Niveles de acceso</h2>
-  <div class="tabla-wrap" style="box-shadow:none">
-  <table class="lista">
-    {% for k, v in ROLES.items() %}<tr><td style="width:190px"><b>{{ v }}</b></td><td class="peq">{{ DESCRIPCION_ROLES[k] }}</td></tr>{% endfor %}
-  </table></div>
-  <p class="peq suave" style="margin-bottom:0">Cualquier usuario se puede limitar a ciertos centros. El médico derivador ve solo los exámenes donde figura como solicitante.</p>
+<div class="cab-pagina">
+  <h1>Usuarios</h1>
+  <a class="btn" href="{{ url_for('admin_perfiles') }}">Perfiles y permisos →</a>
 </div>
+<p class="suave">Lo que puede hacer cada usuario depende de su perfil. Además, cualquier usuario se puede limitar a ciertos centros.</p>
 <datalist id="centros-conocidos">{% for c in centros_conocidos %}<option value="{{ c }}">{% endfor %}</datalist>
+<datalist id="solicitantes-conocidos">{% for c in solicitantes_conocidos %}<option value="{{ c }}">{% endfor %}</datalist>
 {% for u in usuarios %}
   <details class="edit">
-    <summary>{{ u.nombre }} <span class="suave peq">· {{ u.usuario }} · {{ ROLES[u.rol] }}{% if u.centros %} · {{ u.centros }}{% endif %}{% if not u.activo %} · inactivo{% endif %}</span></summary>
+    <summary>{{ u.nombre }} <span class="suave peq">· {{ u.usuario }} · {{ u.perfil_nombre or 'sin perfil' }}{% if u.centros %} · {{ u.centros }}{% endif %}{% if not u.activo %} · inactivo{% endif %}</span></summary>
     {{ form_usuario(u) }}
   </details>
 {% endfor %}
-<details class="edit" open style="margin-top:16px">
+<details class="edit" open>
   <summary>+ Nuevo usuario</summary>
   {{ form_usuario() }}
 </details>

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block titulo %}Dictados{% endblock %}
+{% block contenido %}
+<div class="cab-pagina">
+  <h1>Dictados</h1>
+  <div class="segmentos" role="tablist">
+    <a href="{{ url_for('cola_dictados', ver='pendientes') }}" class="{{ 'activo' if ver == 'pendientes' }}">Por transcribir</a>
+    {% if puede('dictar') %}<a href="{{ url_for('cola_dictados', ver='mios') }}" class="{{ 'activo' if ver == 'mios' }}">Mis dictados</a>{% endif %}
+    <a href="{{ url_for('cola_dictados', ver='hechos') }}" class="{{ 'activo' if ver == 'hechos' }}">Transcritos</a>
+  </div>
+</div>
+{% if ver == 'pendientes' %}<p class="suave">Ordenados por prioridad y antigüedad. Abre el estudio para escuchar el audio y escribir el informe; al terminar, envíalo a validación.</p>{% endif %}
+<div class="tabla-wrap">
+<table class="lista">
+  <thead><tr><th>Dictado</th><th>Paciente</th><th class="ocultar-movil">Examen</th><th class="ocultar-movil">Centro</th>
+    <th>Radiólogo</th><th>Duración</th><th>{{ 'Espera' if ver == 'pendientes' else 'Estado' }}</th><th class="ocultar-movil">Transcriptor</th><th></th></tr></thead>
+  <tbody>
+  {% for d in dictados %}
+    <tr class="{{ 'fila-urgente' if d.prioridad == 'urgente' and d.estado in ('pendiente','tomado') }}">
+      <td class="peq nowrap">{{ d.creado|fh }}</td>
+      <td>{% if d.prioridad == 'urgente' and d.estado in ('pendiente','tomado') %}<span class="tag-urgente">URGENTE</span>{% endif %}
+        <span class="paciente">{{ d.paciente_nombre }}</span><br><span class="mono peq suave">{{ d.paciente_id }}</span></td>
+      <td class="ocultar-movil peq">{% for m in (d.modalidad or '').split('/') if m %}<span class="mod">{{ m }}</span> {% endfor %}{{ d.descripcion }}</td>
+      <td class="ocultar-movil peq suave">{{ d.institucion }}</td>
+      <td class="peq">{{ d.dictado_por }}</td>
+      <td class="peq mono">{{ d.duracion|mmss }}</td>
+      <td class="peq">{% if ver == 'pendientes' %}{{ d.espera }}{% else %}
+        <span class="badge {{ 'dictado' if d.estado in ('pendiente','tomado') else ('firmado' if d.estado_informe == 'firmado' else 'por_validar') }}">
+          {{ {'pendiente':'Por transcribir','tomado':'En transcripción','transcrito':('Validado' if d.estado_informe == 'firmado' else 'Por validar')}[d.estado] }}</span>{% endif %}</td>
+      <td class="ocultar-movil peq">{{ d.transcriptor or '—' }}</td>
+      <td class="nowrap">
+        {% if ver == 'pendientes' and puede('transcribir') and not d.transcriptor_id %}
+          <form method="post" action="{{ url_for('tomar_dictado', did=d.id) }}" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+            <button class="btn prim" type="submit">Tomar y transcribir</button></form>
+        {% else %}
+          <a class="btn {{ 'prim' if ver == 'pendientes' and d.transcriptor_id == usuario.id }}" href="{{ url_for('estudio', estudio_id=d.estudio_id) }}#informe">Abrir</a>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="9" class="suave vacio-tabla">{{ 'No hay dictados por transcribir.' if ver == 'pendientes' else 'Sin dictados.' }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

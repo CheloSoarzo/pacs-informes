@@ -3,7 +3,7 @@
 {% block contenido %}
 <div class="panel" style="max-width:460px">
   <h1>Mi cuenta</h1>
-  <p class="suave">{{ usuario.nombre }} · {{ ROLES[usuario.rol] }}</p>
+  <p class="suave">{{ usuario.nombre }} · {{ usuario.perfil_nombre }}</p>
   <form method="post">
     <input type="hidden" name="csrf" value="{{ csrf_token() }}">
     <div style="margin-bottom:10px"><label for="actual">Clave actual</label>

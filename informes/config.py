@@ -36,6 +36,15 @@ class Config:
     WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "whisper-1")
     WHISPER_API_KEY = os.environ.get("WHISPER_API_KEY", "")
 
+    # Correo saliente (para enviar informes a pacientes)
+    SMTP_HOST = os.environ.get("SMTP_HOST", "")
+    SMTP_PORT = int(os.environ.get("SMTP_PORT", "587") or 587)
+    SMTP_USER = os.environ.get("SMTP_USER", "")
+    SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+    SMTP_FROM = os.environ.get("SMTP_FROM", "") or os.environ.get("CENTRO_EMAIL", "")
+    SMTP_SSL = _bool(os.environ.get("SMTP_SSL"), False)        # true para puerto 465
+    SMTP_STARTTLS = _bool(os.environ.get("SMTP_STARTTLS"), True)
+
     SECURE_COOKIES = PUBLIC_BASE_URL.startswith("https://")
     # Dominio común para compartir la sesión entre la app y el PACS (ej: .tucentro.cl)
     COOKIE_DOMAIN = os.environ.get("COOKIE_DOMAIN", "") or None

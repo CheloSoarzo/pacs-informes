@@ -123,6 +123,16 @@ class Orthanc:
         resultado.sort(key=lambda e: (e["fecha_raw"], e["hora_raw"]), reverse=True)
         return resultado
 
+    def estudios_de_paciente(self, paciente_id, limite=50):
+        """Todos los estudios con exactamente este PatientID (historial)."""
+        res = self.post_json("/tools/find", {
+            "Level": "Study", "Query": {"PatientID": paciente_id}, "Expand": True,
+            "RequestedTags": ["ModalitiesInStudy"], "Limit": limite,
+        }) or []
+        out = [self._resumen(e) for e in res]
+        out.sort(key=lambda e: (e["fecha_raw"], e["hora_raw"]), reverse=True)
+        return out
+
     def estudio(self, estudio_id):
         est = self.get_json(f"/studies/{estudio_id}")
         if not est:

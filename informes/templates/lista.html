@@ -1,58 +1,137 @@
 {% extends "base.html" %}
 {% block titulo %}Estudios{% endblock %}
 {% block contenido %}
-<form class="filtros" method="get">
-  <div><label for="q">Paciente, RUT o N° examen</label>
-    <input type="search" id="q" name="q" value="{{ q }}" placeholder="Buscar en todo el archivo…"></div>
-  <div><label for="desde">Desde</label><input type="date" id="desde" name="desde" value="{{ desde }}"></div>
-  <div><label for="hasta">Hasta</label><input type="date" id="hasta" name="hasta" value="{{ hasta }}"></div>
+<form class="filtros" method="get" id="form-filtros">
+  <div class="f-q"><label for="q">Paciente, RUT o N° examen</label>
+    <input type="search" id="q" name="q" value="{{ f.q }}" placeholder="Buscar en todo el archivo…"></div>
+  <div><label for="desde">Desde</label><input type="date" id="desde" name="desde" value="{{ f.desde }}"></div>
+  <div><label for="hasta">Hasta</label><input type="date" id="hasta" name="hasta" value="{{ f.hasta }}"></div>
   <div><label for="modalidad">Modalidad</label>
     <select id="modalidad" name="modalidad">
-      {% for v, t in modalidades %}<option value="{{ v }}" {{ 'selected' if v == modalidad }}>{{ t }}</option>{% endfor %}
+      {% for v, t in modalidades %}<option value="{{ v }}" {{ 'selected' if v == f.modalidad }}>{{ t }}</option>{% endfor %}
     </select></div>
   <div><label for="estado">Estado</label>
     <select id="estado" name="estado">
       <option value="">Todos</option>
-      <option value="pendiente" {{ 'selected' if estado == 'pendiente' }}>Pendientes</option>
-      <option value="borrador" {{ 'selected' if estado == 'borrador' }}>En borrador</option>
-      <option value="firmado" {{ 'selected' if estado == 'firmado' }}>Firmados</option>
+      {% for k, v in ESTADOS.items() %}
+        {% if k in ('pendiente','firmado') or puede('ver_borrador') %}<option value="{{ k }}" {{ 'selected' if f.estado == k }}>{{ v }}</option>{% endif %}
+      {% endfor %}
     </select></div>
-  <div><button class="btn prim" type="submit">Buscar</button></div>
+  <div><label for="asignado">Radiólogo</label>
+    <select id="asignado" name="asignado">
+      <option value="">Todos</option>
+      {% if puede('firmar') %}<option value="mio" {{ 'selected' if f.asignado == 'mio' }}>Asignados a mí</option>{% endif %}
+      <option value="sin" {{ 'selected' if f.asignado == 'sin' }}>Sin asignar</option>
+      {% for r in radiologos %}<option value="{{ r.id }}" {{ 'selected' if f.asignado == r.id|string }}>{{ r.nombre }}</option>{% endfor %}
+    </select></div>
+  <div><label for="prioridad">Prioridad</label>
+    <select id="prioridad" name="prioridad">
+      <option value="">Todas</option>
+      <option value="urgente" {{ 'selected' if f.prioridad == 'urgente' }}>Solo urgentes</option>
+    </select></div>
+  <div class="f-btn"><button class="btn prim" type="submit">Buscar</button></div>
 </form>
 
-<div class="chips">
-  <span class="chip">{{ estudios|length }} estudios</span>
-  <span class="chip">Pendientes: {{ conteo.pendiente }}</span>
-  <span class="chip">Borrador: {{ conteo.borrador }}</span>
-  <span class="chip">Firmados: {{ conteo.firmado }}</span>
-  {% if q %}<span class="chip activo">Búsqueda en todas las fechas · <a href="{{ url_for('lista') }}" style="color:#fff">quitar</a></span>{% endif %}
+<div class="barra-lista">
+  <div class="chips">
+    <span class="chip"><b>{{ estudios|length }}</b> estudios</span>
+    {% for k, v in ESTADOS.items() if conteo[k] %}
+      <a class="chip estado-{{ k }}" href="?{{ query_sin_estado }}{{ '&' if query_sin_estado }}estado={{ k }}">{{ v }} <b>{{ conteo[k] }}</b></a>
+    {% endfor %}
+    {% if f.q %}<span class="chip activo">Búsqueda en todas las fechas · <a href="{{ url_for('lista') }}">quitar</a></span>{% endif %}
+  </div>
+  <div class="herramientas">
+    {% for fl in filtros %}
+      <span class="chip filtro-guardado"><a href="?{{ fl.query }}">{{ fl.nombre }}</a>
+        <form method="post" action="{{ url_for('borrar_filtro', fid=fl.id) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button type="submit" title="Eliminar filtro {{ fl.nombre }}" aria-label="Eliminar filtro {{ fl.nombre }}">×</button></form></span>
+    {% endfor %}
+    <details class="pop">
+      <summary class="btn peq">Guardar filtro</summary>
+      <form method="post" action="{{ url_for('guardar_filtro') }}" class="pop-cuerpo">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="query" value="{{ query_actual }}">
+        <label for="nombre-filtro">Nombre del filtro</label>
+        <input type="text" id="nombre-filtro" name="nombre" maxlength="40" placeholder="Ej: TC urgentes Rancagua" required>
+        <button class="btn prim" type="submit">Guardar</button>
+      </form>
+    </details>
+    {% if puede('exportar') %}<a class="btn peq" href="{{ url_for('exportar') }}?{{ query_actual }}">Exportar a Excel</a>{% endif %}
+    <label class="refresco"><span>Actualizar</span>
+      <select id="refresco" aria-label="Actualizar la lista automáticamente">
+        <option value="0">No</option><option value="30">cada 30 s</option><option value="60">cada 1 min</option><option value="300">cada 5 min</option>
+      </select></label>
+  </div>
 </div>
+
+<form method="post" action="{{ url_for('acciones_masivas') }}" id="form-acciones">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <input type="hidden" name="volver" value="{{ query_actual }}">
+  <input type="hidden" name="confirmado" id="confirmado" value="0">
+  {% if puede('asignar') or puede('firmar_lote') %}
+  <div class="acciones-lote" id="acciones-lote" hidden>
+    <span id="n-sel">0 seleccionados</span>
+    {% if puede('asignar') %}
+      <select name="radiologo_id" aria-label="Radiólogo a asignar">
+        <option value="">— Quitar asignación —</option>
+        {% for r in radiologos %}<option value="{{ r.id }}">{{ r.nombre }}</option>{% endfor %}
+      </select>
+      <button class="btn" name="accion" value="asignar">Asignar</button>
+      <button class="btn" name="accion" value="urgente">Marcar urgente</button>
+      <button class="btn" name="accion" value="normal">Quitar urgente</button>
+    {% endif %}
+    {% if puede('firmar') and puede('firmar_lote') %}
+      <button class="btn ok" type="button" id="btn-validar-lote">Validar seleccionados</button>
+    {% endif %}
+  </div>
+  <div class="confirmar-lote" id="confirmar-lote" hidden>
+    <p>Vas a validar y firmar con tu nombre <b id="n-validar">0</b> informe(s) en estado «Por validar». Quedarán disponibles para los pacientes.</p>
+    <button class="btn ok" name="accion" value="validar" id="btn-confirmar-lote">Sí, validar</button>
+    <button class="btn" type="button" id="btn-cancelar-lote">Cancelar</button>
+  </div>
+  {% endif %}
 
 <div class="tabla-wrap">
 <table class="lista">
   <thead><tr>
+    {% if puede('asignar') or puede('firmar_lote') %}<th class="col-sel"><input type="checkbox" id="sel-todos" aria-label="Seleccionar todos"></th>{% endif %}
     <th>Fecha</th><th>Paciente</th><th class="ocultar-movil">RUT / ID</th><th>Mod.</th>
-    <th class="ocultar-movil">Examen</th><th class="ocultar-movil">Institución</th><th>Estado</th><th></th>
+    <th class="ocultar-movil">Examen</th><th class="ocultar-movil">Centro</th>
+    <th>Estado</th><th class="ocultar-movil">Radiólogo</th><th class="ocultar-movil" title="Sin informar: desde la llegada o asignación. Validados: tiempo total hasta la validación.">Tiempo</th><th></th>
   </tr></thead>
   <tbody>
   {% for e in estudios %}
-    <tr>
-      <td class="peq">{{ e.fecha }}<br><span class="suave">{{ e.hora }}</span></td>
-      <td><span class="paciente">{{ e.paciente_nombre or '(sin nombre)' }}</span><br>
-        <span class="suave peq">{{ e.edad }}{% if e.paciente_sexo %} · {{ e.paciente_sexo }}{% endif %}</span></td>
+    <tr class="{{ 'fila-urgente' if e.urgente and e.estado != 'firmado' }}">
+      {% if puede('asignar') or puede('firmar_lote') %}<td class="col-sel"><input type="checkbox" name="ids" value="{{ e.id }}" data-estado="{{ e.estado }}" aria-label="Seleccionar {{ e.paciente_nombre }}"></td>{% endif %}
+      <td class="peq nowrap">{{ e.fecha }}<br><span class="suave">{{ e.hora }}</span></td>
+      <td>
+        {% if e.urgente and e.estado != 'firmado' %}<span class="tag-urgente">URGENTE</span>{% endif %}
+        <span class="paciente">{{ e.paciente_nombre or '(sin nombre)' }}</span>
+        <br><span class="suave peq">{{ e.edad }}{% if e.paciente_sexo %} · {{ e.paciente_sexo }}{% endif %}
+        {% if e.notas %} · <span title="Notas">📝 {{ e.notas }}</span>{% endif %}
+        {% if e.entregas %} · <span title="Entregas registradas">📦 {{ e.entregas }}</span>{% endif %}</span>
+      </td>
       <td class="ocultar-movil mono peq">{{ e.paciente_id }}</td>
       <td>{% for m in e.modalidad.split('/') if m %}<span class="mod">{{ m }}</span> {% endfor %}</td>
       <td class="ocultar-movil peq">{{ e.descripcion }}</td>
       <td class="ocultar-movil peq suave">{{ e.institucion }}</td>
-      <td><span class="badge {{ e.estado }}">{{ {'pendiente':'Pendiente','borrador':'Borrador','firmado':'Firmado'}[e.estado] }}</span>
+      <td><span class="badge {{ e.estado }}">{{ ESTADOS[e.estado] }}</span>
         {% if e.firmante %}<br><span class="suave peq">{{ e.firmante }}</span>{% endif %}</td>
-      <td><a class="btn {{ 'prim' if e.estado != 'firmado' }}" href="{{ url_for('estudio', estudio_id=e.id) }}">
-        {{ 'Ver' if e.estado == 'firmado' else 'Informar' }}</a></td>
+      <td class="ocultar-movil peq">{{ e.radiologo or '—' }}</td>
+      <td class="ocultar-movil peq nowrap tiempo {{ e.alerta }}">{{ e.horas|dur if e.horas is not none else '' }}</td>
+      <td><a class="btn {{ 'prim' if e.estado != 'firmado' and (puede('redactar') or puede('firmar')) }}" href="{{ url_for('estudio', estudio_id=e.id) }}">
+        {% if e.estado == 'firmado' or not (puede('redactar') or puede('firmar') or puede('dictar')) %}Ver
+        {% elif e.estado == 'por_validar' and puede('firmar') %}Validar
+        {% elif e.estado == 'dictado' and puede('transcribir') %}Transcribir
+        {% else %}Informar{% endif %}</a></td>
     </tr>
   {% else %}
-    <tr><td colspan="8" class="suave" style="text-align:center;padding:30px">No hay estudios con estos filtros.</td></tr>
+    <tr><td colspan="11" class="suave vacio-tabla">No hay estudios con estos filtros.</td></tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='lista.js') }}"></script>
 {% endblock %}

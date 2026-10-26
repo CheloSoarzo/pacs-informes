@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block titulo %}Estadísticas{% endblock %}
+{% macro barras(filas, etiqueta='') %}
+{% set maximo = (filas|map(attribute=1)|max) if filas else 1 %}
+<div class="barras">
+  {% for nombre, n in filas %}
+    <div class="barra-fila"><span class="barra-nombre">{{ nombre }}</span>
+      <span class="barra-pista"><span class="barra-relleno" style="width: {{ (n / maximo * 100)|round(1) }}%"></span></span>
+      <span class="barra-n">{{ n }}</span></div>
+  {% else %}<p class="suave peq">Sin datos en el período.</p>{% endfor %}
+</div>
+{% endmacro %}
+{% block contenido %}
+<div class="cab-pagina">
+  <h1>Estadísticas</h1>
+  <form method="get" class="fila">
+    <div><label for="desde">Desde</label><input type="date" id="desde" name="desde" value="{{ desde }}"></div>
+    <div><label for="hasta">Hasta</label><input type="date" id="hasta" name="hasta" value="{{ hasta }}"></div>
+    <button class="btn prim" type="submit">Ver</button>
+  </form>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><span>Estudios</span><b>{{ resumen.estudios }}</b></div>
+  <div class="kpi"><span>Validados</span><b>{{ resumen.validados }}</b></div>
+  <div class="kpi"><span>Sin validar</span><b>{{ resumen.pendientes }}</b></div>
+  <div class="kpi"><span>Dictados por transcribir ahora</span><b>{{ resumen.dictados_pendientes }}</b></div>
+  <div class="kpi"><span>Tiempo típico hasta validar</span><b>{{ resumen.mediana_horas|dur if resumen.mediana_horas is not none else '—' }}</b></div>
+</div>
+
+<div class="grid2 estad">
+  <div class="panel"><h2>Por modalidad</h2>{{ barras(por_mod) }}</div>
+  <div class="panel"><h2>Por centro</h2>{{ barras(por_centro) }}</div>
+  <div class="panel">
+    <h2>Radiólogos</h2>
+    <div class="tabla-wrap sin-borde">
+    <table class="lista compacta">
+      <thead><tr><th>Radiólogo</th><th>Validados</th><th>Tiempo típico</th></tr></thead>
+      {% for r in radiologos %}<tr><td>{{ r.nombre }}</td><td class="num">{{ r.n }}</td><td class="num">{{ r.mediana|dur if r.mediana is not none else '—' }}</td></tr>
+      {% else %}<tr><td colspan="3" class="suave peq">Sin informes validados en el período.</td></tr>{% endfor %}
+    </table></div>
+    <p class="peq suave">Tiempo típico: mediana desde la hora del examen hasta la validación.</p>
+  </div>
+  <div class="panel"><h2>Transcripcionistas</h2>{{ barras(transcriptores) }}</div>
+</div>
+<div class="panel">
+  <h2>Estudios por día</h2>
+  {{ barras(por_dia|map('list')|list) }}
+</div>
+{% endblock %}

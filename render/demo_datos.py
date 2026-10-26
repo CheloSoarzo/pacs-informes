@@ -191,18 +191,24 @@ def crear_usuarios():
     if not clave:
         return
     usuarios = [
-        ("radiologo", "Dr. Andrés López", "radiologo", "Médico Radiólogo", "Reg. SIS 000000 (demo)", "", ""),
-        ("tecnologo", "TM Daniela Fuentes", "tecnologo", "Tecnóloga Médica", "", "", ""),
-        ("secretaria", "Ana Secretaría", "secretaria", "", "", "", ""),
-        ("derivador", "Dra. Carolina Rojas", "derivador", "Médico Cirujano", "", "", "ROJAS CAROLINA"),
-        ("radiologo_insi", "Dra. Paula Reyes", "radiologo", "Médico Radiólogo", "", "INSI", ""),
+        # usuario, nombre, perfil, título, registro, centros, filtro_solicitante
+        ("radiologo", "Dr. Andrés López", "radiologos", "Médico Radiólogo", "Reg. SIS 000000 (demo)", "", ""),
+        ("radiologo_insi", "Dra. Paula Reyes", "radiologos", "Médico Radiólogo", "Reg. SIS 000001 (demo)", "INSI", ""),
+        ("transcripcionista", "Carla Muñoz", "transcripcionistas", "", "", "", ""),
+        ("tecnologo", "TM Daniela Fuentes", "tecnologos", "Tecnóloga Médica", "", "", ""),
+        ("secretaria", "Ana Secretaría", "secretarias", "", "", "", ""),
+        ("derivador", "Dra. Carolina Rojas", "medicos_consulta", "Médico Cirujano", "", "", "CAROLINA ROJAS"),
     ]
     con = sqlite3.connect(DB, timeout=30)
     for u in usuarios:
+        fila = con.execute("SELECT id FROM perfiles WHERE clave=?", (u[2],)).fetchone()
+        if not fila:
+            continue
         con.execute(
-            "INSERT OR IGNORE INTO usuarios (usuario, nombre, rol, titulo, registro, centros, filtro_solicitante, "
-            "clave_hash, creado) VALUES (?,?,?,?,?,?,?,?,?)",
-            u + (generate_password_hash(clave), datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            "INSERT OR IGNORE INTO usuarios (usuario, nombre, perfil_id, rol, titulo, registro, centros, "
+            "filtro_solicitante, clave_hash, creado) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (u[0], u[1], fila[0], u[2], u[3], u[4], u[5], u[6], generate_password_hash(clave),
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     con.commit()
     con.close()
     print("[demo] usuarios de prueba listos")

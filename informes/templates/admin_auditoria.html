@@ -2,7 +2,12 @@
 {% block titulo %}Auditoría{% endblock %}
 {% block contenido %}
 <h1>Auditoría</h1>
-<p class="suave">Últimos 500 eventos: ingresos, estudios abiertos, firmas, links y descargas.</p>
+<form method="get" class="fila buscar-auditoria">
+  <div class="crece"><label for="q">Buscar por usuario, acción o detalle (RUT, ID de estudio…)</label>
+    <input type="search" id="q" name="q" value="{{ q }}"></div>
+  <button class="btn prim" type="submit">Buscar</button>
+</form>
+<p class="suave">Últimos 500 eventos: ingresos, estudios abiertos, dictados, validaciones, links, correos, entregas y descargas.</p>
 <div class="tabla-wrap">
 <table class="lista">
   <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Detalle</th><th>IP</th></tr></thead>
