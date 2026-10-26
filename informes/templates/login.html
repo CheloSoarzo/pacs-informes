@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block titulo %}Ingresar{% endblock %}
+{% block contenido %}
+<div class="login panel">
+  <h1>{{ centro }}</h1>
+  <form method="post">
+    <div class="campo"><label for="usuario">Usuario</label>
+      <input type="text" id="usuario" name="usuario" autocomplete="username" autofocus required></div>
+    <div class="campo"><label for="clave">Clave</label>
+      <input type="password" id="clave" name="clave" autocomplete="current-password" required></div>
+    <button class="btn prim" style="width:100%;justify-content:center" type="submit">Ingresar</button>
+  </form>
+</div>
+{% endblock %}

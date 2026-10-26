@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block titulo %}{{ est.paciente_nombre }}{% endblock %}
+{% block contenido %}
+{% set firmado = inf and inf.estado == 'firmado' %}
+{% set puede_editar = puede('informar') and not firmado %}
+<div class="cabecera-estudio">
+  <div>
+    <a href="{{ url_for('lista') }}" class="peq">← Volver a estudios</a>
+    <h1>{{ est.paciente_nombre or '(sin nombre)' }}
+      {% if inf and (firmado or puede('ver_borrador')) %}<span class="badge {{ inf.estado }}">{{ 'Firmado' if firmado else 'Borrador' }}</span>{% else %}<span class="badge pendiente">Pendiente</span>{% endif %}
+    </h1>
+  </div>
+  <div class="acciones">
+    {% if puede('visor') %}
+    <a class="btn prim" href="{{ visor_ohif }}" target="_blank" rel="noopener">Abrir en visor OHIF ↗</a>
+    <a class="btn" href="{{ visor_stone }}" target="_blank" rel="noopener">Visor Stone ↗</a>
+    {% endif %}
+    {% if puede('descargar') %}<a class="btn" href="{{ url_for('estudio_zip', estudio_id=est.id) }}">Descargar DICOM</a>{% endif %}
+  </div>
+</div>
+
+<div class="panel" style="margin-bottom:16px">
+  <div class="datos">
+    <div><span>RUT / ID</span><b class="mono">{{ est.paciente_id }}</b></div>
+    <div><span>Edad · Sexo</span>{{ est.edad or '—' }} · {{ est.paciente_sexo or '—' }}</div>
+    <div><span>Fecha examen</span>{{ est.fecha }} {{ est.hora }}</div>
+    <div><span>Modalidad</span>{{ est.modalidad }}</div>
+    <div><span>Examen</span>{{ est.descripcion or '—' }}</div>
+    <div><span>N° examen</span>{{ est.accession or '—' }}</div>
+    <div><span>Institución</span>{{ est.institucion or '—' }}</div>
+    <div><span>Series</span>{{ series|length }}</div>
+  </div>
+</div>
+
+<div class="estudio">
+  <section>
+    <div class="visor" id="visor"></div>
+    <p class="suave peq">Vista rápida. Para mediciones, ventana/nivel y reconstrucciones usa el visor OHIF.</p>
+  </section>
+
+  <section class="panel">
+    {% if puede_editar %}
+      <div class="editor-barra">
+        <button class="btn prim" id="btn-dictar" type="button">🎙 Dictar (F2)</button>
+        <select id="plantilla" aria-label="Plantilla">
+          <option value="">Insertar plantilla…</option>
+          {% for p in plantillas %}<option value="{{ p.id }}">{{ p.nombre }}</option>{% endfor %}
+        </select>
+        <span class="estado-guardado" id="estado-guardado">{% if inf %}Guardado {{ inf.actualizado|fh }}{% endif %}</span>
+      </div>
+      <div style="margin-bottom:10px"><label for="solicitante">Médico solicitante</label>
+        <input type="text" id="solicitante" value="{{ inf.solicitante if inf else est.solicitante }}"></div>
+      <label for="cuerpo">Informe</label>
+      <textarea id="cuerpo" spellcheck="true" lang="es" placeholder="Escribe o dicta el informe, o inserta una plantilla.">{{ inf.cuerpo if inf else '' }}</textarea>
+      <div class="interino" id="interino" aria-live="polite"></div>
+      <div class="fila" style="justify-content:space-between;flex-wrap:wrap">
+        <button class="btn" id="btn-previa" type="button">Vista previa PDF</button>
+        <button class="btn ok" id="btn-firmar" type="button">✓ Firmar y validar</button>
+      </div>
+      <div class="ayuda-dictado">
+        Dictado: di <b>"punto"</b>, <b>"coma"</b>, <b>"dos puntos"</b>, <b>"punto aparte"</b> o <b>"nueva línea"</b>.
+        F2 activa/detiene el dictado y Ctrl+S guarda. El texto se guarda solo mientras escribes.
+        {% if not whisper %}<br>El dictado usa el reconocimiento de voz de Chrome/Edge.{% endif %}
+      </div>
+      <form id="form-previa" method="post" action="{{ url_for('vista_previa', estudio_id=est.id) }}" target="_blank" hidden>
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="cuerpo"><input type="hidden" name="solicitante">
+      </form>
+
+    {% elif inf and (firmado or puede('ver_borrador')) %}
+      <div class="fila" style="justify-content:space-between;margin-bottom:10px;flex-wrap:wrap">
+        <div class="peq suave">
+          {% if firmado %}Firmado por <b>{{ firmante.nombre if firmante }}</b> el {{ inf.firmado_en|fh }}{% if inf.version > 1 %} · versión {{ inf.version }}{% endif %}
+          {% else %}Borrador en edición por el radiólogo{% endif %}
+        </div>
+        <a class="btn" href="{{ url_for('informe_pdf', inf_id=inf.id) }}" target="_blank">Ver PDF</a>
+      </div>
+      <div class="texto-informe">{{ inf.cuerpo }}</div>
+    {% else %}
+      <p class="suave">Este estudio aún no tiene informe.</p>
+    {% endif %}
+
+    {% if firmado and puede('links') %}
+      <div class="caja-link">
+        <h2>Entrega al paciente</h2>
+        {% if link %}
+          <div class="fila"><input type="text" id="link-url" readonly value="{{ config.PUBLIC_BASE_URL }}/r/{{ link.token }}">
+            <button class="btn" id="btn-copiar" type="button">Copiar</button></div>
+          {% if link.clave %}<p class="peq">Clave de acceso: <b class="mono" id="link-clave">{{ link.clave }}</b></p>{% endif %}
+          <p class="peq suave">Vigente hasta {{ link.expira|fh }} · abierto {{ link.accesos }} {{ 'vez' if link.accesos == 1 else 'veces' }}</p>
+        {% else %}
+          <div class="fila"><input type="text" id="link-url" readonly value="" placeholder="Sin link activo">
+            <button class="btn" id="btn-copiar" type="button">Copiar</button></div>
+          {% if requiere_clave %}<p class="peq">Clave de acceso: <b class="mono" id="link-clave"></b></p>{% endif %}
+        {% endif %}
+        <div class="acciones">
+          <a class="btn" id="btn-whatsapp" href="#" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+          <a class="btn" href="{{ url_for('informe_pdf', inf_id=inf.id) }}" target="_blank">Ver / imprimir PDF</a>
+          <button class="btn" id="btn-nuevo-link" type="button">{{ 'Generar link nuevo' if link else 'Generar link' }}</button>
+          {% if link %}
+          <form method="post" action="{{ url_for('revocar_link', inf_id=inf.id) }}" style="margin:0"
+                onsubmit="return confirm('¿Desactivar el link? El paciente no podrá abrirlo.')">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+            <button class="btn peligro" type="submit">Desactivar link</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+
+    {% endif %}
+    {% if firmado %}
+      {% if usuario.rol == 'admin' or (usuario.rol == 'radiologo' and inf.firmado_por == usuario.id) %}
+      <details class="edit" style="margin-top:12px">
+        <summary>Rectificar informe</summary>
+        <form method="post" action="{{ url_for('reabrir', estudio_id=est.id) }}">
+          <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+          <label for="motivo" style="margin-top:8px">Motivo de la rectificación</label>
+          <input type="text" id="motivo" name="motivo" required placeholder="Ej: corrección de lateralidad">
+          <p class="peq suave">La versión firmada actual queda guardada en el historial. El link del paciente mostrará el informe "en revisión" hasta que se vuelva a firmar.</p>
+          <button class="btn peligro" type="submit">Reabrir para corregir</button>
+        </form>
+      </details>
+      {% endif %}
+    {% endif %}
+
+    {% if versiones and puede('ver_borrador') %}
+      <details class="edit" style="margin-top:12px">
+        <summary>Historial de versiones ({{ versiones|length }})</summary>
+        {% for v in versiones %}
+          <div style="border-top:1px solid var(--borde);padding-top:8px;margin-top:8px">
+            <div class="peq suave">Versión {{ v.version }} · firmada por {{ v.firmante }} el {{ v.firmado_en|fh }} · reabierta {{ v.reabierto_en|fh }}: {{ v.motivo }}</div>
+            <div class="texto-informe peq">{{ v.cuerpo }}</div>
+          </div>
+        {% endfor %}
+      </details>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% set firmado = inf and inf.estado == 'firmado' %}
+{% set puede_editar = puede('informar') and not firmado %}
+<script src="{{ url_for('static', filename='visor.js') }}"></script>
+<script src="{{ url_for('static', filename='editor.js') }}" defer></script>
+<script>
+  new VisorSimple(document.getElementById('visor'),
+    {{ url_for('series_json', estudio_id=est.id)|tojson }}, '/img/');
+  window.EDITOR = {
+    csrf: {{ csrf_token()|tojson }},
+    editable: {{ puede_editar|tojson }},
+    whisper: {{ whisper|tojson }},
+    centro: {{ centro|tojson }},
+    hayLink: {{ (link is not none)|tojson }},
+    plantillas: {{ plantillas|map(attribute='cuerpo')|list|tojson }},
+    plantillaIds: {{ plantillas|map(attribute='id')|list|tojson }},
+    urls: {
+      guardar: {{ url_for('guardar', estudio_id=est.id)|tojson }},
+      firmar: {{ url_for('firmar', estudio_id=est.id)|tojson }},
+      transcribir: {{ url_for('transcribir')|tojson }},
+      link: {{ (url_for('crear_link', inf_id=inf.id) if inf else '')|tojson }}
+    }
+  };
+  // Mapa id → texto de plantilla
+  window.EDITOR.plantillas = Object.fromEntries(window.EDITOR.plantillaIds.map((id, i) => [String(id), window.EDITOR.plantillas[i]]));
+</script>
+{% endblock %}

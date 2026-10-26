@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block titulo %}Estudios{% endblock %}
+{% block contenido %}
+<form class="filtros" method="get">
+  <div><label for="q">Paciente, RUT o N° examen</label>
+    <input type="search" id="q" name="q" value="{{ q }}" placeholder="Buscar en todo el archivo…"></div>
+  <div><label for="desde">Desde</label><input type="date" id="desde" name="desde" value="{{ desde }}"></div>
+  <div><label for="hasta">Hasta</label><input type="date" id="hasta" name="hasta" value="{{ hasta }}"></div>
+  <div><label for="modalidad">Modalidad</label>
+    <select id="modalidad" name="modalidad">
+      {% for v, t in modalidades %}<option value="{{ v }}" {{ 'selected' if v == modalidad }}>{{ t }}</option>{% endfor %}
+    </select></div>
+  <div><label for="estado">Estado</label>
+    <select id="estado" name="estado">
+      <option value="">Todos</option>
+      <option value="pendiente" {{ 'selected' if estado == 'pendiente' }}>Pendientes</option>
+      <option value="borrador" {{ 'selected' if estado == 'borrador' }}>En borrador</option>
+      <option value="firmado" {{ 'selected' if estado == 'firmado' }}>Firmados</option>
+    </select></div>
+  <div><button class="btn prim" type="submit">Buscar</button></div>
+</form>
+
+<div class="chips">
+  <span class="chip">{{ estudios|length }} estudios</span>
+  <span class="chip">Pendientes: {{ conteo.pendiente }}</span>
+  <span class="chip">Borrador: {{ conteo.borrador }}</span>
+  <span class="chip">Firmados: {{ conteo.firmado }}</span>
+  {% if q %}<span class="chip activo">Búsqueda en todas las fechas · <a href="{{ url_for('lista') }}" style="color:#fff">quitar</a></span>{% endif %}
+</div>
+
+<div class="tabla-wrap">
+<table class="lista">
+  <thead><tr>
+    <th>Fecha</th><th>Paciente</th><th class="ocultar-movil">RUT / ID</th><th>Mod.</th>
+    <th class="ocultar-movil">Examen</th><th class="ocultar-movil">Institución</th><th>Estado</th><th></th>
+  </tr></thead>
+  <tbody>
+  {% for e in estudios %}
+    <tr>
+      <td class="peq">{{ e.fecha }}<br><span class="suave">{{ e.hora }}</span></td>
+      <td><span class="paciente">{{ e.paciente_nombre or '(sin nombre)' }}</span><br>
+        <span class="suave peq">{{ e.edad }}{% if e.paciente_sexo %} · {{ e.paciente_sexo }}{% endif %}</span></td>
+      <td class="ocultar-movil mono peq">{{ e.paciente_id }}</td>
+      <td>{% for m in e.modalidad.split('/') if m %}<span class="mod">{{ m }}</span> {% endfor %}</td>
+      <td class="ocultar-movil peq">{{ e.descripcion }}</td>
+      <td class="ocultar-movil peq suave">{{ e.institucion }}</td>
+      <td><span class="badge {{ e.estado }}">{{ {'pendiente':'Pendiente','borrador':'Borrador','firmado':'Firmado'}[e.estado] }}</span>
+        {% if e.firmante %}<br><span class="suave peq">{{ e.firmante }}</span>{% endif %}</td>
+      <td><a class="btn {{ 'prim' if e.estado != 'firmado' }}" href="{{ url_for('estudio', estudio_id=e.id) }}">
+        {{ 'Ver' if e.estado == 'firmado' else 'Informar' }}</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="suave" style="text-align:center;padding:30px">No hay estudios con estos filtros.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

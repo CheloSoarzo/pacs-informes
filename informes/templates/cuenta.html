@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block titulo %}Mi cuenta{% endblock %}
+{% block contenido %}
+<div class="panel" style="max-width:460px">
+  <h1>Mi cuenta</h1>
+  <p class="suave">{{ usuario.nombre }} · {{ ROLES[usuario.rol] }}</p>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <div style="margin-bottom:10px"><label for="actual">Clave actual</label>
+      <input type="password" id="actual" name="actual" autocomplete="current-password" required></div>
+    <div style="margin-bottom:12px"><label for="nueva">Nueva clave (mínimo 10 caracteres)</label>
+      <input type="password" id="nueva" name="nueva" autocomplete="new-password" minlength="10" required></div>
+    <button class="btn prim" type="submit">Cambiar clave</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Informe · {{ centro_info.nombre }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+<div class="pub">
+  <div class="pub-cab">
+    <div>
+      <div class="nombre-centro">{{ centro_info.nombre }}</div>
+      <div class="suave peq">{{ centro_info.direccion }}{% if centro_info.telefono %} · {{ centro_info.telefono }}{% endif %}</div>
+    </div>
+    {% if inf.estado == 'firmado' %}
+    <div class="acciones">
+      <a class="btn prim" href="{{ url_for('publico_pdf', token=token) }}" target="_blank">Descargar informe PDF</a>
+      <a class="btn" href="{{ url_for('publico_zip', token=token) }}">Descargar imágenes (DICOM)</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="panel" style="margin-bottom:16px">
+    <div class="datos">
+      <div><span>Paciente</span><b>{{ d.paciente_nombre }}</b></div>
+      <div><span>RUT / ID</span>{{ d.paciente_id }}</div>
+      <div><span>Fecha examen</span>{{ d.fecha }}</div>
+      <div><span>Examen</span>{{ d.descripcion or d.modalidad }}</div>
+    </div>
+  </div>
+
+  {% if inf.estado == 'firmado' %}
+  <div class="panel" style="margin-bottom:16px">
+    <h2>Informe</h2>
+    <div class="texto-informe">{{ inf.cuerpo }}</div>
+    {% if firmante %}
+    <div class="firma-pub">
+      <b>{{ firmante.nombre }}</b>{% if firmante.titulo %}<br>{{ firmante.titulo }}{% endif %}{% if firmante.registro %}<br><span class="suave">{{ firmante.registro }}</span>{% endif %}
+      <br><span class="suave peq">Validado electrónicamente el {{ d.firmado_en_txt }}</span>
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="flash error">El informe de este examen está en revisión. Vuelve a abrir este mismo link más tarde.</div>
+  {% endif %}
+
+  <h2>Imágenes</h2>
+  <div class="visor" id="visor"></div>
+  <p class="suave peq">Desliza hacia arriba o abajo (o usa la rueda del mouse) para recorrer las imágenes. Las imágenes de esta vista son de referencia; para diagnóstico se usa el estudio original.</p>
+</div>
+<script src="{{ url_for('static', filename='visor.js') }}"></script>
+<script>
+  new VisorSimple(document.getElementById('visor'),
+    {{ url_for('publico_series', token=token)|tojson }},
+    {{ (url_for('publico_img', token=token, instancia_id='X')[:-1])|tojson }});
+</script>
+</body>
+</html>

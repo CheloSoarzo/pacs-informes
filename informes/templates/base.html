@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Informes{% endblock %} · {{ centro }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+{% if usuario %}
+<header class="barra">
+  <a class="marca" href="{{ url_for('lista') }}">{{ centro }}</a>
+  <nav>
+    <a href="{{ url_for('lista') }}" class="{{ 'activo' if request.endpoint in ('lista','estudio') }}">Estudios</a>
+    {% if puede('plantillas') %}
+    <a href="{{ url_for('admin_plantillas') }}" class="{{ 'activo' if request.endpoint == 'admin_plantillas' }}">Plantillas</a>
+    {% endif %}
+    {% if puede('explorador_pacs') %}
+    <a href="{{ PACS_PUBLIC_URL }}/ui/app/" target="_blank" rel="noopener">PACS / subir estudios ↗</a>
+    {% endif %}
+    {% if puede('usuarios') %}
+    <a href="{{ url_for('admin_usuarios') }}" class="{{ 'activo' if request.endpoint == 'admin_usuarios' }}">Usuarios</a>
+    <a href="{{ url_for('admin_auditoria') }}" class="{{ 'activo' if request.endpoint == 'admin_auditoria' }}">Auditoría</a>
+    {% endif %}
+  </nav>
+  <div class="quien">
+    <a href="{{ url_for('cuenta') }}" style="color:inherit">{{ usuario.nombre }} · {{ ROLES[usuario.rol] }}</a>
+    <form method="post" action="{{ url_for('logout') }}" style="margin:0">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <button type="submit">Salir</button>
+    </form>
+  </div>
+</header>
+{% endif %}
+<main class="contenido">
+  {% for cat, msg in get_flashed_messages(with_categories=true) %}
+    <div class="flash {{ cat }}">{{ msg }}</div>
+  {% endfor %}
+  {% block contenido %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

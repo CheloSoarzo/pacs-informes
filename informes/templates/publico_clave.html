@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Acceso a informe</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+<div class="login panel">
+  <h1>{{ centro }}</h1>
+  {% for cat, msg in get_flashed_messages(with_categories=true) %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+  <form method="post">
+    <div class="campo"><label for="clave">Clave de acceso (6 dígitos)</label>
+      <input type="text" id="clave" name="clave" inputmode="numeric" autocomplete="one-time-code" maxlength="6" autofocus required></div>
+    <button class="btn prim" style="width:100%;justify-content:center" type="submit">Ver informe</button>
+  </form>
+</div>
+</body>
+</html>

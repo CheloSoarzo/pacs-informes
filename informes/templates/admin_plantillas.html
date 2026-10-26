@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block titulo %}Plantillas{% endblock %}
+{% macro form_plantilla(p=None) %}
+<form method="post">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  {% if p %}<input type="hidden" name="id" value="{{ p.id }}">{% endif %}
+  <div style="margin:10px 0"><label>Nombre</label><input type="text" name="nombre" value="{{ p.nombre if p }}" required></div>
+  <label>Modalidades (sin marcar = todas)</label>
+  {% set sel = (p.modalidad.split(',') if p and p.modalidad else []) %}
+  <div class="checks" style="margin-bottom:10px">
+    {% for m in mods_disp %}<label><input type="checkbox" name="modalidad" value="{{ m }}" {{ 'checked' if m in sel }}> {{ m }}</label>{% endfor %}
+  </div>
+  <label>Texto</label>
+  <textarea name="cuerpo" rows="14" required>{{ p.cuerpo if p }}</textarea>
+  <p class="peq suave">Las líneas en MAYÚSCULAS terminadas en ":" (ej. HALLAZGOS:) salen como subtítulo en el PDF. Usa ______ para campos a completar.</p>
+  <button class="btn prim" type="submit">{{ 'Guardar' if p else 'Crear plantilla' }}</button>
+</form>
+{% if p %}
+<form method="post" style="margin-top:8px" onsubmit="return confirm('¿Eliminar esta plantilla?')">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <input type="hidden" name="borrar" value="{{ p.id }}">
+  <button class="btn peligro" type="submit">Eliminar</button>
+</form>
+{% endif %}
+{% endmacro %}
+{% block contenido %}
+<h1>Plantillas de informe</h1>
+<p class="suave">Se ofrecen en el editor según la modalidad del estudio.</p>
+{% for p in plantillas %}
+  <details class="edit">
+    <summary>{{ p.nombre }} <span class="suave peq">· {{ p.modalidad or 'todas' }}</span></summary>
+    {{ form_plantilla(p) }}
+  </details>
+{% endfor %}
+<details class="edit" style="margin-top:16px">
+  <summary>+ Nueva plantilla</summary>
+  {{ form_plantilla() }}
+</details>
+{% endblock %}

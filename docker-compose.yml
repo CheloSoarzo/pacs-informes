@@ -1,0 +1,78 @@
+# PACS + Informes
+# Servicios:
+#   - postgres : índice de Orthanc (búsquedas rápidas con millones de imágenes)
+#   - orthanc  : PACS. Recibe DICOM de los equipos (puerto 4242), visor OHIF y Stone
+#   - informes : app de informes (dictado, plantillas, firma, PDF, link al paciente)
+#   - caddy    : HTTPS automático (Let's Encrypt) y control de acceso al PACS
+#
+# El puerto web de Orthanc (8042) NO se publica. Nunca agregues "8042:8042" en un servidor en la nube.
+#
+# Uso:  cp .env.example .env  (y editar)  →  docker compose up -d
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: orthanc
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: orthanc
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+
+  orthanc:
+    image: orthancteam/orthanc:latest   # en producción fija una versión concreta
+    restart: unless-stopped
+    depends_on: [postgres]
+    ports:
+      - "4242:4242"        # DICOM: los equipos (CT, RX, US) envían aquí
+    volumes:
+      - ${DICOM_STORAGE_DIR:-./data/orthanc}:/var/lib/orthanc/db
+    environment:
+      ORTHANC__NAME: ${PACS_NOMBRE:-PACS}
+      ORTHANC__DICOM_AET: ${PACS_AET:-PACS}
+      ORTHANC__DICOM_CHECK_CALLED_AET: "false"
+      ORTHANC__DICOM_ALWAYS_ALLOW_STORE: "true"
+      ORTHANC__OVERWRITE_INSTANCES: "true"
+      ORTHANC__STABLE_AGE: "60"
+      # El acceso web lo controla la app de informes (un solo login por usuario, vía Caddy).
+      # Orthanc NO publica su puerto web: solo Caddy y la app lo alcanzan por la red interna.
+      ORTHANC__AUTHENTICATION_ENABLED: "false"
+      # Índice en PostgreSQL (las imágenes quedan en disco)
+      ORTHANC__POSTGRESQL__HOST: postgres
+      ORTHANC__POSTGRESQL__DATABASE: orthanc
+      ORTHANC__POSTGRESQL__USERNAME: orthanc
+      ORTHANC__POSTGRESQL__PASSWORD: ${PG_PASSWORD}
+      # Visores
+      DICOM_WEB_PLUGIN_ENABLED: "true"
+      OHIF_PLUGIN_ENABLED: "true"
+      ORTHANC__OHIF__DATA_SOURCE: "dicom-web"
+      STONE_WEB_VIEWER_PLUGIN_ENABLED: "true"
+      # Compresión al vuelo para visores web y mantenimiento
+      GDCM_PLUGIN_ENABLED: "true"
+      HOUSEKEEPER_PLUGIN_ENABLED: "true"
+
+  informes:
+    build: ./informes
+    restart: unless-stopped
+    depends_on: [orthanc]
+    env_file: .env
+    environment:
+      ORTHANC_URL: http://orthanc:8042
+      DATA_DIR: /data
+    volumes:
+      - ./data/informes:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [informes, orthanc]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      INFORMES_DOMAIN: ${INFORMES_DOMAIN}
+      PACS_DOMAIN: ${PACS_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data

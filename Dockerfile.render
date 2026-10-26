@@ -1,0 +1,34 @@
+# Versión de DEMOSTRACIÓN para Render (plan gratis): todo en un solo contenedor.
+#   Caddy (puerto público $PORT) → app de informes (127.0.0.1:8000)
+#                                → Orthanc PACS + visores (127.0.0.1:8042)
+# Los datos NO son permanentes: se borran cada vez que Render reinicia el servicio.
+# Para producción usa docker-compose.yml en un servidor propio.
+
+FROM caddy:2 AS caddy
+
+FROM orthancteam/orthanc:latest
+COPY --from=caddy /usr/bin/caddy /usr/bin/caddy
+
+COPY informes/requirements.txt /app/informes/requirements.txt
+RUN (python3 -m pip --version || (apt-get update && apt-get install -y --no-install-recommends python3-pip)) \
+    && python3 -m pip install --no-cache-dir --break-system-packages \
+       -r /app/informes/requirements.txt "pydicom==2.4.4" numpy
+
+COPY . /app
+RUN chmod +x /app/render/start.sh
+
+ENV TZ=America/Santiago \
+    DATA_DIR=/data \
+    ORTHANC_URL=http://127.0.0.1:8042 \
+    PORT=10000 \
+    PROXY_HOPS=2 \
+    ORTHANC__NAME=PACS-DEMO \
+    ORTHANC__AUTHENTICATION_ENABLED=false \
+    ORTHANC__STABLE_AGE=5 \
+    DICOM_WEB_PLUGIN_ENABLED=true \
+    OHIF_PLUGIN_ENABLED=true \
+    ORTHANC__OHIF__DATA_SOURCE=dicom-web \
+    STONE_WEB_VIEWER_PLUGIN_ENABLED=true
+
+EXPOSE 10000
+ENTRYPOINT ["/app/render/start.sh"]

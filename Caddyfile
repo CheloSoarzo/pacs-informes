@@ -1,0 +1,20 @@
+# HTTPS automático. Ambos dominios deben apuntar (DNS) a la IP de este servidor.
+
+{$INFORMES_DOMAIN} {
+	encode gzip
+	reverse_proxy informes:8000
+}
+
+{$PACS_DOMAIN} {
+	encode gzip
+	request_body {
+		max_size 4GB
+	}
+	# Cada petición al PACS se valida contra la sesión de la app de informes:
+	# mismo usuario y clave, y cada rol ve solo lo que le corresponde.
+	forward_auth informes:8000 {
+		uri /api/auth/pacs
+		copy_headers X-Usuario
+	}
+	reverse_proxy orthanc:8042
+}

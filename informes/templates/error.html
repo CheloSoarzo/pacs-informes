@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block titulo %}Error{% endblock %}
+{% block contenido %}
+<div class="panel">
+  <h1>No se pudo completar la acción</h1>
+  <p>{{ mensaje }}</p>
+  <p class="suave">Verifica que el servidor PACS (Orthanc) esté funcionando.</p>
+  <a class="btn" href="{{ url_for('lista') }}">Volver</a>
+</div>
+{% endblock %}

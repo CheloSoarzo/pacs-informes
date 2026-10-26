@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block titulo %}Auditoría{% endblock %}
+{% block contenido %}
+<h1>Auditoría</h1>
+<p class="suave">Últimos 500 eventos: ingresos, estudios abiertos, firmas, links y descargas.</p>
+<div class="tabla-wrap">
+<table class="lista">
+  <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Detalle</th><th>IP</th></tr></thead>
+  <tbody>
+  {% for f in filas %}
+    <tr><td class="peq">{{ f.ts|fh }}</td><td>{{ f.usuario }}</td><td>{{ f.accion }}</td>
+      <td class="peq">{{ f.detalle }}</td><td class="peq mono">{{ f.ip }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

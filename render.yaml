@@ -1,0 +1,28 @@
+# Blueprint de Render para la DEMO (plan gratis, datos temporales).
+# Render → New → Blueprint → elige este repositorio.
+services:
+  - type: web
+    name: pacs-informes-demo
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /salud
+    envVars:
+      - key: ADMIN_PASSWORD        # Render te la pedirá al crear el servicio (mínimo 10 caracteres)
+        sync: false
+      - key: ADMIN_USER
+        value: admin
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEMO_DATOS
+        value: "true"
+      - key: CENTRO_NOMBRE
+        value: Centro de Imágenes (DEMO)
+      - key: CENTRO_DIRECCION
+        value: Dirección de ejemplo, Rancagua
+      - key: CENTRO_TELEFONO
+        value: "+56 9 0000 0000"
+      - key: LINK_REQUIERE_CLAVE
+        value: "true"

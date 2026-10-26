@@ -1,0 +1,26 @@
+# Demo en Render: un solo dominio (xxx.onrender.com). Render pone el HTTPS.
+# Las rutas propias de Orthanc van al PACS (con control de acceso); el resto a la app.
+{
+	auto_https off
+	admin off
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+:{$PORT} {
+	encode gzip
+
+	@pacs path /ohif/* /dicom-web/* /stone-webviewer/* /ui/* /app/* /system /plugins /plugins/* /tools/* /instances /instances/* /studies /studies/* /series /series/* /patients /patients/* /jobs/* /changes /statistics /volview/*
+	handle @pacs {
+		forward_auth 127.0.0.1:8000 {
+			uri /api/auth/pacs
+			copy_headers X-Usuario
+		}
+		reverse_proxy 127.0.0.1:8042
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8000
+	}
+}
