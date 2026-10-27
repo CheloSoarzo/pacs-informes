@@ -309,3 +309,6 @@ label.permiso.destacado { background: var(--aviso-bg); border-radius: 6px; paddi
 td.mono { white-space: nowrap; }
 #entrega .caja-link .fila { flex-wrap: nowrap; }
 #entrega .caja-link .fila input { flex: 1; min-width: 0; }
+.config-equipo { margin-bottom: 14px; }
+.config-equipo .datos b.mono { font-size: 16px; }
+.mt-grande { margin-top: 18px; }

@@ -26,7 +26,7 @@
     {% if puede('pacs_subir') %}
       <a href="{{ PACS_PUBLIC_URL }}/ui/app/" target="_blank" rel="noopener">PACS / subir ↗</a>
     {% endif %}
-    {% if puede('usuarios') or puede('plantillas') or puede('frases') or puede('ajustes') or puede('auditoria') %}
+    {% if puede('usuarios') or puede('plantillas') or puede('frases') or puede('ajustes') or puede('auditoria') or puede('equipos') %}
     <details class="menu {{ 'activo' if ep and ep.startswith('admin_') }}">
       <summary>Administración</summary>
       <div class="menu-lista">
@@ -35,6 +35,7 @@
         {% if puede('plantillas') %}<a href="{{ url_for('admin_plantillas') }}">Plantillas de informe</a>{% endif %}
         {% if puede('frases') %}<a href="{{ url_for('admin_frases') }}">Frases (hallazgos y conclusiones)</a>{% endif %}
         {% if puede('ajustes') %}<a href="{{ url_for('admin_ajustes') }}">Correo y ajustes</a>{% endif %}
+        {% if puede('equipos') %}<a href="{{ url_for('admin_equipos') }}">Equipos DICOM (envío por internet)</a>{% endif %}
         {% if puede('auditoria') %}<a href="{{ url_for('admin_auditoria') }}">Auditoría</a>{% endif %}
       </div>
     </details>

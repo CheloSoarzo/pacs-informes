@@ -25,14 +25,22 @@ services:
     restart: unless-stopped
     depends_on: [postgres]
     ports:
-      - "4242:4242"        # DICOM: los equipos (CT, RX, US) envían aquí
+      # DICOM por internet: los equipos (CT, RX, US) envían a <IP del servidor>:<DICOM_PUERTO_PUBLICO>.
+      # Solo se aceptan los equipos registrados en Administración → Equipos DICOM, desde la IP de su centro,
+      # y el script firewall/sincronizar_firewall.sh cierra el puerto a cualquier otra IP.
+      - "${DICOM_PUERTO_PUBLICO:-46429}:4242"
     volumes:
       - ${DICOM_STORAGE_DIR:-./data/orthanc}:/var/lib/orthanc/db
     environment:
       ORTHANC__NAME: ${PACS_NOMBRE:-PACS}
       ORTHANC__DICOM_AET: ${PACS_AET:-PACS}
       ORTHANC__DICOM_CHECK_CALLED_AET: "false"
-      ORTHANC__DICOM_ALWAYS_ALLOW_STORE: "true"
+      # Lista blanca: solo equipos registrados (AE Title + IP del centro) pueden enviar
+      ORTHANC__DICOM_ALWAYS_ALLOW_STORE: "false"
+      ORTHANC__DICOM_ALWAYS_ALLOW_ECHO: "false"
+      ORTHANC__DICOM_CHECK_MODALITY_HOST: "true"
+      ORTHANC__DICOM_MODALITIES_IN_DATABASE: "true"
+      ORTHANC__DICOM_ASSOCIATION_CLOSE_DELAY: "5"
       ORTHANC__OVERWRITE_INSTANCES: "true"
       ORTHANC__STABLE_AGE: "60"
       # El acceso web lo controla la app de informes (un solo login por usuario, vía Caddy).
@@ -60,6 +68,7 @@ services:
     environment:
       ORTHANC_URL: http://orthanc:8042
       DATA_DIR: /data
+      PACS_AET: ${PACS_AET:-PACS}
     volumes:
       - ./data/informes:/data
 
@@ -71,8 +80,10 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      INFORMES_DOMAIN: ${INFORMES_DOMAIN}
-      PACS_DOMAIN: ${PACS_DOMAIN}
+      INFORMES_DOMAIN: ${INFORMES_DOMAIN:-}
+      PACS_DOMAIN: ${PACS_DOMAIN:-}
+      DOMINIO: ${DOMINIO:-}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Caddyfile = dos dominios (informes.* y pacs.*); Caddyfile.unico = todo en un solo dominio
+      - ./${CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
       - ./data/caddy:/data

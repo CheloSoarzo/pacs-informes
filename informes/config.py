@@ -45,6 +45,12 @@ class Config:
     SMTP_SSL = _bool(os.environ.get("SMTP_SSL"), False)        # true para puerto 465
     SMTP_STARTTLS = _bool(os.environ.get("SMTP_STARTTLS"), True)
 
+    # Recepción DICOM por internet (lista blanca de equipos)
+    PACS_AET = os.environ.get("PACS_AET", "PACS")
+    DICOM_PUERTO_PUBLICO = os.environ.get("DICOM_PUERTO_PUBLICO", "46429")
+    SERVIDOR_IP_PUBLICA = os.environ.get("SERVIDOR_IP_PUBLICA", "")   # solo para mostrar en pantalla
+    FIREWALL_TOKEN = os.environ.get("FIREWALL_TOKEN", "")             # clave del script de firewall
+
     SECURE_COOKIES = PUBLIC_BASE_URL.startswith("https://")
     # Dominio común para compartir la sesión entre la app y el PACS (ej: .tucentro.cl)
     COOKIE_DOMAIN = os.environ.get("COOKIE_DOMAIN", "") or None

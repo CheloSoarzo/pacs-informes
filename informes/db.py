@@ -142,6 +142,18 @@ CREATE TABLE IF NOT EXISTS filtros (
     query TEXT NOT NULL
 );
 
+-- Equipos autorizados a enviar estudios por internet (lista blanca DICOM)
+CREATE TABLE IF NOT EXISTS equipos (
+    id INTEGER PRIMARY KEY,
+    nombre TEXT NOT NULL,                        -- ej: TC Rancagua
+    centro TEXT DEFAULT '',
+    aet TEXT NOT NULL,                           -- AE Title propio del equipo
+    ip TEXT NOT NULL,                            -- IP pública fija del centro
+    activo INTEGER NOT NULL DEFAULT 1,
+    notas TEXT DEFAULT '',
+    creado TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS ajustes (
     clave TEXT PRIMARY KEY,
     valor TEXT NOT NULL DEFAULT ''

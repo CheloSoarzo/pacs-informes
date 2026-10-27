@@ -12,6 +12,7 @@ Módulos:
   rutas_publico.py  links y página del paciente, PDF, imágenes
   rutas_pacs.py     control de acceso al visor/PACS, dictado con Whisper
   rutas_admin.py    usuarios, perfiles, plantillas, frases, ajustes, auditoría
+  rutas_equipos.py  equipos autorizados a enviar por internet (lista blanca DICOM)
 """
 import os
 
@@ -21,6 +22,7 @@ import rutas_estudio  # noqa: F401,E402
 import rutas_publico  # noqa: F401,E402
 import rutas_pacs  # noqa: F401,E402
 import rutas_admin  # noqa: F401,E402
+import rutas_equipos  # noqa: F401,E402
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=os.environ.get("DEBUG") == "1")

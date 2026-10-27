@@ -40,6 +40,7 @@ CATALOGO = [
     ("Administración", "usuarios", "Administrar usuarios y perfiles"),
     ("Administración", "auditoria", "Ver auditoría de accesos"),
     ("Administración", "ajustes", "Ajustes de correo y envíos automáticos"),
+    ("Administración", "equipos", "Administrar los equipos que envían estudios por internet"),
 ]
 TODOS = [c for _, c, _ in CATALOGO]
 DESCRIPCION = {c: d for _, c, d in CATALOGO}

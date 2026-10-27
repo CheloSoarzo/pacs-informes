@@ -15,7 +15,7 @@ Sistema para centros de imágenes (TC, rayos X, ecografía):
 - **Perfiles de permisos editables** (30 permisos), con un solo usuario por persona para la app y el visor. Vienen 10 perfiles listos, iguales a los de pacs4me. Cualquier usuario se puede limitar a ciertos centros.
 
 ```
-Equipos (CT/RX/US) ──DICOM:4242──▶ Orthanc ◀── OHIF / Stone (pacs.tucentro.cl)
+Equipos (CT/RX/US) ──internet, puerto DICOM con lista blanca──▶ Orthanc ◀── OHIF / Stone (pacs.tucentro.cl)
                                      ▲
                                      │ API REST
                               App de informes (informes.tucentro.cl) ──▶ link paciente /r/xxxx
@@ -71,24 +71,63 @@ Cada usuario tiene un **perfil** y cada perfil es una lista de permisos que el a
 
 1. **Servidor**: una máquina virtual Linux (Ubuntu 24.04) en el proveedor que prefieras. Para empezar, 4 vCPU, 8 GB de RAM y un disco de datos separado para las imágenes, que puedas ampliar. Elige una región cercana (Santiago o São Paulo) para que los estudios suban rápido.
 2. **DNS**: crea `informes.tucentro.cl` y `pacs.tucentro.cl` apuntando a la IP pública del servidor.
-3. **Firewall** del proveedor: abre solo 80 y 443 a internet, y 51820/UDP para la VPN. **No abras 4242 ni 8042 a internet.**
-4. **VPN para los centros** (WireGuard): cada centro tiene un pequeño equipo o router con WireGuard conectado al servidor. Los equipos del centro envían DICOM a la IP del servidor dentro de la VPN, puerto 4242. Así las imágenes viajan cifradas.
+3. **Firewall** del proveedor: abre 80 y 443, y el puerto DICOM (ver «Recibir estudios por internet»). **Nunca abras 8042.**
+4. **Equipos de los centros**: envían por internet al puerto DICOM con lista blanca (ver sección siguiente).
 5. Instala Docker, copia este proyecto, crea `.env` y ejecuta `docker compose up -d --build`.
 6. Configura los **respaldos automáticos** diarios (ver más abajo) hacia otro proveedor o almacenamiento.
 
-## Configurar los equipos
+## Instalación automática en Oracle Cloud (u otro servidor Ubuntu)
 
-En cada equipo (CT, rayos, ecógrafo) agrega un destino DICOM de almacenamiento (C-STORE):
+1. Sube este proyecto a tu repositorio de GitHub (público, sin el archivo `.env`).
+2. En Oracle Cloud crea una instancia Ubuntu 24.04 (ARM Ampere A1, 2 OCPU, 12 GB RAM, disco de arranque de 200 GB).
+   En «Opciones avanzadas → Gestión» pega el contenido de `servidor/cloud-init-oracle.sh` (cambia la clave inicial).
+3. En la red virtual (VCN → Lista de seguridad) agrega reglas de entrada TCP para los puertos 80, 443 y el puerto DICOM.
+4. Espera 10-15 minutos y entra a `https://pacs.<ip-con-guiones>.sslip.io` (ej. `https://pacs.129-151-10-20.sslip.io`) con el usuario `admin`.
+   No necesitas comprar un dominio para empezar; más adelante puedes usar uno propio cambiando `DOMINIO` en `.env`.
 
-| Campo | Valor |
+El instalador (`servidor/instalar.sh`) instala Docker, genera claves seguras en `.env`, abre el firewall de Oracle,
+levanta el sistema con HTTPS, programa el firewall DICOM cada 5 minutos y un respaldo diario de las bases de datos.
+El registro queda en `/var/log/pacs-instalacion.log`.
+
+## Recibir estudios por internet (equipos de cada centro)
+
+Los equipos envían directo a un puerto público del servidor, como en pacs4me, con tres protecciones:
+
+1. **Puerto poco común** (`DICOM_PUERTO_PUBLICO`, por defecto 46429).
+2. **Lista blanca en el PACS**: Orthanc solo acepta envíos de los equipos registrados en
+   *Administración → Equipos DICOM*, y solo desde la IP pública de su centro (AE Title + IP).
+3. **Firewall**: el puerto se abre únicamente a esas IPs; para cualquier otra dirección de internet está cerrado.
+
+### Lo que necesitas
+
+- Una **IP pública fija** en cada centro (pídela a tu proveedor de internet). Para ver la IP actual, abre https://ifconfig.me desde un PC del centro.
+- El **AE Title** de cada equipo (está en la configuración DICOM del equipo, o te lo da el técnico). Cada equipo de un mismo centro debe tener uno distinto.
+
+### Pasos
+
+1. En `.env` define `DICOM_PUERTO_PUBLICO`, `SERVIDOR_IP_PUBLICA` y `FIREWALL_TOKEN` (una clave larga; la pantalla de equipos te sugiere una). Reinicia con `docker compose up -d`.
+2. En el **firewall de tu proveedor de nube** (si lo tiene) permite el puerto `DICOM_PUERTO_PUBLICO` por TCP.
+3. Activa el firewall automático del servidor (se actualiza cada 5 minutos con los equipos de la app):
+   ```bash
+   sudo ./firewall/sincronizar_firewall.sh        # prueba manual: debe decir "abierto solo para: ..."
+   echo "*/5 * * * * root $(pwd)/firewall/sincronizar_firewall.sh >> /var/log/pacs-firewall.log 2>&1" | sudo tee /etc/cron.d/pacs-firewall
+   echo "@reboot root sleep 60 && $(pwd)/firewall/sincronizar_firewall.sh >> /var/log/pacs-firewall.log 2>&1" | sudo tee -a /etc/cron.d/pacs-firewall
+   ```
+   (Docker se salta `ufw`, por eso el script usa la cadena `DOCKER-USER` de iptables.)
+4. En la app, entra a *Administración → Equipos DICOM* y agrega cada equipo: nombre, centro, AE Title e IP del centro.
+5. En cada equipo, crea un destino DICOM de almacenamiento (C-STORE) con:
+
+| Campo en el equipo | Valor |
 |---|---|
-| AE Title | `PACS` (o el valor de `PACS_AET`) |
-| IP / Host | IP del servidor |
-| Puerto | `4242` |
+| IP / Host destino | IP pública del servidor (`SERVIDOR_IP_PUBLICA`) |
+| Puerto | `DICOM_PUERTO_PUBLICO` (ej. 46429) |
+| AE Title destino (llamado) | `PACS_AET` (ej. `PACS`) |
+| AE Title propio del equipo | El mismo que registraste en la app |
 
-Si el servidor está en la nube, usa la IP del servidor dentro de la VPN (ver "Instalación en la nube").
-Para que la restricción por centro funcione, cada equipo debe enviar el nombre de institución (InstitutionName)
-de su centro; casi todos los equipos lo tienen en su configuración.
+6. Envía un estudio de prueba. Si no llega, revisa en orden: que la IP del centro no haya cambiado, que el AE Title coincida exactamente, y el registro `/var/log/pacs-firewall.log`.
+
+> Importante: DICOM normal viaja **sin cifrar** por internet (igual que en pacs4me). Si algún equipo soporta DICOM TLS,
+> conviene activarlo. Para máxima seguridad, la alternativa es un PC «puente» en cada centro que reenvía por HTTPS.
 
 ## Uso diario
 
@@ -175,6 +214,8 @@ informes/            App de informes (Flask + SQLite)
 dev/mock_orthanc.py  PACS simulado para pruebas
 dev/prueba_completa.py  Prueba automática de todo el flujo (97 verificaciones)
 dev/smtp_falso.py    Servidor de correo falso para las pruebas
+dev/prueba_equipos.py   Prueba de la lista blanca de equipos
+firewall/            Script que abre el puerto DICOM solo a los centros registrados
 ```
 
 ## Próximos pasos posibles

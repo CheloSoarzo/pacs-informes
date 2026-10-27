@@ -181,6 +181,21 @@ class Orthanc:
                 return self.estudio(item["ID"])
         return None
 
+    # ---- equipos remotos (modalidades DICOM) ----
+    def modalidades(self):
+        return self.get_json("/modalities", params={"expand": ""}) or {}
+
+    def guardar_modalidad(self, nombre, aet, host, permitir_store=True):
+        r = self._req("PUT", f"/modalities/{nombre}", json={
+            "AET": aet, "Host": host, "Port": 104, "Manufacturer": "Generic",
+            "AllowEcho": True, "AllowStore": permitir_store, "AllowFind": False, "AllowMove": False,
+            "AllowStorageCommitment": False})
+        if r is None:
+            raise OrthancError("El PACS no aceptó el equipo (¿DicomModalitiesInDatabase activado?)")
+
+    def borrar_modalidad(self, nombre):
+        self._req("DELETE", f"/modalities/{nombre}")
+
     def preview(self, instancia_id):
         r = self._req("GET", f"/instances/{instancia_id}/preview",
                       headers={"Accept": "image/jpeg"})

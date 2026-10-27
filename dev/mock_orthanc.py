@@ -98,6 +98,27 @@ def find():
     return jsonify(out)
 
 
+MODALIDADES = {}
+
+
+@app.get("/modalities")
+def modalidades():
+    return jsonify(MODALIDADES if "expand" in request.args else list(MODALIDADES))
+
+
+@app.put("/modalities/<nombre>")
+def poner_modalidad(nombre):
+    MODALIDADES[nombre] = request.get_json()
+    return jsonify({})
+
+
+@app.delete("/modalities/<nombre>")
+def borrar_modalidad(nombre):
+    if MODALIDADES.pop(nombre, None) is None:
+        abort(404)
+    return jsonify({})
+
+
 @app.post("/tools/lookup")
 def lookup():
     uid = request.get_data(as_text=True).strip()

@@ -1,0 +1,23 @@
+# Todo en un solo dominio (ej: pacs.129-151-10-20.sslip.io o pacs.tucentro.cl).
+# Las rutas propias de Orthanc van al PACS, siempre validadas contra la sesión de la app;
+# todo lo demás va a la app de informes. HTTPS automático con Let's Encrypt.
+
+{$DOMINIO} {
+	encode gzip
+
+	@pacs path /ohif/* /dicom-web/* /stone-webviewer/* /ui/* /app/* /system /plugins /plugins/* /tools/* /instances /instances/* /studies /studies/* /series /series/* /patients /patients/* /jobs/* /changes /statistics /volview/*
+	handle @pacs {
+		request_body {
+			max_size 4GB
+		}
+		forward_auth informes:8000 {
+			uri /api/auth/pacs
+			copy_headers X-Usuario
+		}
+		reverse_proxy orthanc:8042
+	}
+
+	handle {
+		reverse_proxy informes:8000
+	}
+}
