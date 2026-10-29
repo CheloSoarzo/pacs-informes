@@ -332,7 +332,7 @@ def _columnas(con, tabla):
 
 def _migrar(con):
     """Actualiza bases de datos creadas por versiones anteriores."""
-    from permisos import PERFILES_INICIALES, ROL_A_PERFIL
+    from permisos import PERFILES_INICIALES, PERMISOS_NUEVOS, ROL_A_PERFIL
     cols = _columnas(con, "usuarios")
     for col in ("centros", "filtro_solicitante"):
         if col not in cols:
@@ -344,6 +344,25 @@ def _migrar(con):
                       ("transcrito_en", "TEXT")):
         if col not in cols:
             con.execute(f"ALTER TABLE informes ADD COLUMN {col} {tipo}")
+
+    # Permisos nuevos de esta versión → a los perfiles de fábrica que ya existían (una sola vez por permiso)
+    hay_perfiles = con.execute("SELECT COUNT(*) FROM perfiles").fetchone()[0] > 0
+    fila = con.execute("SELECT valor FROM ajustes WHERE clave='permisos_migrados'").fetchone()
+    migrados = set((fila[0] if fila else "").split(","))
+    for permiso in PERMISOS_NUEVOS:
+        if permiso in migrados:
+            continue
+        if hay_perfiles:
+            for clave, _, _, permisos, _ in PERFILES_INICIALES:
+                if permiso not in permisos:
+                    continue
+                f = con.execute("SELECT id, permisos FROM perfiles WHERE clave=?", (clave,)).fetchone()
+                if f and permiso not in f[1].split(","):
+                    con.execute("UPDATE perfiles SET permisos=? WHERE id=?",
+                                (",".join(p for p in (f[1].split(",") + [permiso]) if p), f[0]))
+        migrados.add(permiso)
+    con.execute("INSERT OR REPLACE INTO ajustes (clave, valor) VALUES ('permisos_migrados', ?)",
+                (",".join(sorted(p for p in migrados if p)),))
 
     # Perfiles iniciales (solo si no existen; después los edita el administrador)
     for clave, nombre, desc, permisos, solo in PERFILES_INICIALES:

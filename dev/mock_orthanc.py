@@ -126,6 +126,36 @@ def lookup():
                     for eid, e in ESTUDIOS.items() if e["StudyInstanceUID"] == uid])
 
 
+PACIENTE_TAGS = {"PatientName", "PatientID", "PatientBirthDate", "PatientSex"}
+
+
+@app.post("/studies/<eid>/modify")
+def modificar(eid):
+    if eid not in ESTUDIOS:
+        abort(404)
+    rep = request.get_json().get("Replace", {})
+    e = ESTUDIOS[eid]
+    nuevo = eid
+    if "PatientID" in rep and rep["PatientID"] != e["paciente"]["PatientID"]:
+        nuevo = eid + "-mod"
+    destino = dict(e, paciente=dict(e["paciente"]))
+    for k, v in rep.items():
+        (destino["paciente"] if k in PACIENTE_TAGS else destino)[k] = v
+    ESTUDIOS[nuevo] = destino
+    for sid in e["series_ids"]:
+        SERIES[sid]["estudio"] = nuevo
+        for iid in SERIES[sid]["instancias"]:
+            INSTANCIAS[iid]["estudio"] = nuevo
+    return jsonify({"ID": nuevo, "Path": f"/studies/{nuevo}", "Type": "Study"})
+
+
+@app.delete("/studies/<eid>")
+def borrar_estudio(eid):
+    if ESTUDIOS.pop(eid, None) is None:
+        abort(404)
+    return jsonify({})
+
+
 @app.get("/studies/<eid>")
 def study(eid):
     if eid not in ESTUDIOS:

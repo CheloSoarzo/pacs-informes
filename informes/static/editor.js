@@ -97,6 +97,25 @@
     const i = txt.value.indexOf('___'); if (i >= 0) txt.setSelectionRange(i, i + txt.value.slice(i).match(/^_+/)[0].length);
   });
 
+  // ---------- subir un informe escrito en Word / LibreOffice / PDF ----------
+  const archivo = $('#archivo-informe');
+  archivo && archivo.addEventListener('change', async () => {
+    const f = archivo.files[0];
+    archivo.value = '';
+    if (!f) return;
+    if (txt.value.trim() && !confirm('¿Reemplazar el texto actual por el del archivo «' + f.name + '»?')) return;
+    const fd = new FormData(); fd.append('archivo', f);
+    estado.textContent = 'Leyendo ' + f.name + '…';
+    try {
+      const r = await fetch(cfg.urls.importar, { method: 'POST', body: fd, credentials: 'same-origin',
+                                                 headers: { 'X-CSRF': cfg.csrf } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'No se pudo leer el archivo');
+      txt.value = j.texto; marcar(); txt.focus(); txt.setSelectionRange(0, 0); txt.scrollTop = 0;
+      estado.textContent = 'Cargado desde ' + f.name + ': revísalo antes de enviarlo';
+    } catch (e) { estado.textContent = '⚠ ' + e.message; alert(e.message); }
+  });
+
   // ---------- frases (hallazgos y conclusiones) ----------
   const frases = cfg.frases || [];
   const panel = $('#panel-frases'), lista = $('#lista-frases'), buscar = $('#buscar-frase'), bf = $('#btn-frases');

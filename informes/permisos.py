@@ -16,6 +16,7 @@ CATALOGO = [
     ("Estudios", "notas", "Ver y agregar notas y adjuntos en los estudios"),
     ("Estudios", "notas_eliminar", "Eliminar notas de otros usuarios"),
     ("Estudios", "datos_contacto", "Editar correo y teléfono del paciente"),
+    ("Estudios", "editar_paciente", "Corregir datos del paciente y del examen (nombre, RUT, nacimiento, examen…)"),
     ("Estudios", "asignar", "Asignar radiólogo y marcar estudios urgentes"),
     ("Estudios", "pacs_subir", "Subir estudios y usar el explorador del PACS"),
     ("Estudios", "pacs_borrar", "Borrar o modificar estudios en el PACS"),
@@ -50,8 +51,8 @@ _RADIOLOGO = ["visor", "descargar", "exportar", "notas", "datos_contacto", "dict
               "dictados_anular", "ver_borrador", "redactar", "firmar", "firmar_lote", "rectificar", "links",
               "email", "entregas", "plantillas", "frases", "estadisticas"]
 _TRANSCRIPCION = ["notas", "dictados_escuchar", "transcribir", "ver_borrador", "redactar"]
-_TECNOLOGO = ["visor", "descargar", "notas", "datos_contacto", "pacs_subir"]
-_RECEPCION = ["exportar", "notas", "datos_contacto", "links", "email", "entregas"]
+_TECNOLOGO = ["visor", "descargar", "notas", "datos_contacto", "editar_paciente", "pacs_subir"]
+_RECEPCION = ["exportar", "notas", "datos_contacto", "editar_paciente", "links", "email", "entregas"]
 
 PERFILES_INICIALES = [
     # clave, nombre, descripción, permisos, solo_solicitados
@@ -73,6 +74,10 @@ PERFILES_INICIALES = [
      "Médicos derivadores: ven solo los exámenes que ellos solicitaron, ya validados.",
      ["visor", "descargar"], 1),
 ]
+
+# Permisos agregados en versiones posteriores: al actualizar, se suman a los perfiles iniciales que los
+# traen de fábrica (los perfiles creados por el administrador no se tocan).
+PERMISOS_NUEVOS = ["editar_paciente"]
 
 # Migración desde la versión con 5 roles fijos
 ROL_A_PERFIL = {"admin": "admin", "radiologo": "radiologos", "tecnologo": "tecnologos",

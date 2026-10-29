@@ -108,6 +108,7 @@ pacs detener clinica-sur                     # suspende un PACS (los datos se co
 pacs iniciar clinica-sur
 pacs logs rancagua
 pacs actualizar                              # baja la última versión de GitHub y reinicia todos
+                                             # (también desde la web: Administración → Ajustes → Sistema)
 pacs respaldo                                # respaldo manual (el automático corre cada noche)
 ```
 
@@ -165,6 +166,21 @@ Los equipos envían directo a un puerto público del servidor, como en pacs4me, 
 7. Para corregir un informe validado: **Rectificar** (queda en el historial). Para retirarlo por error grave: **Invalidar** (desactiva el link).
 
 Los tiempos en rojo indican estudios que llevan más horas sin informar que lo configurado en *Administración → Correo y ajustes*.
+
+**Visor dentro del informe.** En la pantalla del estudio, a la izquierda, el médico tiene el visor diagnóstico (OHIF)
+o Stone junto al editor: maneja los grises (ventana/nivel arrastrando con el clic izquierdo o con presets), recorre
+cortes con la rueda e informa al lado. «⇔ Agrandar visor» le da más espacio a las imágenes y ⛶ lo pone en pantalla
+completa. La elección se recuerda en cada computador. En el celular se usa la vista rápida.
+
+**Subir un informe escrito fuera.** Si la transcripcionista escribió el informe en Word, en el estudio usa
+«📄 Subir informe» (Word .docx, LibreOffice .odt, PDF con texto o .txt). El texto queda en el editor para revisarlo
+y sigue el flujo normal (enviar a validación, firmar); el PDF final lo genera el sistema con el formato del centro.
+Los .doc antiguos y los PDF escaneados no se pueden leer: hay que guardarlos como .docx.
+
+**Corregir datos del paciente.** Doble clic en la fila del estudio (o «✎ Corregir datos» dentro del estudio) para
+corregir nombre, RUT, fecha de nacimiento, sexo, examen, N° de examen y médico solicitante. Se corrige en el PACS
+(imágenes DICOM) y en el informe, y queda en la auditoría con el dato anterior. Permiso «Corregir datos del
+paciente» (de fábrica: tecnólogos, secretarías y entrega).
 
 ## Correo a pacientes
 

@@ -41,4 +41,22 @@
 
   <button class="btn prim" type="submit">Guardar ajustes</button>
 </form>
+
+{% if sistema and usuario.perfil_clave == 'admin' %}
+<div class="panel" id="sistema">
+  <h2>Sistema</h2>
+  <p class="peq">Versión instalada: <b class="mono">{{ sistema.version or 'sin dato' }}</b></p>
+  {% if sistema.resultado %}<p class="peq suave">Última actualización: {{ sistema.resultado }}</p>{% endif %}
+  {% if sistema.pendiente %}
+    <p class="peq">⏳ Hay una actualización en curso. Recarga esta página en unos minutos.</p>
+  {% else %}
+  <form method="post" action="{{ url_for('admin_actualizar') }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <p class="peq suave">Baja la última versión publicada en GitHub y reinicia todos los PACS de este servidor
+      (1 a 3 minutos sin servicio; no se pierden datos). Conviene hacerlo fuera del horario de atención.</p>
+    <button class="btn" type="submit">Actualizar sistema</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}

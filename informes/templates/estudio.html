@@ -37,6 +37,9 @@
     <div><span>N° examen</span>{{ est.accession or '—' }}</div>
     <div><span>Centro</span>{{ est.institucion or '—' }}</div>
     <div><span>Solicitante</span>{{ (inf.solicitante if inf else est.solicitante) or '—' }}</div>
+    {% if puede('editar_paciente') %}
+    <div class="corregir"><button type="button" class="btn peq" data-editar-paciente="{{ est.id }}">✎ Corregir datos</button></div>
+    {% endif %}
   </div>
   <div class="asignacion">
     <div><span class="etq">Radiólogo asignado</span>
@@ -67,8 +70,35 @@
 <div class="estudio">
   <!-- Columna izquierda: imágenes, notas, historial -->
   <section class="col-izq">
-    <div class="visor" id="visor"></div>
-    <p class="suave peq">Vista rápida. Para mediciones, ventana/nivel y reconstrucciones usa el visor OHIF.</p>
+    {# Visor dentro de la pantalla del informe: el médico maneja ventana/nivel (grises) e informa al lado #}
+    {% set con_visor = puede('visor') %}
+    <div class="visor-caja" id="visor-caja"
+         data-defecto="{{ 'ohif' if con_visor and (puede('firmar') or puede('redactar') or puede('dictar')) else 'rapida' }}">
+      <div class="visor-pestanas" role="tablist" aria-label="Visor de imágenes">
+        {% if con_visor %}
+        <button type="button" role="tab" data-modo="ohif">Visor diagnóstico</button>
+        <button type="button" role="tab" data-modo="stone">Visor Stone</button>
+        {% endif %}
+        <button type="button" role="tab" data-modo="rapida">Vista rápida</button>
+        {% if con_visor %}
+        <span class="espacio"></span>
+        <button type="button" class="btn-visor" id="visor-ampliar" aria-pressed="false"
+                title="Agranda el visor y deja el informe más angosto">⇔ Agrandar visor</button>
+        <button type="button" class="btn-visor" id="visor-completa" title="Pantalla completa (Esc para salir)">⛶</button>
+        {% endif %}
+      </div>
+      {% if con_visor %}
+      <div class="visor-marco" id="visor-marco" hidden>
+        <iframe title="Visor de imágenes" allow="fullscreen" data-ohif="{{ visor_ohif }}" data-stone="{{ visor_stone }}"></iframe>
+      </div>
+      {% endif %}
+      <div class="visor" id="visor" hidden></div>
+      <p class="suave peq visor-ayuda" data-modo="ohif" hidden>Grises (ventana/nivel): arrastra con el clic izquierdo sobre la
+        imagen, o elige un preset en la barra del visor. Rueda del mouse: cortes. Clic derecho: zoom.</p>
+      <p class="suave peq visor-ayuda" data-modo="stone" hidden>Grises: arrastra con el clic izquierdo. Rueda del mouse: cortes.</p>
+      <p class="suave peq visor-ayuda" data-modo="rapida" hidden>Vista rápida (JPEG, sin ventana/nivel). Para manejar los grises usa
+        el visor diagnóstico.</p>
+    </div>
 
     {% if puede('notas') %}
     <div class="panel" id="notas">
@@ -154,6 +184,8 @@
             {% for p in plantillas %}<option value="{{ p.id }}">{{ p.nombre }}</option>{% endfor %}
           </select>
           <button class="btn" id="btn-frases" type="button" aria-expanded="false" aria-controls="panel-frases">Frases</button>
+          <label class="btn" for="archivo-informe" title="Cargar un informe escrito en Word, LibreOffice, PDF o texto">📄 Subir informe</label>
+          <input type="file" id="archivo-informe" accept=".docx,.odt,.pdf,.txt" hidden>
           <span class="estado-guardado" id="estado-guardado">{% if inf %}Guardado {{ inf.actualizado|fh }}{% endif %}</span>
         </div>
         <div class="panel-frases" id="panel-frases" hidden>
@@ -333,7 +365,7 @@
 <script src="{{ url_for('static', filename='visor.js') }}"></script>
 <script src="{{ url_for('static', filename='audio.js') }}"></script>
 <script>
-  new VisorSimple(document.getElementById('visor'), {{ url_for('series_json', estudio_id=est.id)|tojson }}, '/img/');
+  iniciarVisores({{ url_for('series_json', estudio_id=est.id)|tojson }});
   window.EDITOR = {
     csrf: {{ csrf_token()|tojson }},
     editable: {{ puede_editar|tojson }},
@@ -348,11 +380,13 @@
       firmar: {{ url_for('firmar', estudio_id=est.id)|tojson }},
       transcribir: {{ url_for('transcribir')|tojson }},
       subirDictado: {{ url_for('subir_dictado', estudio_id=est.id)|tojson }},
-      link: {{ (url_for('crear_link', inf_id=inf.id) if inf else '')|tojson }}
+      link: {{ (url_for('crear_link', inf_id=inf.id) if inf else '')|tojson }},
+      importar: {{ url_for('importar_informe', estudio_id=est.id)|tojson }}
     }
   };
   {% for p in (plantillas if puede_editar else []) %}window.EDITOR.plantillas[{{ p.id|tojson }}] = {{ p.cuerpo|tojson }};
   {% endfor %}
 </script>
 <script src="{{ url_for('static', filename='editor.js') }}"></script>
+{% if puede('editar_paciente') %}{% include "_editar_paciente.html" %}{% endif %}
 {% endblock %}

@@ -244,7 +244,42 @@ def admin_ajustes():
         return redirect(url_for("admin_ajustes"))
     valores = {r["clave"]: r["valor"] for r in db.execute("SELECT * FROM ajustes").fetchall()}
     return render_template("admin_ajustes.html", v={k: valores.get(k, "") for k in claves},
-                           correo_ok=correo_configurado(), smtp_host=Config.SMTP_HOST)
+                           correo_ok=correo_configurado(), smtp_host=Config.SMTP_HOST, sistema=_estado_sistema())
+
+
+# ------------------------------------------------------------------ actualizar el sistema desde la web
+# La app no maneja Docker (por seguridad): deja una solicitud en su carpeta de datos y el servidor
+# (cron, `pacs revisar`) la ve en menos de un minuto, baja la última versión de GitHub y reinicia.
+SOLICITUD = "actualizar.solicitud"
+
+
+def _leer(nombre):
+    try:
+        with open(os.path.join(Config.DATA_DIR, nombre), encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def _estado_sistema():
+    if not Config.ADMINISTRA_SERVIDOR:
+        return None
+    return {"version": _leer("version.txt"), "resultado": _leer("actualizacion.txt"),
+            "pendiente": os.path.exists(os.path.join(Config.DATA_DIR, SOLICITUD))}
+
+
+@app.route("/admin/actualizar", methods=["POST"])
+@login_requerido("ajustes")
+def admin_actualizar():
+    u = usuario_actual()
+    if not Config.ADMINISTRA_SERVIDOR or u["perfil_clave"] != "admin":
+        abort(403)
+    with open(os.path.join(Config.DATA_DIR, SOLICITUD), "w", encoding="utf-8") as f:
+        f.write(f"{ahora()} {u['usuario']}\n")
+    registrar("actualizar_sistema")
+    flash("Actualización solicitada. En 1 a 3 minutos el sistema se reinicia con la última versión; "
+          "durante ese rato puede no responder.", "ok")
+    return redirect(url_for("admin_ajustes") + "#sistema")
 
 
 # ------------------------------------------------------------------ auditoría

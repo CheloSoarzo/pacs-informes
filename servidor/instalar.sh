@@ -62,20 +62,15 @@ for item in "${LISTA[@]}"; do
   [ -n "$nombre" ] || continue
   if [ -d "/opt/pacs-instancias/$nombre" ]; then echo "PACS $nombre ya existe"; continue; fi
   if [ -n "${ADMIN_PASSWORD:-}" ]; then
-    pacs nueva "$nombre" --centro "$centro" --clave "$ADMIN_PASSWORD"
+    pacs nueva "$nombre" --centro "$centro" --clave "$ADMIN_PASSWORD" --administra
   else
-    pacs nueva "$nombre" --centro "$centro"
+    pacs nueva "$nombre" --centro "$centro" --administra
   fi
 done
 
-# 6) Tareas automáticas: firewall DICOM (cada 5 min y al reiniciar) y respaldos diarios (se guardan 14 días)
-cat > /etc/cron.d/pacs <<CRON
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-*/5 * * * * root pacs firewall >> /var/log/pacs-firewall.log 2>&1
-@reboot root sleep 90 && pacs firewall >> /var/log/pacs-firewall.log 2>&1
-30 3 * * * root pacs respaldo >> /var/log/pacs-respaldo.log 2>&1
-CRON
-rm -f /etc/cron.d/pacs-firewall /etc/cron.d/pacs-respaldo
+# 6) Tareas automáticas: firewall DICOM (cada 5 min y al reiniciar), respaldos diarios (se guardan 14 días)
+#    y actualización pedida desde la web (se revisa cada minuto)
+pacs instalar-cron
 
 echo "=== Instalación terminada ==="
 pacs lista

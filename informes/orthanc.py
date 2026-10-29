@@ -181,6 +181,26 @@ class Orthanc:
                 return self.estudio(item["ID"])
         return None
 
+    def modificar_estudio(self, estudio_id, reemplazos):
+        """Corrige tags DICOM de todo el estudio (datos del paciente y del examen).
+
+        Se conservan los UID (el estudio sigue siendo el mismo para visores y equipos). Si cambia el RUT/ID del
+        paciente, Orthanc le asigna otro ID interno: se devuelve el ID nuevo y se borra la copia anterior."""
+        r = self._req("POST", f"/studies/{estudio_id}/modify", timeout=900, json={
+            "Replace": reemplazos,
+            "Keep": ["StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID"],
+            "Force": True,            # necesario para conservar UID y cambiar datos del paciente
+            "KeepSource": True,       # se borra el original solo si quedó con otro ID
+        })
+        if r is None:
+            raise OrthancError("El estudio ya no existe en el PACS")
+        nuevo = r.json().get("ID")
+        if not nuevo:
+            raise OrthancError("El PACS no devolvió el estudio modificado")
+        if nuevo != estudio_id:
+            self._req("DELETE", f"/studies/{estudio_id}")
+        return nuevo
+
     # ---- equipos remotos (modalidades DICOM) ----
     def modalidades(self):
         return self.get_json("/modalities", params={"expand": ""}) or {}
@@ -224,6 +244,9 @@ class Orthanc:
             "institucion": st.get("InstitutionName", ""),
             "solicitante": nombre_dicom(st.get("ReferringPhysicianName", "")),
             "paciente_nombre": nombre_dicom(pt.get("PatientName", "")),
+            "paciente_nombre_raw": pt.get("PatientName", ""),
+            "paciente_sexo_raw": pt.get("PatientSex", ""),
+            "solicitante_raw": st.get("ReferringPhysicianName", ""),
             "paciente_id": pt.get("PatientID", ""),
             "paciente_fnac_raw": pt.get("PatientBirthDate", ""),
             "paciente_fnac": fecha_dicom(pt.get("PatientBirthDate", "")),

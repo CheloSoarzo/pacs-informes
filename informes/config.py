@@ -53,6 +53,10 @@ class Config:
     SERVIDOR_IP_PUBLICA = os.environ.get("SERVIDOR_IP_PUBLICA", "")   # solo para mostrar en pantalla
     FIREWALL_TOKEN = os.environ.get("FIREWALL_TOKEN", "")             # clave del script de firewall
 
+    # Este PACS puede pedir actualizar todo el servidor desde la web (Ajustes → Sistema).
+    # Solo los PACS propios; a los PACS arrendados a terceros no se les da.
+    ADMINISTRA_SERVIDOR = _bool(os.environ.get("ADMINISTRA_SERVIDOR"), False)
+
     SECURE_COOKIES = PUBLIC_BASE_URL.startswith("https://")
     # Dominio común para compartir la sesión entre la app y el PACS (ej: .tucentro.cl)
     COOKIE_DOMAIN = os.environ.get("COOKIE_DOMAIN", "") or None

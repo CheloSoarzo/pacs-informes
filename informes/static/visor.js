@@ -75,3 +75,53 @@ class VisorSimple {
     }
   }
 }
+
+/* Pestañas del visor en la pantalla del informe: visor diagnóstico (OHIF), Stone o vista rápida.
+   Los visores completos se cargan solo al elegirlos y la elección se recuerda en este navegador. */
+function iniciarVisores(urlSeries) {
+  const caja = document.getElementById('visor-caja');
+  if (!caja) return;
+  const estudio = caja.closest('.estudio');
+  const marco = document.getElementById('visor-marco');
+  const iframe = marco && marco.querySelector('iframe');
+  const rapida = document.getElementById('visor');
+  const tabs = [...caja.querySelectorAll('[role=tab]')];
+  let simple = null;
+  const leer = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
+  const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+
+  function mostrar(modo) {
+    if (!tabs.some(t => t.dataset.modo === modo)) modo = 'rapida';
+    tabs.forEach(t => t.setAttribute('aria-selected', String(t.dataset.modo === modo)));
+    caja.querySelectorAll('.visor-ayuda').forEach(p => { p.hidden = p.dataset.modo !== modo; });
+    const completo = modo !== 'rapida';
+    if (marco) marco.hidden = !completo;
+    rapida.hidden = completo;
+    estudio && estudio.classList.toggle('con-visor', completo);
+    if (completo) {
+      const src = iframe.dataset[modo];
+      if (iframe.dataset.actual !== modo) { iframe.src = src; iframe.dataset.actual = modo; }
+    } else if (!simple) {
+      simple = new VisorSimple(rapida, urlSeries, '/img/');
+    }
+    guardar('visor_modo', modo);
+  }
+
+  tabs.forEach(t => t.addEventListener('click', () => mostrar(t.dataset.modo)));
+  const angosta = window.matchMedia('(max-width: 900px)').matches;   // en el celular, la vista rápida
+  mostrar(angosta ? 'rapida' : leer('visor_modo', caja.dataset.defecto));
+
+  const ampliar = document.getElementById('visor-ampliar');
+  if (ampliar && estudio) {
+    const aplicar = on => { estudio.classList.toggle('ampliado', on); ampliar.setAttribute('aria-pressed', String(on)); };
+    aplicar(leer('visor_ampliado', '0') === '1');
+    ampliar.addEventListener('click', () => {
+      const on = !estudio.classList.contains('ampliado'); aplicar(on); guardar('visor_ampliado', on ? '1' : '0');
+    });
+  }
+  const completa = document.getElementById('visor-completa');
+  completa && completa.addEventListener('click', () => {
+    const el = (marco && !marco.hidden) ? marco : rapida;
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+  });
+}

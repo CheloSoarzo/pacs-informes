@@ -3,11 +3,14 @@
 # Se instala como /usr/local/bin/pacs. Ejecutar como root.
 #
 #   pacs nueva <nombre> [--centro "Nombre visible"] [--dominio pacs.cliente.cl] [--puerto 46430] [--clave X]
+#              [--administra]   (PACS propio: su administrador puede actualizar el servidor desde la web.
+#                                No lo uses en PACS arrendados a terceros)
 #   pacs lista                 PACS del servidor con su dirección, puerto DICOM, estado y espacio usado
 #   pacs iniciar <nombre>      / pacs detener <nombre>
 #   pacs logs <nombre>         registros de la app de ese PACS
 #   pacs dominio <nombre> <dominio>   cambia la dirección web (ej: cuando compres un dominio propio)
 #   pacs actualizar            baja la última versión de GitHub y reinicia todos los PACS
+#                              (también desde la web: Administración → Ajustes → Sistema, en los PACS propios)
 #   pacs firewall              aplica la lista blanca DICOM de cada PACS (lo hace cron cada 5 min)
 #   pacs respaldo              respaldo de las bases de datos de todos los PACS (lo hace cron cada noche)
 #   pacs base                  (interno) crea la red compartida y la entrada web HTTPS
@@ -16,6 +19,7 @@ set -euo pipefail
 CODIGO="${PACS_CODIGO:-/opt/pacs-informes}"
 INST="${PACS_INSTANCIAS:-/opt/pacs-instancias}"
 RESPALDOS="${PACS_RESPALDOS:-/opt/respaldos}"
+CRON_FILE="${PACS_CRON:-/etc/cron.d/pacs}"
 COMPOSE_INST="$CODIGO/docker-compose.instancia.yml"
 COMPOSE_PROXY="$CODIGO/docker-compose.proxy.yml"
 PUERTO_INICIAL=46429
@@ -117,13 +121,14 @@ cmd_nueva() {
   local n="${1:-}"; shift || true
   [[ "$n" =~ ^[a-z][a-z0-9-]{1,19}$ ]] || error "nombre inválido: usa minúsculas, números o guiones (2 a 20 letras), ej: rancagua"
   [ -e "$INST/$n" ] && error "ya existe el PACS '$n'"
-  local centro="$n" dominio="" puerto="" clave=""
+  local centro="$n" dominio="" puerto="" clave="" administra=false
   while [ $# -gt 0 ]; do
     case "$1" in
       --centro) centro="$2"; shift 2;;
       --dominio) dominio="$2"; shift 2;;
       --puerto) puerto="$2"; shift 2;;
       --clave) clave="$2"; shift 2;;
+      --administra) administra=true; shift;;
       *) error "opción desconocida: $1";;
     esac
   done
@@ -138,6 +143,7 @@ cmd_nueva() {
 # PACS "$n" — creado por 'pacs nueva' el $(date '+%F %T')
 INSTANCIA=$n
 ACTIVO=true
+ADMINISTRA_SERVIDOR=$administra
 DOMINIO=$dominio
 PUBLIC_BASE_URL=https://$dominio
 PACS_PUBLIC_URL=https://$dominio
@@ -176,6 +182,7 @@ SMTP_SSL=false
 SMTP_STARTTLS=true
 ENV
   chmod 600 "$INST/$n/.env"
+  escribir_version "$n"
   ufw_abrir "$puerto"
   dc "$n" up -d --build
   recargar_caddy
@@ -227,9 +234,17 @@ cmd_logs() { existe "${1:-}"; dc "$1" logs --tail 200 -f informes; }
 
 cmd_actualizar() {
   git -C "$CODIGO" -c core.fileMode=false pull --ff-only
+  # Lo que sigue lo hace la versión recién descargada de este mismo script
+  exec bash "$CODIGO/servidor/pacs.sh" _post-actualizar
+}
+
+cmd_post_actualizar() {
   local n primera; primera="$(instancias | head -n1)"
   [ -n "$primera" ] && dc "$primera" build informes   # la imagen de la app es la misma para todos los PACS
   for n in $(instancias); do
+    # PACS creados antes de existir esta opción: son los propios
+    grep -qE "^ADMINISTRA_SERVIDOR=" "$INST/$n/.env" || poner "$INST/$n/.env" ADMINISTRA_SERVIDOR true
+    escribir_version "$n"
     [ "$(leer "$INST/$n/.env" ACTIVO)" = "false" ] && continue
     dc "$n" pull -q orthanc postgres || true
     dc "$n" up -d
@@ -237,7 +252,54 @@ cmd_actualizar() {
   proxy pull -q || true
   recargar_caddy
   proxy up -d
-  echo "Todos los PACS actualizados"
+  instalar_cron
+  echo "Todos los PACS actualizados a la versión $(version)"
+}
+
+version() { git -C "$CODIGO" log -1 --format='%h del %cd' --date=format:'%d-%m-%Y %H:%M' 2>/dev/null || echo "?"; }
+escribir_version() {
+  mkdir -p "$INST/$1/data/informes"
+  version > "$INST/$1/data/informes/version.txt"
+}
+
+instalar_cron() {
+  cat > "$CRON_FILE" <<CRON
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+*/5 * * * * root pacs firewall >> /var/log/pacs-firewall.log 2>&1
+@reboot root sleep 90 && pacs firewall >> /var/log/pacs-firewall.log 2>&1
+30 3 * * * root pacs respaldo >> /var/log/pacs-respaldo.log 2>&1
+* * * * * root pacs revisar >> /var/log/pacs-actualizacion.log 2>&1
+CRON
+  if [ "$CRON_FILE" = /etc/cron.d/pacs ]; then rm -f /etc/cron.d/pacs-firewall /etc/cron.d/pacs-respaldo; fi
+}
+
+# Cada minuto (cron): si el administrador de un PACS propio pidió actualizar desde la web, se actualiza.
+cmd_revisar() {
+  local n pedido=""
+  for n in $(instancias); do
+    local f="$INST/$n/data/informes/actualizar.solicitud"
+    [ -f "$f" ] || continue
+    if [ "$(leer "$INST/$n/.env" ADMINISTRA_SERVIDOR)" = "true" ]; then pedido="$n"; fi
+    rm -f "$f"     # las de PACS sin permiso se descartan
+  done
+  [ -n "$pedido" ] || return 0
+  exec 9>/var/lock/pacs-actualizar.lock
+  flock -n 9 || return 0
+  echo "$(date '+%F %T') actualización pedida desde el PACS $pedido"
+  local res
+  if res="$(bash "$CODIGO/servidor/pacs.sh" actualizar 2>&1)"; then
+    res="$(date '+%d-%m-%Y %H:%M') OK, versión $(version)"
+  else
+    echo "$res"
+    res="$(date '+%d-%m-%Y %H:%M') FALLÓ: $(echo "$res" | tail -n 3 | tr '\n' ' ' | cut -c1-300)"
+  fi
+  echo "$res"
+  for n in $(instancias); do
+    if [ "$(leer "$INST/$n/.env" ADMINISTRA_SERVIDOR)" = "true" ]; then
+      echo "$res" > "$INST/$n/data/informes/actualizacion.txt"
+    fi
+  done
+  return 0
 }
 
 cmd_firewall() {
@@ -274,6 +336,9 @@ case "$c" in
   logs) cmd_logs "$@";;
   dominio) cmd_dominio "$@";;
   actualizar) cmd_actualizar;;
+  _post-actualizar) cmd_post_actualizar;;
+  revisar) cmd_revisar;;
+  instalar-cron) instalar_cron;;
   firewall) cmd_firewall;;
   respaldo) cmd_respaldo;;
   *) sed -n '2,14p' "$0"; exit 1;;

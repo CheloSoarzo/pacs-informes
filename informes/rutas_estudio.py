@@ -485,3 +485,144 @@ def enviar_email(estudio_id):
     ok, msg = enviar_correo_informe(inf, para)
     flash(msg, "ok" if ok else "error")
     return _volver(estudio_id, "entrega")
+
+
+# ------------------------------------------------------------------ corregir datos del paciente / examen
+SEXOS = {"M": "Masculino", "F": "Femenino", "O": "Otro", "": "Sin dato"}
+TABLAS_CON_ESTUDIO = ("informes", "estudio_meta", "dictados", "entregas", "notas")
+
+
+def _datos_editables(est):
+    apellidos, _, nombres = (est.get("paciente_nombre_raw") or "").partition("^")
+    fnac = est.get("paciente_fnac_raw") or ""
+    return {
+        "apellidos": apellidos.replace("^", " ").strip(),
+        "nombres": nombres.replace("^", " ").strip(),
+        "rut": est.get("paciente_id", ""),
+        "fnac": f"{fnac[0:4]}-{fnac[4:6]}-{fnac[6:8]}" if len(fnac) >= 8 and fnac[:8].isdigit() else "",
+        "sexo": est.get("paciente_sexo_raw", "") if est.get("paciente_sexo_raw", "") in SEXOS else "O",
+        "descripcion": est.get("descripcion", ""),
+        "solicitante": (est.get("solicitante_raw") or "").replace("^", " ").strip(),
+        "accession": est.get("accession", ""),
+    }
+
+
+def _limpio(v, largo=64):
+    # Sin caracteres de control ni separadores DICOM ("\\" separa valores; "^" lo ponemos nosotros)
+    v = "".join(c for c in (v or "") if c.isprintable() and c not in "\\^=").strip()
+    return " ".join(v.split())[:largo]
+
+
+@app.route("/estudio/<estudio_id>/datos", methods=["GET", "POST"])
+@login_requerido("editar_paciente")
+def datos_paciente(estudio_id):
+    est = estudio_visible(estudio_id)
+    actual = _datos_editables(est)
+    inf = informe_por_estudio(estudio_id)
+    if request.method == "GET":
+        return jsonify(datos=actual, informe_validado=bool(inf and inf["estado"] == "firmado"))
+
+    f = request.form
+    nuevo = {
+        "apellidos": _limpio(f.get("apellidos")).upper(),
+        "nombres": _limpio(f.get("nombres")).upper(),
+        "rut": _limpio(f.get("rut")).upper(),
+        "fnac": (f.get("fnac") or "").strip(),
+        "sexo": (f.get("sexo") or "").strip().upper(),
+        "descripcion": _limpio(f.get("descripcion")).upper(),
+        "solicitante": _limpio(f.get("solicitante")).upper(),
+        "accession": _limpio(f.get("accession"), 16),
+    }
+    errores = []
+    if not nuevo["apellidos"]:
+        errores.append("Falta el apellido del paciente.")
+    if not nuevo["rut"]:
+        errores.append("Falta el RUT o ID del paciente.")
+    if nuevo["sexo"] not in SEXOS:
+        errores.append("Sexo no válido.")
+    if nuevo["fnac"]:
+        try:
+            fn = datetime.strptime(nuevo["fnac"], "%Y-%m-%d").date()
+            if fn > datetime.now().date() or fn.year < 1900:
+                errores.append("La fecha de nacimiento no es válida.")
+        except ValueError:
+            errores.append("La fecha de nacimiento no es válida.")
+    if errores:
+        for e in errores:
+            flash(e, "error")
+        return _volver(estudio_id)
+
+    # Solo se envían al PACS los datos que cambiaron
+    tags = {}
+    if (nuevo["apellidos"], nuevo["nombres"]) != (actual["apellidos"].upper(), actual["nombres"].upper()):
+        tags["PatientName"] = nuevo["apellidos"] + ("^" + nuevo["nombres"] if nuevo["nombres"] else "")
+    if nuevo["rut"] != actual["rut"]:
+        tags["PatientID"] = nuevo["rut"]
+    if nuevo["fnac"] != actual["fnac"]:
+        tags["PatientBirthDate"] = nuevo["fnac"].replace("-", "")
+    if nuevo["sexo"] != actual["sexo"]:
+        tags["PatientSex"] = nuevo["sexo"]
+    if nuevo["descripcion"] != actual["descripcion"].upper():
+        tags["StudyDescription"] = nuevo["descripcion"]
+    if nuevo["solicitante"] != actual["solicitante"].upper():
+        tags["ReferringPhysicianName"] = nuevo["solicitante"]
+    if nuevo["accession"] != actual["accession"]:
+        tags["AccessionNumber"] = nuevo["accession"]
+    if not tags:
+        flash("No hubo cambios.", "info")
+        return _volver(estudio_id)
+
+    nuevo_id = pacs.modificar_estudio(estudio_id, tags)
+    db = get_db()
+    if nuevo_id != estudio_id:
+        # El PACS le dio otro ID interno (cambió el RUT): se mueve todo lo asociado al estudio
+        for tabla in TABLAS_CON_ESTUDIO:
+            db.execute(f"UPDATE {tabla} SET estudio_id=? WHERE estudio_id=?", (nuevo_id, estudio_id))
+    # Los informes y dictados guardan una copia de los datos (para el PDF y las listas): se actualiza
+    est2 = pacs.estudio(nuevo_id) or est
+    campos = {"paciente_nombre": est2["paciente_nombre"], "paciente_id": est2["paciente_id"],
+              "paciente_fnac": est2["paciente_fnac_raw"], "paciente_sexo": est2["paciente_sexo"],
+              "descripcion": est2["descripcion"], "accession": est2["accession"]}
+    if "ReferringPhysicianName" in tags:
+        campos["solicitante"] = est2["solicitante"]
+    db.execute(f"UPDATE informes SET {', '.join(k + '=?' for k in campos)} WHERE estudio_id=?",
+               (*campos.values(), nuevo_id))
+    db.execute("UPDATE dictados SET paciente_nombre=?, paciente_id=?, descripcion=? WHERE estudio_id=?",
+               (est2["paciente_nombre"], est2["paciente_id"], est2["descripcion"], nuevo_id))
+    db.commit()
+    cambios = "; ".join(f"{k}: {actual_tag(est, k)} → {v}" for k, v in tags.items())
+    registrar("editar_paciente", f"{nuevo_id} | {cambios}")
+    flash("Datos del paciente corregidos" + (" (el informe validado mostrará los datos nuevos)."
+                                             if inf and inf["estado"] == "firmado" else "."), "ok")
+    return _volver(nuevo_id)
+
+
+def actual_tag(est, tag):
+    return {"PatientName": est.get("paciente_nombre_raw"), "PatientID": est.get("paciente_id"),
+            "PatientBirthDate": est.get("paciente_fnac_raw"), "PatientSex": est.get("paciente_sexo_raw"),
+            "StudyDescription": est.get("descripcion"), "ReferringPhysicianName": est.get("solicitante_raw"),
+            "AccessionNumber": est.get("accession")}.get(tag, "") or "(vacío)"
+
+
+# ------------------------------------------------------------------ subir un informe escrito fuera del sistema
+@app.route("/estudio/<estudio_id>/importar-informe", methods=["POST"])
+@login_requerido("redactar")
+def importar_informe(estudio_id):
+    """Devuelve el texto del archivo para cargarlo en el editor (no guarda nada: eso lo hace el editor)."""
+    from importar import ImportarError, extraer_texto
+    estudio_visible(estudio_id)
+    inf = informe_por_estudio(estudio_id)
+    if inf and inf["estado"] == "firmado":
+        return jsonify(error="El informe ya está validado. Para cambiarlo usa Rectificar."), 409
+    f = request.files.get("archivo")
+    if not f or not f.filename:
+        return jsonify(error="No llegó ningún archivo."), 400
+    try:
+        texto = extraer_texto(f.filename, f.read(MAX_SUBIDA + 1))
+    except ImportarError as e:
+        return jsonify(error=str(e)), 400
+    registrar("importar_informe", f"{estudio_id} | {f.filename[:80]}")
+    return jsonify(ok=True, texto=texto, archivo=f.filename)
+
+
+MAX_SUBIDA = 15 * 1024 * 1024

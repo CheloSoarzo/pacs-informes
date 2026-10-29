@@ -1,0 +1,30 @@
+{# Ventana para corregir los datos del paciente y del examen. Se abre con doble clic en la lista
+   o con el botón "Corregir datos" en la pantalla del estudio (static/paciente.js). #}
+<dialog id="dlg-paciente" class="dialogo" aria-labelledby="dlg-paciente-titulo">
+  <form method="post" id="form-paciente">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <h2 id="dlg-paciente-titulo">Corregir datos del paciente</h2>
+    <p class="suave peq" id="dlg-paciente-cargando">Cargando…</p>
+    <div class="campos-2" id="dlg-paciente-campos" hidden>
+      <label>Apellidos<input type="text" name="apellidos" required maxlength="64" autocomplete="off"></label>
+      <label>Nombres<input type="text" name="nombres" maxlength="64" autocomplete="off"></label>
+      <label>RUT / ID<input type="text" name="rut" required maxlength="64" autocomplete="off" class="mono"></label>
+      <label>Fecha de nacimiento<input name="fnac" type="date"></label>
+      <label>Sexo
+        <select name="sexo"><option value="M">Masculino</option><option value="F">Femenino</option>
+          <option value="O">Otro</option><option value="">Sin dato</option></select></label>
+      <label>N° de examen<input type="text" name="accession" maxlength="16" autocomplete="off"></label>
+      <label class="ancho">Examen<input type="text" name="descripcion" maxlength="64" autocomplete="off"></label>
+      <label class="ancho">Médico solicitante<input type="text" name="solicitante" maxlength="64" autocomplete="off"></label>
+    </div>
+    <p class="aviso peq" id="dlg-paciente-validado" hidden>
+      Este examen ya tiene informe validado: el PDF y el link del paciente mostrarán los datos corregidos.</p>
+    <p class="suave peq">Se corrigen en el PACS (imágenes DICOM) y en el informe. El cambio queda en la auditoría.
+      En estudios grandes puede tardar un poco.</p>
+    <div class="fila fin">
+      <button type="button" class="btn" id="dlg-paciente-cancelar">Cancelar</button>
+      <button type="submit" class="btn prim" id="dlg-paciente-guardar" disabled>Guardar cambios</button>
+    </div>
+  </form>
+</dialog>
+<script src="{{ url_for('static', filename='paciente.js') }}"></script>

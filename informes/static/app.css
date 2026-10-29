@@ -312,3 +312,41 @@ td.mono { white-space: nowrap; }
 .config-equipo { margin-bottom: 14px; }
 .config-equipo .datos b.mono { font-size: 16px; }
 .mt-grande { margin-top: 18px; }
+
+/* ---- Visor dentro de la pantalla del informe ---- */
+.visor-caja { display: grid; gap: 6px; }
+.visor-pestanas { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.visor-pestanas [role=tab], .btn-visor { border: 1px solid var(--borde, #D0D7DE); background: var(--panel, #fff); color: inherit;
+  border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer; }
+.visor-pestanas [role=tab][aria-selected=true] { background: var(--primario); color: #fff; border-color: var(--primario); }
+.btn-visor[aria-pressed=true] { background: var(--primario-claro); border-color: var(--primario); }
+.visor-pestanas .espacio { flex: 1; }
+.visor-marco { height: calc(100vh - 140px); min-height: 480px; background: #000; border-radius: var(--radio, 8px); overflow: hidden; }
+.visor-marco iframe { width: 100%; height: 100%; border: 0; display: block; }
+.visor-marco:fullscreen, .visor:fullscreen { height: 100vh; border-radius: 0; }
+.visor-ayuda { margin: 0; }
+/* Con el visor completo, la columna de imágenes queda fija mientras se escribe el informe */
+.estudio.con-visor .col-izq { position: sticky; top: 8px; max-height: calc(100vh - 16px); overflow-y: auto; }
+.estudio.ampliado { grid-template-columns: minmax(0, 1.9fr) minmax(360px, 1fr); }
+.datos .corregir { display: flex; align-items: end; }
+@media (max-width: 900px) {
+  .estudio.con-visor .col-izq { position: static; max-height: none; overflow: visible; }
+  .estudio.ampliado { grid-template-columns: 1fr; }
+  .visor-marco { height: 70vh; min-height: 0; }
+  #visor-ampliar { display: none; }
+}
+
+/* ---- Ventana para corregir datos del paciente ---- */
+.dialogo { border: 0; border-radius: 12px; padding: 0; width: min(640px, calc(100vw - 32px));
+  box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.dialogo::backdrop { background: rgba(15, 23, 42, .45); }
+.dialogo form { padding: 20px; display: grid; gap: 12px; }
+.dialogo h2 { margin: 0; }
+.campos-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+.campos-2 label { display: grid; gap: 4px; font-size: 13px; }
+.campos-2 .ancho { grid-column: 1 / -1; }
+.campos-2 input, .campos-2 select { width: 100%; }
+.dialogo .aviso { background: var(--aviso-bg); border: 1px solid var(--aviso); border-radius: 6px; padding: 8px 10px; margin: 0; }
+.fila.fin { justify-content: flex-end; }
+tr.editable { cursor: default; }
+@media (max-width: 600px) { .campos-2 { grid-template-columns: 1fr; } }

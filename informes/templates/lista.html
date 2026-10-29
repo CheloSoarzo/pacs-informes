@@ -100,7 +100,8 @@
   </tr></thead>
   <tbody>
   {% for e in estudios %}
-    <tr class="{{ 'fila-urgente' if e.urgente and e.estado != 'firmado' }}">
+    <tr class="{{ 'fila-urgente' if e.urgente and e.estado != 'firmado' }}{{ ' editable' if puede('editar_paciente') }}"
+        data-url="{{ url_for('estudio', estudio_id=e.id) }}"{% if puede('editar_paciente') %} data-estudio="{{ e.id }}" title="Doble clic: corregir datos del paciente"{% endif %}>
       {% if puede('asignar') or puede('firmar_lote') %}<td class="col-sel"><input type="checkbox" name="ids" value="{{ e.id }}" data-estado="{{ e.estado }}" aria-label="Seleccionar {{ e.paciente_nombre }}"></td>{% endif %}
       <td class="peq nowrap">{{ e.fecha }}<br><span class="suave">{{ e.hora }}</span></td>
       <td>
@@ -134,4 +135,5 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='lista.js') }}"></script>
+{% if puede('editar_paciente') %}{% include "_editar_paciente.html" %}{% endif %}
 {% endblock %}

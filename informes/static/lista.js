@@ -28,6 +28,13 @@
   const cl = $('#btn-cancelar-lote');
   cl && cl.addEventListener('click', () => { conf.hidden = true; $('#confirmado').value = '0'; });
 
+  // Doble clic en una fila: abre el estudio (quien puede corregir datos ve la ventana de edición, paciente.js)
+  document.addEventListener('dblclick', e => {
+    const fila = e.target.closest('tr[data-url]');
+    if (!fila || fila.dataset.estudio || e.target.closest('a, button, input, select, label')) return;
+    location.href = fila.dataset.url;
+  });
+
   // Actualización automática (se recuerda en este navegador)
   const sel = $('#refresco');
   let seg = 0;
@@ -38,7 +45,7 @@
   }
   if (seg > 0) {
     setInterval(() => {
-      const ocupado = checks().some(c => c.checked) || document.querySelector('details[open]') ||
+      const ocupado = checks().some(c => c.checked) || document.querySelector('details[open], dialog[open]') ||
         (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName));
       if (!ocupado && document.visibilityState === 'visible') location.reload();
     }, seg * 1000);
