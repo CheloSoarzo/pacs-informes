@@ -9,6 +9,8 @@ def _bool(v, default=False):
 
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-cambia-esto")
+    # Nombre corto de este PACS cuando hay varios en el mismo servidor (ej: rancagua, insi)
+    INSTANCIA = "".join(c for c in os.environ.get("INSTANCIA", "").lower() if c.isalnum() or c == "-")
     DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))
 
     ORTHANC_URL = os.environ.get("ORTHANC_URL", "http://localhost:8042").rstrip("/")

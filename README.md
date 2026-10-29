@@ -76,18 +76,43 @@ Cada usuario tiene un **perfil** y cada perfil es una lista de permisos que el a
 5. Instala Docker, copia este proyecto, crea `.env` y ejecuta `docker compose up -d --build`.
 6. Configura los **respaldos automáticos** diarios (ver más abajo) hacia otro proveedor o almacenamiento.
 
-## Instalación automática en Oracle Cloud (u otro servidor Ubuntu)
+## Instalación automática (Vultr, Oracle Cloud u otro servidor Ubuntu)
 
-1. Sube este proyecto a tu repositorio de GitHub (público, sin el archivo `.env`).
-2. En Oracle Cloud crea una instancia Ubuntu 24.04 (ARM Ampere A1, 2 OCPU, 12 GB RAM, disco de arranque de 200 GB).
-   En «Opciones avanzadas → Gestión» pega el contenido de `servidor/cloud-init-oracle.sh` (cambia la clave inicial).
-3. En la red virtual (VCN → Lista de seguridad) agrega reglas de entrada TCP para los puertos 80, 443 y el puerto DICOM.
-4. Espera 10-15 minutos y entra a `https://pacs.<ip-con-guiones>.sslip.io` (ej. `https://pacs.129-151-10-20.sslip.io`) con el usuario `admin`.
-   No necesitas comprar un dominio para empezar; más adelante puedes usar uno propio cambiando `DOMINIO` en `.env`.
+Un mismo servidor aloja **varios PACS independientes**, como los "servidores PACS" de pacs4me: cada uno con su
+dirección web, sus usuarios, su base de datos, sus imágenes, su puerto DICOM y el nombre de su centro en los informes.
+Ninguno ve los datos de otro, lo que también permite arrendar un PACS a un tercero.
 
-El instalador (`servidor/instalar.sh`) instala Docker, genera claves seguras en `.env`, abre el firewall de Oracle,
-levanta el sistema con HTTPS, programa el firewall DICOM cada 5 minutos y un respaldo diario de las bases de datos.
+1. Sube este proyecto a tu repositorio de GitHub (público, sin archivos `.env`).
+2. Crea un servidor Ubuntu 24.04 (para 2-3 PACS chicos basta con 2 vCPU y 4 GB de RAM; para más, 8 GB o más).
+   - **Vultr**: en «Additional Features → Cloud-Init User-Data» pega `servidor/cloud-init-vultr.sh`.
+   - **Oracle Cloud**: en «Opciones avanzadas → Gestión» pega `servidor/cloud-init-oracle.sh`, y en la VCN abre
+     TCP 80, 443 y 46429-46479.
+   Antes de pegar, cambia la clave inicial y la lista `PACS_INICIALES` (ej. `rancagua:Centro Médico Rancagua;insi:INSI`).
+3. Espera 10-15 minutos y entra a cada PACS en `https://<nombre>.<ip-con-guiones>.sslip.io`
+   (ej. `https://rancagua.64-176-4-237.sslip.io`) con el usuario `admin`. Cambia la clave al entrar.
+   No necesitas comprar un dominio para empezar.
+
+El instalador (`servidor/instalar.sh`) instala Docker, crea una entrada web HTTPS compartida (Caddy), crea los PACS
+iniciales con claves seguras, y programa el firewall DICOM cada 5 minutos y un respaldo diario de todos los PACS.
 El registro queda en `/var/log/pacs-instalacion.log`.
+
+### Administrar los PACS del servidor (comando `pacs`)
+
+Por SSH o desde la consola web del proveedor, como root:
+
+```
+pacs lista                                   # PACS, estado, puerto DICOM, espacio usado y dirección
+pacs nueva clinica-sur --centro "Clínica Sur" # crea un PACS nuevo (puerto DICOM y dirección automáticos)
+pacs dominio rancagua pacs.cmrancagua.cl     # usar un dominio propio (debe apuntar a la IP del servidor)
+pacs detener clinica-sur                     # suspende un PACS (los datos se conservan; la web muestra "suspendido")
+pacs iniciar clinica-sur
+pacs logs rancagua
+pacs actualizar                              # baja la última versión de GitHub y reinicia todos
+pacs respaldo                                # respaldo manual (el automático corre cada noche)
+```
+
+Cada PACS vive en `/opt/pacs-instancias/<nombre>/` (su `.env` y su carpeta `data`). Los respaldos quedan en
+`/opt/respaldos/<nombre>/`. Cada PACS usa unos 400-500 MB de RAM: un servidor de 4 GB aguanta 3-4 PACS chicos.
 
 ## Recibir estudios por internet (equipos de cada centro)
 

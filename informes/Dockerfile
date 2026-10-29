@@ -10,4 +10,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 EXPOSE 8000
-CMD ["gunicorn", "-w", "3", "--threads", "4", "-b", "0.0.0.0:8000", "--timeout", "300", "app:app"]
+# WEB_WORKERS: procesos de la app (menos procesos = menos RAM cuando hay varios PACS en un servidor)
+CMD ["sh", "-c", "exec gunicorn -w ${WEB_WORKERS:-3} --threads 4 -b 0.0.0.0:8000 --timeout 300 app:app"]

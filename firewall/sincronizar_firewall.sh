@@ -5,22 +5,25 @@
 # Importante: Docker publica puertos saltándose ufw, por eso las reglas van en la cadena DOCKER-USER
 # de iptables, que Docker respeta.
 #
-# Uso:   sudo ./sincronizar_firewall.sh            (lee .env de la carpeta del proyecto)
+# Uso:   sudo ./sincronizar_firewall.sh                 (un solo PACS: lee el .env del proyecto)
+#        sudo ./sincronizar_firewall.sh /ruta/al/.env   (varios PACS: uno por llamada; lo hace `pacs firewall`)
 # Cron:  */5 * * * * root /opt/pacs-informes/firewall/sincronizar_firewall.sh >> /var/log/pacs-firewall.log 2>&1
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="${1:-$DIR/.env}"
 # Lee solo las variables necesarias del .env (sin ejecutarlo: hay valores con espacios y < >)
-leer() { grep -E "^$1=" "$DIR/.env" | tail -n1 | cut -d= -f2- | sed -e 's/^["'"'"']//' -e 's/["'"'"']$//'; }
+leer() { grep -E "^$1=" "$ENV_FILE" | tail -n1 | cut -d= -f2- | sed -e 's/^["'"'"']//' -e 's/["'"'"']$//'; }
 PUBLIC_BASE_URL="$(leer PUBLIC_BASE_URL)"
 FIREWALL_TOKEN="$(leer FIREWALL_TOKEN)"
 DICOM_PUERTO_PUBLICO="$(leer DICOM_PUERTO_PUBLICO)"
 PUERTO="${DICOM_PUERTO_PUBLICO:-46429}"
 URL="${PUBLIC_BASE_URL%/}/api/equipos/ips"
-CADENA="PACS-DICOM"
+# Una cadena por puerto: cada PACS del servidor tiene su propia lista blanca
+CADENA="PACS-DICOM-${PUERTO}"
 
 if [ -z "${FIREWALL_TOKEN:-}" ]; then
-  echo "$(date '+%F %T') Falta FIREWALL_TOKEN en .env"; exit 1
+  echo "$(date '+%F %T') Falta FIREWALL_TOKEN en $ENV_FILE"; exit 1
 fi
 
 # 1) Obtener IPs autorizadas. Si la app no responde, se mantienen las reglas actuales (no se corta el servicio).

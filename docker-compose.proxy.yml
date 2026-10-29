@@ -1,0 +1,19 @@
+# Entrada web única (HTTPS automático) para todos los PACS del servidor.
+# El Caddyfile lo genera el comando `pacs` a partir de las carpetas en /opt/pacs-instancias/.
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Se monta la carpeta (no el archivo) para que `caddy reload` vea el Caddyfile regenerado
+      - ${INSTANCIAS_DIR:-/opt/pacs-instancias}/caddy:/etc/caddy:ro
+      - ${INSTANCIAS_DIR:-/opt/pacs-instancias}/caddy-data:/data
+    networks: [proxy]
+
+networks:
+  proxy:
+    name: pacs-proxy
+    external: true

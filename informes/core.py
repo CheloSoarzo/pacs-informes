@@ -25,6 +25,8 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=Config.SECURE_COOKIES,
     SESSION_COOKIE_DOMAIN=Config.COOKIE_DOMAIN,
+    # Cada PACS del servidor tiene su propia cookie de sesión (no se mezclan los logins)
+    SESSION_COOKIE_NAME=f"sesion_{Config.INSTANCIA}" if Config.INSTANCIA else "session",
     PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
     MAX_CONTENT_LENGTH=60 * 1024 * 1024,
 )

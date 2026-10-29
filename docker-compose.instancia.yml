@@ -1,0 +1,78 @@
+# Un PACS (Orthanc + PostgreSQL + app de informes) dentro de un servidor que aloja varios PACS.
+# No se usa directamente: lo maneja el comando `pacs` (servidor/pacs.sh), por ejemplo:
+#
+#   pacs nueva insi --centro "INSI"
+#
+# Cada PACS tiene su carpeta en /opt/pacs-instancias/<nombre>/ con su .env y sus datos,
+# su propio dominio, su propio puerto DICOM y su propia base de datos. La entrada web (HTTPS)
+# la hace un único Caddy compartido (docker-compose.proxy.yml) por la red "pacs-proxy".
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: orthanc
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: orthanc
+    volumes:
+      - ${INSTANCIA_DIR}/data/postgres:/var/lib/postgresql/data
+
+  orthanc:
+    image: orthancteam/orthanc:latest   # en producción fija una versión concreta
+    restart: unless-stopped
+    depends_on: [postgres]
+    ports:
+      - "${DICOM_PUERTO_PUBLICO}:4242"
+    volumes:
+      - ${INSTANCIA_DIR}/data/orthanc:/var/lib/orthanc/db
+    environment:
+      ORTHANC__NAME: ${PACS_NOMBRE:-PACS}
+      ORTHANC__DICOM_AET: ${PACS_AET:-PACS}
+      ORTHANC__DICOM_CHECK_CALLED_AET: "false"
+      ORTHANC__DICOM_ALWAYS_ALLOW_STORE: "false"
+      ORTHANC__DICOM_ALWAYS_ALLOW_ECHO: "false"
+      ORTHANC__DICOM_CHECK_MODALITY_HOST: "true"
+      ORTHANC__DICOM_MODALITIES_IN_DATABASE: "true"
+      ORTHANC__DICOM_ASSOCIATION_CLOSE_DELAY: "5"
+      ORTHANC__OVERWRITE_INSTANCES: "true"
+      ORTHANC__STABLE_AGE: "60"
+      ORTHANC__AUTHENTICATION_ENABLED: "false"
+      ORTHANC__POSTGRESQL__HOST: postgres
+      ORTHANC__POSTGRESQL__DATABASE: orthanc
+      ORTHANC__POSTGRESQL__USERNAME: orthanc
+      ORTHANC__POSTGRESQL__PASSWORD: ${PG_PASSWORD}
+      DICOM_WEB_PLUGIN_ENABLED: "true"
+      OHIF_PLUGIN_ENABLED: "true"
+      ORTHANC__OHIF__DATA_SOURCE: "dicom-web"
+      STONE_WEB_VIEWER_PLUGIN_ENABLED: "true"
+      GDCM_PLUGIN_ENABLED: "true"
+      HOUSEKEEPER_PLUGIN_ENABLED: "true"
+    networks:
+      default: {}
+      proxy:
+        # Nombre único en la red compartida (ojo: "orthanc" a secas existe en todos los PACS)
+        aliases: ["${INSTANCIA}-orthanc"]
+
+  informes:
+    build: ./informes
+    image: pacs-informes-app:latest      # una sola imagen para todos los PACS del servidor
+    restart: unless-stopped
+    depends_on: [orthanc]
+    env_file: ${INSTANCIA_DIR}/.env
+    environment:
+      # Se usa el nombre único: en la red compartida "orthanc" podría ser el de otro PACS
+      ORTHANC_URL: http://${INSTANCIA}-orthanc:8042
+      DATA_DIR: /data
+      WEB_WORKERS: ${WEB_WORKERS:-2}
+    volumes:
+      - ${INSTANCIA_DIR}/data/informes:/data
+    networks:
+      default: {}
+      proxy:
+        aliases: ["${INSTANCIA}-informes"]
+
+networks:
+  proxy:
+    name: pacs-proxy
+    external: true
