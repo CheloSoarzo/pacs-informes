@@ -154,6 +154,9 @@ class Orthanc:
                 "id": s["ID"],
                 "modalidad": tags.get("Modality", ""),
                 "descripcion": tags.get("SeriesDescription", "") or tags.get("BodyPartExamined", ""),
+                "region": tags.get("BodyPartExamined", ""),
+                "fecha": fecha_dicom(tags.get("SeriesDate", "")),
+                "hora": _hora(tags.get("SeriesTime", "")),
                 "numero": _int(tags.get("SeriesNumber")),
                 "n_instancias": len(s.get("Instances", [])),
             })

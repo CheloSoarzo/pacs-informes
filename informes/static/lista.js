@@ -35,6 +35,14 @@
     location.href = fila.dataset.url;
   });
 
+  // Pantalla de dictado: se guarda el orden de la lista para el botón "Siguiente →"
+  document.addEventListener('click', e => {
+    const a = e.target.closest('a[data-dictar]');
+    if (!a) return;
+    const ids = [...document.querySelectorAll('table.lista tbody a[data-dictar]')].map(x => x.dataset.dictar);
+    try { sessionStorage.setItem('cola_estudios', JSON.stringify(ids)); } catch (err) {}
+  });
+
   // Actualización automática (se recuerda en este navegador)
   const sel = $('#refresco');
   let seg = 0;
@@ -45,7 +53,7 @@
   }
   if (seg > 0) {
     setInterval(() => {
-      const ocupado = checks().some(c => c.checked) || document.querySelector('details[open], dialog[open]') ||
+      const ocupado = checks().some(c => c.checked) || document.querySelector('details[open], dialog[open]') || document.body.classList.contains('con-panel-lista') ||
         (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName));
       if (!ocupado && document.visibilityState === 'visible') location.reload();
     }, seg * 1000);

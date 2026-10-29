@@ -1,0 +1,160 @@
+{# Pantalla de dictado del radiólogo: datos y grabadora a la izquierda, imágenes en el resto de la pantalla. #}
+{% set firmado = inf and inf.estado == 'firmado' %}
+{% set dict_activos = dictados|selectattr('estado','in',['pendiente','tomado'])|list %}
+{% if inf and inf.estado in ('por_validar','firmado') %}{% set estado = inf.estado %}
+{% elif dict_activos %}{% set estado = 'dictado' %}
+{% elif inf %}{% set estado = 'borrador' %}
+{% else %}{% set estado = 'pendiente' %}{% endif %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dictado · {{ est.paciente_nombre }} · {{ centro }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="modo-dictado">
+<header class="dict-barra">
+  <a href="{{ url_for('lista') }}" class="dict-volver" title="Volver a la lista de estudios">← Estudios</a>
+  <span class="dict-titulo">Dictado › <b>{{ est.paciente_nombre or '(sin nombre)' }}</b></span>
+  <span class="badge {{ estado }}">{{ ESTADOS[estado] }}</span>
+  {% if meta.prioridad == 'urgente' and not firmado %}<span class="tag-urgente">URGENTE</span>{% endif %}
+  <span class="espacio"></span>
+  <a class="btn peq" href="{{ url_for('estudio', estudio_id=est.id) }}" title="Pantalla completa del estudio: escribir el informe, validar, entregar">✎ Escribir informe</a>
+  <a class="btn peq prim" id="btn-siguiente" href="#" hidden title="Siguiente estudio de la lista">Siguiente →</a>
+</header>
+{% for cat, msg in get_flashed_messages(with_categories=true) %}
+  <div class="flash {{ cat }} dict-flash" role="status">{{ msg }}</div>
+{% endfor %}
+
+<div class="dict">
+  <aside class="dict-izq">
+    {# --- asignación --- #}
+    <div class="dict-caja dict-asig">
+      <div><span class="etq">Radiólogo</span> <b>{{ radiologo.nombre if radiologo else 'Sin asignar' }}</b></div>
+      {% if puede('asignar') and not firmado %}
+      <form method="post" action="{{ url_for('asignar_estudio', estudio_id=est.id) }}" class="fila">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="volver" value="dictar">
+        <select name="radiologo_id" aria-label="Asignar radiólogo">
+          <option value="">— Sin asignar —</option>
+          {% for r in radiologos %}<option value="{{ r.id }}" {{ 'selected' if meta.radiologo_id == r.id }}>{{ r.nombre }}</option>{% endfor %}
+        </select>
+        <select name="prioridad" aria-label="Prioridad">
+          <option value="normal" {{ 'selected' if meta.prioridad != 'urgente' }}>Normal</option>
+          <option value="urgente" {{ 'selected' if meta.prioridad == 'urgente' }}>Urgente</option>
+        </select>
+        <button class="btn peq" type="submit">Guardar</button>
+      </form>
+      {% elif puede('firmar') and not firmado and meta.radiologo_id != usuario.id %}
+      <form method="post" action="{{ url_for('tomar_estudio', estudio_id=est.id) }}">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="volver" value="dictar">
+        <button class="btn peq" type="submit">Tomar este estudio</button>
+      </form>
+      {% endif %}
+    </div>
+
+    {# --- paciente --- #}
+    <div class="dict-caja dict-paciente">
+      <span class="etq">Paciente</span>
+      <div class="dict-nombre">👤 {{ est.paciente_nombre or '(sin nombre)' }}</div>
+      <div class="dict-datos">
+        <div><span class="etq">Identificación</span><b class="mono">{{ est.paciente_id }}</b></div>
+        <div><span class="etq">Nacimiento</span><b>{{ est.paciente_fnac or '—' }}</b>{% if est.edad %}<span class="suave peq"> ({{ est.edad }})</span>{% endif %}</div>
+        <div><span class="etq">Sexo</span><b>{{ est.paciente_sexo or '—' }}</b></div>
+      </div>
+    </div>
+
+    {# --- estudio / anteriores --- #}
+    <div class="dict-caja dict-tabs">
+      <div class="dict-pestanas" role="tablist">
+        <button type="button" role="tab" aria-selected="true" data-tab="actual">Estudio para dictar</button>
+        <button type="button" role="tab" aria-selected="false" data-tab="anteriores">Estudios anteriores{% if historial %} ({{ historial|length }}){% endif %}</button>
+      </div>
+      <div data-panel="actual">
+        <div class="dict-estudio">
+          <div class="fila"><b>{{ est.descripcion or 'Sin descripción' }}</b><span class="espacio"></span>
+            {% for m in est.modalidad.split('/') if m %}<span class="mod">{{ m }}</span>{% endfor %}</div>
+          <div class="dict-datos">
+            <div><span class="etq">Fecha</span>{{ est.fecha }} {{ est.hora }}</div>
+            <div><span class="etq">N° examen</span>{{ est.accession or '—' }}</div>
+            <div><span class="etq">Solicitante</span>{{ est.solicitante or '—' }}</div>
+            <div><span class="etq">Centro</span>{{ est.institucion or '—' }}</div>
+          </div>
+          <div class="fila">
+            {% if puede('editar_paciente') %}<button type="button" class="btn peq" data-editar-paciente="{{ est.id }}">✎ Modificar</button>{% endif %}
+            {% if puede('notas') %}<button type="button" class="btn peq" id="btn-notas" aria-expanded="false">📝 Notas ({{ notas|length }})</button>{% endif %}
+          </div>
+          {% if puede('notas') %}
+          <div class="dict-notas" id="dict-notas" hidden>
+            {% for n in notas %}
+              <div class="nota"><div class="peq suave">{{ n.autor }} · {{ n.creado|fh }}</div>
+                {% if n.texto %}<div class="nota-texto">{{ n.texto }}</div>{% endif %}
+                {% if n.archivo %}<a class="peq" href="{{ url_for('archivo_nota', nid=n.id) }}" target="_blank" rel="noopener">📎 {{ n.archivo_nombre }}</a>{% endif %}</div>
+            {% else %}<p class="peq suave">Sin notas.</p>{% endfor %}
+            <a class="peq" href="{{ url_for('estudio', estudio_id=est.id) }}#notas">Agregar nota ↗</a>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      <div data-panel="anteriores" hidden>
+        {% for h in historial %}
+          <div class="dict-previo">
+            <div><b class="peq">{{ h.fecha }}</b> {% for m in h.modalidad.split('/') if m %}<span class="mod">{{ m }}</span>{% endfor %}
+              <span class="badge {{ h.estado }}">{{ ESTADOS[h.estado] }}</span></div>
+            <div class="peq">{{ h.descripcion }}</div>
+            <div class="fila">
+              <button type="button" class="btn peq" data-comparar="{{ h.uid }}" title="Ver junto al estudio actual en el visor">Comparar</button>
+              <a class="btn peq" href="{{ url_for('estudio', estudio_id=h.id) }}" target="_blank" rel="noopener">Abrir ↗</a>
+            </div>
+          </div>
+        {% else %}<p class="peq suave">El paciente no tiene otros estudios.</p>{% endfor %}
+      </div>
+    </div>
+
+    {# --- dictados --- #}
+    <div class="dict-caja dict-audio">
+      {% for d in dictados %}
+        <div class="dictado-item {{ 'activo' if d.estado in ('pendiente','tomado') }}">
+          <div class="dictado-cab"><b>Audio {{ loop.index }}</b>
+            <span class="suave peq">· {{ d.creado|fh }} · {{ d.duracion|mmss }}</span>
+            <span class="badge {{ 'dictado' if d.estado in ('pendiente','tomado') else 'firmado' }}">
+              {{ {'pendiente':'Por transcribir','tomado':'En transcripción','transcrito':'Transcrito'}[d.estado] }}</span></div>
+          {% if puede('dictados_escuchar') or d.creado_por == usuario.id %}
+            <div class="reproductor" data-src="{{ url_for('audio_dictado', did=d.id) }}"></div>
+          {% endif %}
+          {% if d.estado == 'pendiente' and (puede('dictados_anular') or d.creado_por == usuario.id) %}
+          <form method="post" action="{{ url_for('anular_dictado', did=d.id) }}" class="inline" data-confirmar="¿Eliminar este audio?">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="volver" value="dictar">
+            <button class="enlace peq peligro" type="submit">🗑 Eliminar audio</button>
+          </form>{% endif %}
+        </div>
+      {% endfor %}
+      {% if firmado %}
+        <p class="peq">Este estudio ya tiene informe validado.</p>
+      {% else %}
+        <div id="grabador" class="grabador grabador-grande"></div>
+        <p class="peq suave dict-atajo">F8: empezar o terminar de grabar</p>
+      {% endif %}
+    </div>
+  </aside>
+
+  <main class="dict-visor">
+    <div class="dict-visor-pestanas" role="tablist" aria-label="Visor">
+      <button type="button" role="tab" aria-selected="true" data-visor="ohif">OHIF</button>
+      <button type="button" role="tab" aria-selected="false" data-visor="stone">Stone</button>
+      <button type="button" class="btn-visor" id="dict-quitar-comparar" hidden>✕ Quitar comparación</button>
+    </div>
+    <iframe id="dict-iframe" title="Imágenes del estudio" allow="fullscreen"
+            data-ohif="{{ visor_ohif }}" data-stone="{{ visor_stone }}" data-uid="{{ est.uid }}"
+            data-base="{{ base_pacs }}" src="{{ visor_ohif }}"></iframe>
+  </main>
+</div>
+
+<script>
+  window.EDITOR = { csrf: {{ csrf_token()|tojson }}, urls: { subirDictado: {{ url_for('subir_dictado', estudio_id=est.id)|tojson }} } };
+</script>
+<script src="{{ url_for('static', filename='audio.js') }}"></script>
+<script src="{{ url_for('static', filename='dictar.js') }}"></script>
+{% if puede('editar_paciente') %}{% include "_editar_paciente.html" %}{% endif %}
+</body>
+</html>

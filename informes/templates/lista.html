@@ -119,7 +119,10 @@
         {% if e.firmante %}<br><span class="suave peq">{{ e.firmante }}</span>{% endif %}</td>
       <td class="ocultar-movil peq">{{ e.radiologo or '—' }}</td>
       <td class="ocultar-movil peq nowrap tiempo {{ e.alerta }}">{{ e.horas|dur if e.horas is not none else '' }}</td>
-      <td><a class="btn {{ 'prim' if e.estado != 'firmado' and (puede('redactar') or puede('firmar')) }}" href="{{ url_for('estudio', estudio_id=e.id) }}">
+      {% set a_dictar = puede('dictar') and e.estado in ('pendiente', 'dictado', 'borrador') %}
+      <td><a class="btn {{ 'prim' if e.estado != 'firmado' and (puede('redactar') or puede('firmar') or puede('dictar')) }}"
+             href="{{ url_for('dictar', estudio_id=e.id) if a_dictar else url_for('estudio', estudio_id=e.id) }}"
+             {% if a_dictar %}data-dictar="{{ e.id }}" title="Abrir en pantalla de dictado"{% endif %}>
         {% if e.estado == 'firmado' or not (puede('redactar') or puede('firmar') or puede('dictar')) %}Ver
         {% elif e.estado == 'por_validar' and puede('firmar') %}Validar
         {% elif e.estado == 'dictado' and puede('transcribir') %}Transcribir
@@ -132,8 +135,33 @@
 </table>
 </div>
 </form>
+
+{# Panel inferior: se abre con un clic en un paciente (static/panel_lista.js) #}
+<section id="panel-estudio" class="panel-lista" hidden aria-label="Vista rápida del estudio">
+  <div class="pl-col pl-audio">
+    <div class="pl-tit">Audio del dictado</div>
+    <div id="pl-audios"></div>
+  </div>
+  <div class="pl-col pl-series-col">
+    <div class="pl-tit"><b id="pl-paciente"></b><span class="espacio"></span>
+      <a class="btn peq prim" id="pl-abrir" href="#">Abrir →</a>
+      <button type="button" class="btn peq" id="pl-cerrar" aria-label="Cerrar panel" title="Cerrar">✕</button></div>
+    <div class="pl-tabla">
+      <table class="lista compacta" id="pl-series">
+        <thead><tr><th>Fecha/hora</th><th>N°</th><th>Serie</th><th>Región</th><th>Mod.</th><th>Imág.</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="pl-col pl-visor" id="pl-visor" title="Rueda del mouse: recorrer imágenes">
+    <img id="pl-img" alt="Vista previa de la serie">
+    <div class="pl-controles"><input type="range" id="pl-rango" min="0" value="0" aria-label="Imagen"><span id="pl-pos" class="peq"></span></div>
+  </div>
+</section>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='lista.js') }}"></script>
+<script src="{{ url_for('static', filename='audio.js') }}"></script>
+<script src="{{ url_for('static', filename='panel_lista.js') }}"></script>
 {% if puede('editar_paciente') %}{% include "_editar_paciente.html" %}{% endif %}
 {% endblock %}

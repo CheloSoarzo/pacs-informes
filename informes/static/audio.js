@@ -58,6 +58,7 @@
     }
   }
 
+  window.ReproductorAudio = Reproductor;   // lo usa el panel de la lista
   document.querySelectorAll('.reproductor').forEach(el => new Reproductor(el));
   document.addEventListener('keydown', e => {
     if (!activo) return;
@@ -150,6 +151,13 @@
         g.insertAdjacentHTML('beforeend', `<p class="peq error-txt">No se pudo enviar: ${err.message}. Intenta de nuevo.</p>`);
       }
     }
+  });
+  // F8: empezar a grabar / terminar la grabación (útil con la vista en las imágenes)
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'F8') return;
+    e.preventDefault();
+    const b = g.querySelector('[data-g=grabar]') || g.querySelector('[data-g=detener]');
+    if (b) b.click();
   });
   window.addEventListener('beforeunload', e => { if (rec && rec.state !== 'inactive' || (blob && g.querySelector('[data-g=enviar]'))) { e.preventDefault(); e.returnValue = ''; } });
   vista('inicio');

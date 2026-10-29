@@ -167,6 +167,16 @@ Los equipos envían directo a un puerto público del servidor, como en pacs4me, 
 
 Los tiempos en rojo indican estudios que llevan más horas sin informar que lo configurado en *Administración → Correo y ajustes*.
 
+**Panel de la lista.** Un clic en un paciente abre abajo un panel con el audio del dictado (si tiene y si el
+usuario puede escucharlo), las series del estudio y un minivisor (rueda del mouse para recorrer). Las flechas ↑ ↓
+cambian de paciente y Enter abre el estudio.
+
+**Pantalla de dictado.** Para el radiólogo, «Informar» abre una pantalla aparte, sin menú: a la izquierda el
+radiólogo asignado, los datos del paciente, el estudio (con «Modificar» y «Notas»), los estudios anteriores
+(«Comparar» los abre junto al actual en el visor) y la grabadora; las imágenes ocupan el resto de la pantalla.
+F8 empieza o termina la grabación, aunque el foco esté en el visor. «Siguiente →» pasa al próximo estudio de la
+lista y «✎ Escribir informe» abre la pantalla completa del estudio.
+
 **Visor dentro del informe.** En la pantalla del estudio, a la izquierda, el médico tiene el visor diagnóstico (OHIF)
 o Stone junto al editor: maneja los grises (ventana/nivel arrastrando con el clic izquierdo o con presets), recorre
 cortes con la rueda e informa al lado. «⇔ Agrandar visor» le da más espacio a las imágenes y ⛶ lo pone en pantalla

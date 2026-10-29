@@ -23,6 +23,8 @@ EXT_ADJUNTO = (".pdf", ".jpg", ".jpeg", ".png", ".txt", ".doc", ".docx")
 
 
 def _volver(estudio_id, ancla=""):
+    if request.form.get("volver") == "dictar":
+        return redirect(url_for("dictar", estudio_id=estudio_id))
     return redirect(url_for("estudio", estudio_id=estudio_id) + (f"#{ancla}" if ancla else ""))
 
 
@@ -63,18 +65,7 @@ def estudio(estudio_id):
     transcriptor = usuario_por_id(inf["transcrito_por"]) if inf and inf["transcrito_por"] else None
     radiologo = usuario_por_id(meta["radiologo_id"]) if meta["radiologo_id"] else None
 
-    # Otros estudios del mismo paciente (para comparar)
-    historial = []
-    if est["paciente_id"]:
-        previos = [e for e in pacs.estudios_de_paciente(est["paciente_id"]) if e["id"] != estudio_id and ve_estudio(u, e)]
-        estados = {r["estudio_id"]: r["estado"] for r in db.execute(
-            f"SELECT estudio_id, estado FROM informes WHERE estudio_id IN ({','.join('?' * len(previos))})",
-            [e["id"] for e in previos]).fetchall()} if previos else {}
-        for e in previos[:20]:
-            e["estado"] = estados.get(e["id"], "pendiente")
-            if e["estado"] != "firmado" and not puede(u, "ver_borrador"):
-                e["estado"] = "pendiente"
-            historial.append(e)
+    historial = _historial(u, est)
 
     registrar("abrir_estudio", f"{estudio_id} {est['paciente_id']}")
     return render_template(
@@ -86,6 +77,71 @@ def estudio(estudio_id):
         visor_stone=f"{Config.PACS_PUBLIC_URL}/stone-webviewer/index.html?study={est['uid']}",
         whisper=bool(Config.WHISPER_URL), requiere_clave=Config.LINK_REQUIERE_CLAVE,
         correo_ok=correo_configurado())
+
+
+def _historial(u, est):
+    """Otros estudios del mismo paciente (para comparar), con el estado de su informe."""
+    historial = []
+    if not est["paciente_id"]:
+        return historial
+    db = get_db()
+    previos = [e for e in pacs.estudios_de_paciente(est["paciente_id"]) if e["id"] != est["id"] and ve_estudio(u, e)]
+    estados = {r["estudio_id"]: r["estado"] for r in db.execute(
+        f"SELECT estudio_id, estado FROM informes WHERE estudio_id IN ({','.join('?' * len(previos))})",
+        [e["id"] for e in previos]).fetchall()} if previos else {}
+    for e in previos[:20]:
+        e["estado"] = estados.get(e["id"], "pendiente")
+        if e["estado"] != "firmado" and not puede(u, "ver_borrador"):
+            e["estado"] = "pendiente"
+        historial.append(e)
+    return historial
+
+
+# ------------------------------------------------------------------ panel inferior de la lista
+@app.route("/estudio/<estudio_id>/panel")
+@login_requerido()
+def panel_estudio(estudio_id):
+    """Para el panel de la lista (clic en un paciente): audios, series y sus imágenes para el minivisor."""
+    u = usuario_actual()
+    estudio_visible(estudio_id)
+    series = pacs.series(estudio_id)
+    for se in series:
+        se["instancias"] = pacs.instancias_ordenadas(se["id"])
+    filas = get_db().execute(
+        "SELECT d.id, d.duracion, d.estado, d.creado, d.creado_por, d.nota, uc.nombre AS autor FROM dictados d "
+        "LEFT JOIN usuarios uc ON uc.id=d.creado_por WHERE d.estudio_id=? AND d.estado!='anulado' ORDER BY d.id",
+        (estudio_id,)).fetchall()
+    dictados = [{"id": d["id"], "audio": url_for("audio_dictado", did=d["id"]), "duracion": d["duracion"],
+                 "estado": d["estado"], "autor": d["autor"] or "", "creado": d["creado"], "nota": d["nota"] or ""}
+                for d in filas if puede(u, "dictados_escuchar") or d["creado_por"] == u["id"]]
+    return jsonify(series=[s for s in series if s["instancias"]], dictados=dictados)
+
+
+# ------------------------------------------------------------------ pantalla de dictado (radiólogo)
+@app.route("/estudio/<estudio_id>/dictar")
+@login_requerido("dictar")
+def dictar(estudio_id):
+    """Pantalla completa para dictar: datos del paciente y grabadora a la izquierda, imágenes al resto."""
+    u = usuario_actual()
+    est = estudio_visible(estudio_id)
+    db = get_db()
+    inf = informe_por_estudio(estudio_id)
+    meta = meta_de(estudio_id)
+    dictados = db.execute(
+        "SELECT d.*, uc.nombre AS dictado_por, ut.nombre AS transcriptor FROM dictados d "
+        "LEFT JOIN usuarios uc ON uc.id=d.creado_por LEFT JOIN usuarios ut ON ut.id=d.transcriptor_id "
+        "WHERE d.estudio_id=? AND d.estado!='anulado' ORDER BY d.id", (estudio_id,)).fetchall()
+    notas = db.execute("SELECT n.*, uu.nombre AS autor FROM notas n LEFT JOIN usuarios uu ON uu.id=n.usuario_id "
+                       "WHERE n.estudio_id=? AND n.eliminado=0 ORDER BY n.id", (estudio_id,)).fetchall() \
+        if puede(u, "notas") else []
+    radiologo = usuario_por_id(meta["radiologo_id"]) if meta["radiologo_id"] else None
+    registrar("abrir_dictado", f"{estudio_id} {est['paciente_id']}")
+    base = Config.PACS_PUBLIC_URL
+    return render_template(
+        "dictar.html", est=est, inf=inf, meta=meta, dictados=dictados, notas=notas, radiologo=radiologo,
+        radiologos=radiologos(), historial=_historial(u, est),
+        visor_ohif=f"{base}/ohif/viewer?StudyInstanceUIDs={est['uid']}",
+        visor_stone=f"{base}/stone-webviewer/index.html?study={est['uid']}", base_pacs=base)
 
 
 # ------------------------------------------------------------------ informe
