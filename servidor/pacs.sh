@@ -16,6 +16,9 @@
 #   pacs agenda <nombre> <dominio>    agrega (o cambia) la agenda del centro, unida a su PACS
 #   pacs agenda-importar <nombre> <archivo.db>   carga el respaldo de la agenda que estaba en Render
 #   pacs portal <dominio>      página de ingreso común (ej: examenes.inq.cl) con el acceso de pacientes y del personal
+#   pacs panel-clave [usuario] clave del panel de servidores (<portal>/panel): espacio, estudios e informes de cada PACS
+#   pacs cuota <nombre> <GB>   espacio contratado de un PACS (se muestra en el panel; 0 = sin límite)
+#   pacs estado                actualiza los números del panel (lo hace cron cada 5 min)
 #   pacs base                  (interno) crea la red compartida y la entrada web HTTPS
 set -euo pipefail
 
@@ -118,6 +121,15 @@ EOF
         echo "	redir /$n https://$(leer "$INST/$n/.env" DOMINIO)/paciente 302"
         echo "	redir /$n/ https://$(leer "$INST/$n/.env" DOMINIO)/paciente 302"
       done
+      echo "	redir /panel /panel/ 308"
+      local ph pu; ph="$(leer "$INST/servidor.env" PANEL_HASH || true)"; pu="$(leer "$INST/servidor.env" PANEL_USUARIO || true)"
+      if [ -n "$ph" ]; then
+        echo "	basic_auth /panel/* {"
+        echo "		${pu:-admin} $ph"
+        echo "	}"
+      else
+        echo "	respond /panel/* \"Panel sin clave. En el servidor ejecuta: pacs panel-clave\" 403"
+      fi
       echo "	root * /etc/caddy/portal"
       echo "	file_server"
       echo "}"
@@ -128,7 +140,8 @@ EOF
 
 # Página del portal común: un botón por centro para pacientes y otro para el personal
 generar_portal() {
-  mkdir -p "$INST/caddy/portal"
+  mkdir -p "$INST/caddy/portal/panel"
+  cp "$CODIGO/servidor/panel.html" "$INST/caddy/portal/panel/index.html" 2>/dev/null || true
   local f="$INST/caddy/portal/index.html" n botones_p="" botones_s=""
   for n in $(instancias); do
     [ "$(leer "$INST/$n/.env" ACTIVO)" = "false" ] && continue
@@ -151,7 +164,7 @@ h2{font-size:16px;margin:0 0 12px}.b{display:block;text-align:center;padding:14p
 .fila b{flex:1 1 100%}.fila .b{flex:1;margin:0}small{display:block;color:var(--s);margin-top:12px;font-size:13px}
 </style></head><body><main><h1>Exámenes en línea</h1><p>Elija dónde se realizó su examen</p>
 <section><h2>Pacientes</h2>$botones_p<small>Ingrese con su RUT y la clave de la hoja que recibió en recepción.</small></section>
-<section><h2>Personal</h2>$botones_s</section></main></body></html>
+<section><h2>Personal</h2>$botones_s<a class="b" href="/panel/">Panel de servidores</a></section></main></body></html>
 EOF
 }
 
@@ -369,6 +382,58 @@ cmd_portal() {
   echo "Portal en https://$d (el certificado HTTPS tarda 1-2 minutos)"
 }
 
+# Números de cada PACS para el panel (cron cada 5 minutos)
+js() { printf '%s' "$1" | tr -d '"\\' | tr -d '\000-\037'; }
+cmd_estado() {
+  local dir="$INST/caddy/portal/panel" n primero=1 total usado
+  mkdir -p "$dir"
+  read -r total usado <<<"$(df -B1 --output=size,used "$INST" | tail -n1)"
+  {
+    printf '{"generado":"%s","servidor":{"ip":"%s","disco_total":%s,"disco_usado":%s},"pacs":[' \
+      "$(date '+%F %T')" "$(js "$(ip_publica)")" "${total:-0}" "${usado:-0}"
+    for n in $(instancias); do
+      local e="$INST/$n/.env" u datos creado cuota activo=true
+      u="$(du -sb "$INST/$n/data" 2>/dev/null | cut -f1)"
+      datos="$(timeout 60 docker exec "pacs-$n-informes-1" python estado_cli.py 2>/dev/null | tail -n1 || true)"
+      case "$datos" in "{"*"}") ;; *) datos='{"error_pacs":"sin respuesta"}';; esac
+      creado="$(sed -n "s/.*creado por 'pacs nueva' el \(.*\)$/\1/p" "$e" | head -n1)"
+      cuota="$(leer "$e" CUOTA_GB)"; [[ "$cuota" =~ ^[0-9]+$ ]] && [ "$cuota" -gt 0 ] || cuota=null
+      [ "$(leer "$e" ACTIVO)" = "false" ] && activo=false
+      [ $primero = 1 ] || printf ','; primero=0
+      printf '{"nombre":"%s","centro":"%s","dominio":"%s","agenda":"%s","activo":%s,"creado":"%s","usado":%s,"cuota_gb":%s,"aet":"%s","puerto":"%s","datos":%s}' \
+        "$(js "$n")" "$(js "$(leer "$e" CENTRO_NOMBRE)")" "$(js "$(leer "$e" DOMINIO)")" "$(js "$(leer "$e" AGENDA_DOMINIO)")" \
+        "$activo" "$(js "$creado")" "${u:-0}" "$cuota" "$(js "$(leer "$e" PACS_AET)")" "$(js "$(leer "$e" DICOM_PUERTO_PUBLICO)")" "$datos"
+    done
+    printf ']}\n'
+  } > "$dir/.estado.json"
+  mv "$dir/.estado.json" "$dir/estado.json"
+}
+
+cmd_panel_clave() {
+  local u="${1:-admin}" c1 c2 h
+  [[ "$u" =~ ^[a-zA-Z0-9._-]{3,30}$ ]] || error "usuario inválido"
+  [ -n "$(leer "$INST/servidor.env" PORTAL_DOMINIO || true)" ] || error "primero crea el portal: pacs portal examenes.inq.cl"
+  read -rsp "Clave para el panel (usuario $u): " c1; echo
+  read -rsp "Repite la clave: " c2; echo
+  [ "$c1" = "$c2" ] || error "las claves no coinciden"
+  [ ${#c1} -ge 8 ] || error "la clave debe tener al menos 8 caracteres"
+  h="$(proxy exec -T caddy caddy hash-password --plaintext "$c1" | tr -d '\r' | tail -n1)"
+  [[ "$h" == \$2* ]] || error "no se pudo cifrar la clave"
+  poner "$INST/servidor.env" PANEL_USUARIO "$u"
+  poner "$INST/servidor.env" PANEL_HASH "$h"
+  recargar_caddy
+  cmd_estado
+  echo "Panel listo en https://$(leer "$INST/servidor.env" PORTAL_DOMINIO)/panel/  (usuario $u)"
+}
+
+cmd_cuota() {
+  local n="${1:-}" g="${2:-}"; existe "$n"
+  [[ "$g" =~ ^[0-9]+$ ]] || error "uso: pacs cuota <nombre> <GB>   (0 = sin límite, muestra el disco del servidor)"
+  poner "$INST/$n/.env" CUOTA_GB "$g"
+  cmd_estado
+  echo "PACS $n: espacio contratado ${g} GB"
+}
+
 cmd_iniciar() { existe "${1:-}"; poner "$INST/$1/.env" ACTIVO true; dc "$1" up -d; recargar_caddy; echo "PACS $1 iniciado"; }
 cmd_detener() { existe "${1:-}"; poner "$INST/$1/.env" ACTIVO false; dc "$1" stop; recargar_caddy; echo "PACS $1 detenido (sus datos se conservan)"; }
 cmd_logs() { existe "${1:-}"; dc "$1" logs --tail 200 -f informes; }
@@ -418,6 +483,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 @reboot root sleep 90 && pacs firewall >> /var/log/pacs-firewall.log 2>&1
 30 3 * * * root pacs respaldo >> /var/log/pacs-respaldo.log 2>&1
 * * * * * root pacs revisar >> /var/log/pacs-actualizacion.log 2>&1
+*/5 * * * * root pacs estado >/dev/null 2>&1
 CRON
   if [ "$CRON_FILE" = /etc/cron.d/pacs ]; then rm -f /etc/cron.d/pacs-firewall /etc/cron.d/pacs-respaldo; fi
 }
@@ -497,6 +563,9 @@ case "$c" in
   respaldo) cmd_respaldo;;
   agenda) cmd_agenda "$@";;
   agenda-importar) cmd_agenda_importar "$@";;
-  portal) cmd_portal "$@";;
-  *) sed -n '2,18p' "$0"; exit 1;;
+  portal) cmd_portal "$@"; cmd_estado;;
+  panel-clave) cmd_panel_clave "$@";;
+  cuota) cmd_cuota "$@";;
+  estado) cmd_estado;;
+  *) sed -n '2,21p' "$0"; exit 1;;
 esac

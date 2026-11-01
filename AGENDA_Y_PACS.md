@@ -145,6 +145,30 @@ ingreso del paciente.
 
 ---
 
+## Panel de servidores (`examenes.inq.cl/panel`)
+
+Una página para elegir a qué PACS entrar, con una tarjeta por centro: espacio usado, estudios, dictados, informes
+validados, pendientes por validar y por transcribir, y botones **Entrar al PACS**, **Agenda** y **Datos DICOM**
+(IP, puerto y AE Title, para configurar equipos).
+
+1. Primero crea el portal (Parte 5).
+2. Ponle clave al panel. Pide la clave dos veces y no se ve al escribirla:
+
+   ```
+   pacs panel-clave
+   ```
+
+3. Entra a `https://examenes.inq.cl/panel` con usuario `admin` y esa clave. Desde la página del portal también hay
+   un botón **Panel de servidores**.
+
+Los números se actualizan solos cada 5 minutos (o al momento con `pacs estado`). El **Total** es el disco del
+servidor. Para un PACS con espacio contratado (por ejemplo, uno arrendado), fija su límite y el panel mostrará el
+porcentaje sobre ese límite:
+
+```
+pacs cuota rismed 50
+```
+
 ## Equipos sin worklist
 
 El worklist es lo ideal, pero no es obligatorio. Los equipos que no lo usen (o mientras lo configuras) igual quedan
