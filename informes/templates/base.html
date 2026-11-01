@@ -10,7 +10,7 @@
 {% if usuario %}
 {% set ep = request.endpoint %}
 <header class="barra">
-  <a class="marca" href="{{ url_for('lista') }}">{{ centro }}</a>
+  <a class="marca" href="{{ url_for('lista') }}">{% if logo_url %}<span class="marca-logo"><img src="{{ logo_url }}" alt=""></span>{% endif %}<span>{{ centro }}</span></a>
   <nav>
     <a href="{{ url_for('lista') }}" class="{{ 'activo' if ep in ('lista','estudio') and request.args.get('estado') != 'por_validar' }}">Estudios</a>
     {% if puede('transcribir') or puede('dictar') or puede('dictados_escuchar') %}

@@ -426,3 +426,16 @@ table.lista tbody tr.sel > td { background: var(--aviso-bg) !important; }
 .orden-agenda.sin-orden summary{cursor:pointer;font-weight:600;font-size:13px}
 .orden-agenda .cand{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--borde);font-size:13px}
 .orden-agenda .cand span .suave{display:block}
+
+/* Logo del centro */
+.barra .marca { display: inline-flex; align-items: center; gap: 10px; }
+.marca-logo { display: inline-flex; align-items: center; background: #fff; border-radius: 6px; padding: 3px 6px; height: 38px; }
+.marca-logo img { max-height: 32px; max-width: 120px; object-fit: contain; display: block; }
+.login-logo { text-align: center; margin-bottom: 10px; }
+.login-logo img { max-width: 220px; max-height: 100px; object-fit: contain; }
+.pub-marca { display: flex; align-items: center; gap: 14px; }
+.pub-marca img { max-height: 56px; max-width: 150px; object-fit: contain; }
+.logo-fila { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.logo-muestra { width: 180px; height: 90px; border: 1px dashed var(--borde); border-radius: var(--radio); display: flex; align-items: center; justify-content: center; background: #fff; }
+.logo-muestra img { max-width: 170px; max-height: 80px; object-fit: contain; }
+@media (max-width: 640px) { .barra .marca-logo + span { display: none; } }

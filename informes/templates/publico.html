@@ -10,9 +10,12 @@
 <body>
 <div class="pub">
   <div class="pub-cab">
-    <div>
+    <div class="pub-marca">
+      {% if logo_url %}<img src="{{ logo_url }}" alt="">{% endif %}
+      <div>
       <div class="nombre-centro">{{ centro_info.nombre }}</div>
       <div class="suave peq">{{ centro_info.direccion }}{% if centro_info.telefono %} · {{ centro_info.telefono }}{% endif %}</div>
+      </div>
     </div>
     {% if inf.estado == 'firmado' %}
     <div class="acciones">

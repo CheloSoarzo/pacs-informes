@@ -46,6 +46,8 @@ main{max-width:1240px;margin:0 auto;padding:18px 16px 40px}
 .fila1{display:flex;gap:12px;align-items:flex-start}
 .num{font-family:var(--mono);font-size:13px;color:var(--muted);padding-top:3px;min-width:34px}
 .nom{min-width:0;flex:1}
+.logo{flex:none;background:#fff;border:1px solid var(--line);border-radius:8px;padding:4px 6px;display:flex;align-items:center;height:48px}
+.logo img{max-height:38px;max-width:110px;object-fit:contain;display:block}
 .nom b{display:block;font-size:17px;text-transform:uppercase;letter-spacing:.2px}
 .nom span{display:block;color:var(--muted);font-size:14px}
 .chip{font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap}
@@ -131,6 +133,7 @@ function pintar(){
     return `<article class="card${p.activo?"":" inactivo"}">
       <div class="izq">
         <div class="fila1"><span class="num">#${i+1}</span>
+          ${p.logo?`<span class="logo"><img src="${esc(p.logo)}" alt=""></span>`:""}
           <div class="nom"><b>${esc(p.centro||p.nombre)}</b><span>${esc(p.dominio)}</span></div>
           <span class="chip ${p.activo&&!sinDatos?"ok":"mal"}">${!p.activo?"Suspendido":sinDatos?"Sin respuesta":"Activo"}</span></div>
         <div class="acciones">

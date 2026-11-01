@@ -247,6 +247,49 @@ def admin_ajustes():
                            correo_ok=correo_configurado(), smtp_host=Config.SMTP_HOST, sistema=_estado_sistema())
 
 
+# ------------------------------------------------------------------ logo del centro
+@app.route("/admin/logo", methods=["POST"])
+@login_requerido("ajustes")
+def admin_logo():
+    """Sube o quita el logo: aparece en el PDF, la barra del PACS, el ingreso y las páginas del paciente."""
+    destino = os.path.join(Config.DATA_DIR, "logo.png")
+    if request.form.get("accion") == "quitar":
+        try:
+            os.remove(destino)
+        except OSError:
+            pass
+        registrar("logo_quitar")
+        flash("Logo quitado.", "ok")
+        return redirect(url_for("admin_ajustes") + "#logo")
+    f = request.files.get("logo")
+    if not f or not f.filename:
+        flash("Elige una imagen (PNG o JPG).", "error")
+        return redirect(url_for("admin_ajustes") + "#logo")
+    datos = f.read(6 * 1024 * 1024 + 1)
+    if len(datos) > 6 * 1024 * 1024:
+        flash("La imagen supera los 6 MB.", "error")
+        return redirect(url_for("admin_ajustes") + "#logo")
+    try:
+        from io import BytesIO
+        from PIL import Image
+        im = Image.open(BytesIO(datos))
+        im.load()
+        if im.format not in ("PNG", "JPEG", "WEBP"):
+            raise ValueError("formato")
+        im = im.convert("RGBA")
+        im.thumbnail((1200, 600))           # tamaño suficiente para pantalla y PDF
+        tmp = destino + ".tmp"
+        im.save(tmp, "PNG", optimize=True)
+        os.replace(tmp, destino)
+    except Exception:  # noqa: BLE001
+        flash("No se pudo leer la imagen. Usa un archivo PNG o JPG.", "error")
+        return redirect(url_for("admin_ajustes") + "#logo")
+    registrar("logo_subir")
+    flash("Logo guardado. Ya aparece en el PACS, en el PDF y en las páginas del paciente "
+          "(en el portal y el panel, en unos 5 minutos).", "ok")
+    return redirect(url_for("admin_ajustes") + "#logo")
+
+
 # ------------------------------------------------------------------ actualizar el sistema desde la web
 # La app no maneja Docker (por seguridad): deja una solicitud en su carpeta de datos y el servidor
 # (cron, `pacs revisar`) la ve en menos de un minuto, baja la última versión de GitHub y reinicia.

@@ -42,6 +42,26 @@
   <button class="btn prim" type="submit">Guardar ajustes</button>
 </form>
 
+<div class="panel" id="logo">
+  <h2>Logo del centro</h2>
+  <p class="peq suave">Aparece en el informe PDF, en la barra y el ingreso del PACS, en las páginas del paciente,
+    en el portal de exámenes y en el panel de servidores. Usa un PNG o JPG, idealmente con fondo blanco o transparente.</p>
+  <div class="logo-fila">
+    <div class="logo-muestra">{% if logo_url %}<img src="{{ logo_url }}" alt="Logo actual">{% else %}<span class="suave peq">Sin logo</span>{% endif %}</div>
+    <form method="post" action="{{ url_for('admin_logo') }}" enctype="multipart/form-data" class="fila">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" required aria-label="Imagen del logo">
+      <button class="btn prim" type="submit">Subir logo</button>
+    </form>
+    {% if logo_url %}
+    <form method="post" action="{{ url_for('admin_logo') }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="quitar">
+      <button class="btn" type="submit">Quitar</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
 {% if sistema and usuario.perfil_clave == 'admin' %}
 <div class="panel" id="sistema">
   <h2>Sistema</h2>

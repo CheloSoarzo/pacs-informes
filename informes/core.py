@@ -126,7 +126,7 @@ def contexto():
 
     return {"usuario": u, "csrf_token": csrf_token, "centro": Config.CENTRO_NOMBRE, "n_dictados": n_dictados,
             "puede": lambda accion: puede(u, accion), "ESTADOS": ESTADOS, "TIPOS_ENTREGA": TIPOS_ENTREGA,
-            "PACS_PUBLIC_URL": Config.PACS_PUBLIC_URL, "CATALOGO": CATALOGO}
+            "PACS_PUBLIC_URL": Config.PACS_PUBLIC_URL, "CATALOGO": CATALOGO, "logo_url": logo_url()}
 
 
 @app.after_request
@@ -259,6 +259,22 @@ def centro_info():
 def logo_path():
     p = os.path.join(Config.DATA_DIR, "logo.png")
     return p if os.path.exists(p) else None
+
+
+def logo_url():
+    """Dirección del logo del centro (con versión, para que el navegador tome el nuevo al cambiarlo)."""
+    p = logo_path()
+    return f"/logo.png?v={int(os.path.getmtime(p))}" if p else ""
+
+
+@app.route("/logo.png")
+def logo_publico():
+    from flask import send_file
+    p = logo_path()
+    if not p:
+        abort(404)
+    r = send_file(p, mimetype="image/png", max_age=86400)
+    return r
 
 
 def link_vigente(inf_id):

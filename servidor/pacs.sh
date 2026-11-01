@@ -138,16 +138,32 @@ EOF
   mv "$f" "$INST/caddy/Caddyfile"
 }
 
+# Logos que cada PACS subió en Administración → Correo y ajustes → Logo del centro
+copiar_logos() {
+  local n d="$INST/caddy/portal/logos"
+  mkdir -p "$d"
+  for n in $(instancias); do
+    local src="$INST/$n/data/informes/logo.png"
+    if [ -f "$src" ]; then cmp -s "$src" "$d/$n.png" || cp "$src" "$d/$n.png"; else rm -f "$d/$n.png"; fi
+  done
+}
+logo_de() {  # dirección del logo de un PACS en el portal (vacía si no tiene)
+  local f="$INST/caddy/portal/logos/$1.png"
+  [ -f "$f" ] && echo "/logos/$1.png?v=$(stat -c %Y "$f")" || true
+}
+
 # Página del portal común: un botón por centro para pacientes y otro para el personal
 generar_portal() {
   mkdir -p "$INST/caddy/portal/panel"
   cp "$CODIGO/servidor/panel.html" "$INST/caddy/portal/panel/index.html" 2>/dev/null || true
+  copiar_logos
   local f="$INST/caddy/portal/index.html" n botones_p="" botones_s=""
   for n in $(instancias); do
     [ "$(leer "$INST/$n/.env" ACTIVO)" = "false" ] && continue
-    local c d a; c="$(leer "$INST/$n/.env" CENTRO_NOMBRE | sed 's/[<>&"]//g')"; d="$(leer "$INST/$n/.env" DOMINIO)"; a="$(leer "$INST/$n/.env" AGENDA_DOMINIO)"
-    [ -n "$a" ] && botones_p="$botones_p<a class=\"b p\" href=\"https://$d/paciente\">$c</a>"
-    botones_s="$botones_s<div class=\"fila\"><b>$c</b><a class=\"b\" href=\"https://$d/\">PACS e informes</a>"
+    local c d a l img=""; c="$(leer "$INST/$n/.env" CENTRO_NOMBRE | sed 's/[<>&"]//g')"; d="$(leer "$INST/$n/.env" DOMINIO)"; a="$(leer "$INST/$n/.env" AGENDA_DOMINIO)"
+    l="$(logo_de "$n")"; [ -n "$l" ] && img="<img src=\"$l\" alt=\"\">"
+    [ -n "$a" ] && botones_p="$botones_p<a class=\"b p centro\" href=\"https://$d/paciente\">$img<span>$c</span></a>"
+    botones_s="$botones_s<div class=\"fila\"><b>$img$c</b><a class=\"b\" href=\"https://$d/\">PACS e informes</a>"
     [ -n "$a" ] && botones_s="$botones_s<a class=\"b\" href=\"https://$a/\">Agenda</a>"
     botones_s="$botones_s</div>"
   done
@@ -161,7 +177,10 @@ main{max-width:520px;margin:0 auto;padding:40px 16px}h1{font-size:24px;margin:0 
 p{color:var(--s);text-align:center;margin:0 0 24px}section{background:var(--p);border:1px solid var(--b);border-radius:14px;padding:20px;margin-bottom:16px}
 h2{font-size:16px;margin:0 0 12px}.b{display:block;text-align:center;padding:14px;border-radius:10px;border:1px solid var(--b);color:var(--t);text-decoration:none;font-weight:600;margin-top:8px}
 .b.p{background:var(--a);border-color:var(--a);color:#fff}.fila{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
-.fila b{flex:1 1 100%}.fila .b{flex:1;margin:0}small{display:block;color:var(--s);margin-top:12px;font-size:13px}
+.fila b{flex:1 1 100%;display:flex;align-items:center;gap:10px}.fila .b{flex:1;margin:0}small{display:block;color:var(--s);margin-top:12px;font-size:13px}
+img{background:#fff;border-radius:8px;object-fit:contain}.fila b img{height:34px;max-width:90px;padding:3px 5px;border:1px solid var(--b)}
+.b.centro{display:flex;align-items:center;justify-content:center;gap:14px;background:var(--p);color:var(--t);border:2px solid var(--a);padding:12px}
+.b.centro img{height:56px;max-width:150px;padding:4px 6px}.b.centro span{font-size:17px}
 </style></head><body><main><h1>Exámenes en línea</h1><p>Elija dónde se realizó su examen</p>
 <section><h2>Pacientes</h2>$botones_p<small>Ingrese con su RUT y la clave de la hoja que recibió en recepción.</small></section>
 <section><h2>Personal</h2>$botones_s<a class="b" href="/panel/">Panel de servidores</a></section></main></body></html>
@@ -387,6 +406,7 @@ js() { printf '%s' "$1" | tr -d '"\\' | tr -d '\000-\037'; }
 cmd_estado() {
   local dir="$INST/caddy/portal/panel" n primero=1 total usado
   mkdir -p "$dir"
+  copiar_logos
   read -r total usado <<<"$(df -B1 --output=size,used "$INST" | tail -n1)"
   {
     printf '{"generado":"%s","servidor":{"ip":"%s","disco_total":%s,"disco_usado":%s},"pacs":[' \
@@ -400,8 +420,8 @@ cmd_estado() {
       cuota="$(leer "$e" CUOTA_GB)"; [[ "$cuota" =~ ^[0-9]+$ ]] && [ "$cuota" -gt 0 ] || cuota=null
       [ "$(leer "$e" ACTIVO)" = "false" ] && activo=false
       [ $primero = 1 ] || printf ','; primero=0
-      printf '{"nombre":"%s","centro":"%s","dominio":"%s","agenda":"%s","activo":%s,"creado":"%s","usado":%s,"cuota_gb":%s,"aet":"%s","puerto":"%s","datos":%s}' \
-        "$(js "$n")" "$(js "$(leer "$e" CENTRO_NOMBRE)")" "$(js "$(leer "$e" DOMINIO)")" "$(js "$(leer "$e" AGENDA_DOMINIO)")" \
+      printf '{"nombre":"%s","centro":"%s","logo":"%s","dominio":"%s","agenda":"%s","activo":%s,"creado":"%s","usado":%s,"cuota_gb":%s,"aet":"%s","puerto":"%s","datos":%s}' \
+        "$(js "$n")" "$(js "$(leer "$e" CENTRO_NOMBRE)")" "$(js "$(logo_de "$n")")" "$(js "$(leer "$e" DOMINIO)")" "$(js "$(leer "$e" AGENDA_DOMINIO)")" \
         "$activo" "$(js "$creado")" "${u:-0}" "$cuota" "$(js "$(leer "$e" PACS_AET)")" "$(js "$(leer "$e" DICOM_PUERTO_PUBLICO)")" "$datos"
     done
     printf ']}\n'
