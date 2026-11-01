@@ -115,6 +115,13 @@ pacs respaldo                                # respaldo manual (el automático c
 Cada PACS vive en `/opt/pacs-instancias/<nombre>/` (su `.env` y su carpeta `data`). Los respaldos quedan en
 `/opt/respaldos/<nombre>/`. Cada PACS usa unos 400-500 MB de RAM: un servidor de 4 GB aguanta 3-4 PACS chicos.
 
+## Agenda unida al PACS
+
+Cada centro puede tener su agenda en el mismo servidor, unida a su PACS: número de acceso por cita, worklist
+para los equipos, clave del paciente al pagar con hoja de retiro, avance del examen en la agenda y portal del
+paciente (`/paciente`, con RUT y clave). Comandos: `pacs agenda`, `pacs agenda-importar` y `pacs portal`.
+Guía completa: **[AGENDA_Y_PACS.md](AGENDA_Y_PACS.md)**.
+
 ## Recibir estudios por internet (equipos de cada centro)
 
 Los equipos envían directo a un puerto público del servidor, como en pacs4me, con tres protecciones:
@@ -271,5 +278,5 @@ firewall/            Script que abre el puerto DICOM solo a los centros registra
 
 ## Próximos pasos posibles
 
-Agendamiento y admisión con worklist DICOM (los equipos toman los datos del paciente), firma electrónica avanzada,
+Firma electrónica avanzada,
 envío automático por WhatsApp Business, informes comparativos lado a lado, visores de escritorio (Weasis/RadiAnt).

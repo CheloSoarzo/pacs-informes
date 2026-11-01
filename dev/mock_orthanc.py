@@ -223,5 +223,26 @@ def archive(eid):
     return Response(buf.getvalue(), mimetype="application/zip")
 
 
+@app.post("/dev/llega")
+def dev_llega():
+    """Solo pruebas: simula que un equipo envió un estudio con este número de acceso."""
+    b = request.get_json()
+    eid = "est-" + b["AccessionNumber"].lower()
+    ESTUDIOS[eid] = dict(StudyInstanceUID=b.get("uid", "1.2.826.0.9." + str(len(ESTUDIOS))), StudyDate=hoy.strftime("%Y%m%d"),
+                         StudyTime="101500", StudyDescription=b.get("StudyDescription", "TC TORAX"),
+                         AccessionNumber=b["AccessionNumber"], InstitutionName="CENTRO NORTE", ReferringPhysicianName="",
+                         paciente=dict(PatientName=b.get("PatientName", "PACIENTE^PRUEBA"), PatientID=b.get("PatientID", ""),
+                                       PatientBirthDate=b.get("PatientBirthDate", ""), PatientSex="F"),
+                         series=[(b.get("Modality", "CT"), "Axial", 3)])
+    e = ESTUDIOS[eid]; e["series_ids"] = []
+    for n, (mod, desc, cant) in enumerate(e["series"], 1):
+        sid = f"{eid}-s{n}"; e["series_ids"].append(sid)
+        SERIES[sid] = dict(estudio=eid, Modality=mod, SeriesDescription=desc, SeriesNumber=str(n),
+                           instancias=[f"{sid}-i{k}" for k in range(1, cant + 1)])
+        for k, iid in enumerate(SERIES[sid]["instancias"], 1):
+            INSTANCIAS[iid] = dict(serie=sid, estudio=eid, InstanceNumber=str(k), total=cant, mod=mod)
+    return jsonify(ID=eid)
+
+
 if __name__ == "__main__":
     app.run(port=8042)

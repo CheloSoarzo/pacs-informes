@@ -51,6 +51,7 @@ TIPOS_ENTREGA = {
     "placas": "Placas impresas",
     "impreso": "Informe impreso",
     "email": "Correo electrónico",
+    "portal": "Portal del paciente",
     "otro": "Otro",
 }
 
@@ -105,7 +106,8 @@ def registrar(accion, detalle=""):
 
 @app.before_request
 def verificar_csrf():
-    if request.method == "POST" and not request.path.startswith("/r/"):
+    # /api/integracion/: la llama la agenda con su propio token (no es un navegador)
+    if request.method == "POST" and not request.path.startswith(("/r/", "/api/integracion/")):
         enviado = request.headers.get("X-CSRF") or request.form.get("csrf")
         if not enviado or enviado != session.get("csrf"):
             if request.endpoint == "login":

@@ -417,3 +417,12 @@ table.lista tbody tr.sel > td { background: var(--aviso-bg) !important; }
   .pl-visor { height: 260px; }
   .pl-tabla { max-height: 200px; }
 }
+
+/* Orden que viene de la agenda (en la pantalla del estudio) */
+.orden-agenda{grid-column:1/-1;display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-left:3px solid var(--primario);background:var(--primario-claro);border-radius:6px}
+.orden-agenda>span:first-child{font-size:12px;opacity:.75}
+.orden-agenda span:not(:first-child),.orden-agenda b{text-transform:none;letter-spacing:normal}
+.orden-agenda.sin-orden{border-left-color:var(--aviso);background:var(--aviso-bg)}
+.orden-agenda.sin-orden summary{cursor:pointer;font-weight:600;font-size:13px}
+.orden-agenda .cand{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--borde);font-size:13px}
+.orden-agenda .cand span .suave{display:block}

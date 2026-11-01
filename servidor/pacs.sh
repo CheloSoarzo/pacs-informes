@@ -13,10 +13,14 @@
 #                              (también desde la web: Administración → Ajustes → Sistema, en los PACS propios)
 #   pacs firewall              aplica la lista blanca DICOM de cada PACS (lo hace cron cada 5 min)
 #   pacs respaldo              respaldo de las bases de datos de todos los PACS (lo hace cron cada noche)
+#   pacs agenda <nombre> <dominio>    agrega (o cambia) la agenda del centro, unida a su PACS
+#   pacs agenda-importar <nombre> <archivo.db>   carga el respaldo de la agenda que estaba en Render
+#   pacs portal <dominio>      página de ingreso común (ej: examenes.inq.cl) con el acceso de pacientes y del personal
 #   pacs base                  (interno) crea la red compartida y la entrada web HTTPS
 set -euo pipefail
 
 CODIGO="${PACS_CODIGO:-/opt/pacs-informes}"
+AGENDA_CODIGO="${AGENDA_CODIGO:-/opt/agenda-imagenes}"
 INST="${PACS_INSTANCIAS:-/opt/pacs-instancias}"
 RESPALDOS="${PACS_RESPALDOS:-/opt/respaldos}"
 CRON_FILE="${PACS_CRON:-/etc/cron.d/pacs}"
@@ -30,9 +34,12 @@ leer() { { grep -E "^$2=" "$1" 2>/dev/null || true; } | tail -n1 | cut -d= -f2-;
 
 instancias() { for d in "$INST"/*/; do [ -f "$d.env" ] && basename "$d"; done 2>/dev/null || true; }
 existe() { [ -f "$INST/$1/.env" ] || error "no existe el PACS '$1' (mira: pacs lista)"; }
-dc() {  # docker compose de un PACS
+dc() {  # docker compose de un PACS (con su agenda, si tiene)
   local n="$1"; shift
-  INSTANCIA_DIR="$INST/$n" docker compose -p "pacs-$n" -f "$COMPOSE_INST" --env-file "$INST/$n/.env" "$@"
+  local perfiles=""
+  [ -n "$(leer "$INST/$n/.env" AGENDA_DOMINIO)" ] && perfiles="agenda"
+  INSTANCIA_DIR="$INST/$n" AGENDA_CODIGO="$AGENDA_CODIGO" COMPOSE_PROFILES="$perfiles" \
+    docker compose -p "pacs-$n" -f "$COMPOSE_INST" --env-file "$INST/$n/.env" "$@"
 }
 proxy() { INSTANCIAS_DIR="$INST" docker compose -p pacs-proxy -f "$COMPOSE_PROXY" "$@"; }
 
@@ -84,9 +91,68 @@ $dom {
 	}
 }
 EOF
+      local ag; ag="$(leer "$INST/$n/.env" AGENDA_DOMINIO)"
+      if [ -n "$ag" ]; then
+        cat <<EOF
+
+# Agenda: $n
+$ag {
+	encode gzip
+	request_body {
+		max_size 20MB
+	}
+	reverse_proxy $n-agenda:3000
+}
+EOF
+      fi
     done
+    local portal; portal="$(leer "$INST/servidor.env" PORTAL_DOMINIO || true)"
+    if [ -n "$portal" ]; then
+      generar_portal
+      echo
+      echo "# Portal común de ingreso"
+      echo "$portal {"
+      echo "	encode gzip"
+      for n in $(instancias); do
+        [ -n "$(leer "$INST/$n/.env" AGENDA_DOMINIO)" ] || continue
+        echo "	redir /$n https://$(leer "$INST/$n/.env" DOMINIO)/paciente 302"
+        echo "	redir /$n/ https://$(leer "$INST/$n/.env" DOMINIO)/paciente 302"
+      done
+      echo "	root * /etc/caddy/portal"
+      echo "	file_server"
+      echo "}"
+    fi
   } > "$f"
   mv "$f" "$INST/caddy/Caddyfile"
+}
+
+# Página del portal común: un botón por centro para pacientes y otro para el personal
+generar_portal() {
+  mkdir -p "$INST/caddy/portal"
+  local f="$INST/caddy/portal/index.html" n botones_p="" botones_s=""
+  for n in $(instancias); do
+    [ "$(leer "$INST/$n/.env" ACTIVO)" = "false" ] && continue
+    local c d a; c="$(leer "$INST/$n/.env" CENTRO_NOMBRE | sed 's/[<>&"]//g')"; d="$(leer "$INST/$n/.env" DOMINIO)"; a="$(leer "$INST/$n/.env" AGENDA_DOMINIO)"
+    [ -n "$a" ] && botones_p="$botones_p<a class=\"b p\" href=\"https://$d/paciente\">$c</a>"
+    botones_s="$botones_s<div class=\"fila\"><b>$c</b><a class=\"b\" href=\"https://$d/\">PACS e informes</a>"
+    [ -n "$a" ] && botones_s="$botones_s<a class=\"b\" href=\"https://$a/\">Agenda</a>"
+    botones_s="$botones_s</div>"
+  done
+  cat > "$f" <<EOF
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Exámenes en línea</title><style>
+:root{--bg:#f4f6f8;--p:#fff;--t:#18212b;--s:#5b6573;--b:#dce2e8;--a:#1f5fa8}
+@media (prefers-color-scheme:dark){:root{--bg:#0f151b;--p:#16202a;--t:#e6edf3;--s:#93a3b2;--b:#2a3846;--a:#6fb1e0}}
+body{margin:0;background:var(--bg);color:var(--t);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:520px;margin:0 auto;padding:40px 16px}h1{font-size:24px;margin:0 0 6px;text-align:center}
+p{color:var(--s);text-align:center;margin:0 0 24px}section{background:var(--p);border:1px solid var(--b);border-radius:14px;padding:20px;margin-bottom:16px}
+h2{font-size:16px;margin:0 0 12px}.b{display:block;text-align:center;padding:14px;border-radius:10px;border:1px solid var(--b);color:var(--t);text-decoration:none;font-weight:600;margin-top:8px}
+.b.p{background:var(--a);border-color:var(--a);color:#fff}.fila{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.fila b{flex:1 1 100%}.fila .b{flex:1;margin:0}small{display:block;color:var(--s);margin-top:12px;font-size:13px}
+</style></head><body><main><h1>Exámenes en línea</h1><p>Elija dónde se realizó su examen</p>
+<section><h2>Pacientes</h2>$botones_p<small>Ingrese con su RUT y la clave de la hoja que recibió en recepción.</small></section>
+<section><h2>Personal</h2>$botones_s</section></main></body></html>
+EOF
 }
 
 recargar_caddy() {
@@ -138,7 +204,7 @@ cmd_nueva() {
   clave="${clave:-$(openssl rand -base64 12 | tr -d '/+=')}"
   local aet; aet="$(echo "$n" | tr 'a-z-' 'A-Z_' | cut -c1-16)"
 
-  mkdir -p "$INST/$n/data"
+  mkdir -p "$INST/$n/data/worklists"
   cat > "$INST/$n/.env" <<ENV
 # PACS "$n" — creado por 'pacs nueva' el $(date '+%F %T')
 INSTANCIA=$n
@@ -160,6 +226,18 @@ DICOM_PUERTO_PUBLICO=$puerto
 SERVIDOR_IP_PUBLICA=$(ip_publica)
 FIREWALL_TOKEN=$(openssl rand -hex 24)
 WEB_WORKERS=2
+
+# Agenda unida a este PACS (la activa: pacs agenda $n <dominio>)
+AGENDA_DOMINIO=
+AGENDA_ADMIN_CLAVE=
+INTEGRACION_TOKEN=$(openssl rand -hex 24)
+PORTAL_URL=https://$dominio/paciente
+ACCESION_PREFIJO=$(echo "$n" | tr 'a-z' 'A-Z' | tr -cd 'A-Z' | cut -c1-3)
+# Worklist: modalidad DICOM de cada equipo y qué pacientes aparecen (llegados = pagados o marcados "llegó")
+MWL_MODALIDAD_TC=CT
+MWL_MODALIDAD_RX=CR
+MWL_MODALIDAD_ECO=US
+MWL_INCLUIR=llegados
 
 CENTRO_NOMBRE=$centro
 CENTRO_DIRECCION=
@@ -228,6 +306,69 @@ cmd_dominio() {
   echo "PACS $n ahora en https://$d (el dominio debe apuntar a $(ip_publica))"
 }
 
+traer_agenda() {  # baja (o actualiza) el código de la agenda
+  local repo; repo="$(leer "$INST/servidor.env" AGENDA_REPO || true)"
+  repo="${repo:-https://github.com/CheloSoarzo/agenda-imagenes.git}"
+  if [ -d "$AGENDA_CODIGO/.git" ]; then
+    git -C "$AGENDA_CODIGO" remote set-url origin "$repo"
+    git -C "$AGENDA_CODIGO" -c core.fileMode=false pull --ff-only
+  else
+    git clone "$repo" "$AGENDA_CODIGO" || error "no pude bajar la agenda de GitHub. Si el repositorio es privado, pon en $INST/servidor.env la línea AGENDA_REPO=https://<token>@github.com/CheloSoarzo/agenda-imagenes.git"
+  fi
+}
+
+cmd_agenda() {
+  local n="${1:-}" d="${2:-}"; existe "$n"; [ -n "$d" ] || error "uso: pacs agenda <nombre> <dominio>   (ej: pacs agenda rancagua agendarancagua.inq.cl)"
+  local e="$INST/$n/.env" clave=""
+  traer_agenda
+  mkdir -p "$INST/$n/data/agenda" "$INST/$n/data/worklists"
+  [ -n "$(leer "$e" INTEGRACION_TOKEN)" ] || poner "$e" INTEGRACION_TOKEN "$(openssl rand -hex 24)"
+  [ -n "$(leer "$e" PORTAL_URL)" ] || poner "$e" PORTAL_URL "https://$(leer "$e" DOMINIO)/paciente"
+  [ -n "$(leer "$e" ACCESION_PREFIJO)" ] || poner "$e" ACCESION_PREFIJO "$(echo "$n" | tr 'a-z' 'A-Z' | tr -cd 'A-Z' | cut -c1-3)"
+  if [ -z "$(leer "$e" AGENDA_ADMIN_CLAVE)" ] && [ ! -f "$INST/$n/data/agenda/agenda.db" ]; then
+    clave="$(openssl rand -base64 12 | tr -d '/+=')"; poner "$e" AGENDA_ADMIN_CLAVE "$clave"
+  fi
+  poner "$e" AGENDA_DOMINIO "$d"
+  dc "$n" up -d --build
+  recargar_caddy
+  echo
+  echo "Agenda de $n en https://$d (el certificado HTTPS tarda 1-2 minutos)"
+  [ -n "$clave" ] && echo "  Usuario: admin   Clave inicial: $clave   (cámbiala al entrar)"
+  [ -f "$INST/$n/data/agenda/agenda.db" ] && [ -z "$clave" ] && echo "  Usa los usuarios de siempre de la agenda."
+  echo "  Pacientes: https://$(leer "$e" DOMINIO)/paciente"
+}
+
+cmd_agenda_importar() {
+  local n="${1:-}" f="${2:-}"; existe "$n"
+  [ -f "$f" ] || error "uso: pacs agenda-importar <nombre> <archivo.db>   (el respaldo que bajaste de la agenda)"
+  [ "$(head -c 15 "$f")" = "SQLite format 3" ] || error "$f no es un respaldo de la agenda"
+  [ -n "$(leer "$INST/$n/.env" AGENDA_DOMINIO)" ] || error "primero activa la agenda: pacs agenda $n <dominio>"
+  local d="$INST/$n/data/agenda"
+  dc "$n" stop agenda
+  mkdir -p "$RESPALDOS/$n"
+  [ -f "$d/agenda.db" ] && cp "$d/agenda.db" "$RESPALDOS/$n/agenda_antes_de_importar_$(date +%F_%H%M).db"
+  rm -f "$d/agenda.db" "$d/agenda.db-wal" "$d/agenda.db-shm"
+  cp "$f" "$d/agenda.db"
+  # Las órdenes de prueba que haya recibido el PACS se borran: la agenda importada vuelve a enviar las suyas
+  docker exec "pacs-$n-informes-1" python -c \
+    "import sqlite3; c=sqlite3.connect('/data/informes.db'); c.execute('DELETE FROM ordenes'); c.commit()"
+  rm -f "$INST/$n/data/worklists/"*.wl
+  dc "$n" up -d agenda
+  echo "Agenda de $n cargada desde $f. Entra con los mismos usuarios que usabas en Render."
+}
+
+cmd_portal() {
+  local d="${1:-}"; [ -n "$d" ] || error "uso: pacs portal <dominio>   (ej: pacs portal examenes.inq.cl)"
+  [ -f "$INST/servidor.env" ] || cmd_base
+  poner "$INST/servidor.env" PORTAL_DOMINIO "$d"
+  local n
+  for n in $(instancias); do   # la hoja de retiro imprime la dirección corta: examenes.inq.cl/rancagua
+    [ -n "$(leer "$INST/$n/.env" AGENDA_DOMINIO)" ] && poner "$INST/$n/.env" PORTAL_URL "https://$d/$n" && dc "$n" up -d agenda
+  done
+  recargar_caddy
+  echo "Portal en https://$d (el certificado HTTPS tarda 1-2 minutos)"
+}
+
 cmd_iniciar() { existe "${1:-}"; poner "$INST/$1/.env" ACTIVO true; dc "$1" up -d; recargar_caddy; echo "PACS $1 iniciado"; }
 cmd_detener() { existe "${1:-}"; poner "$INST/$1/.env" ACTIVO false; dc "$1" stop; recargar_caddy; echo "PACS $1 detenido (sus datos se conservan)"; }
 cmd_logs() { existe "${1:-}"; dc "$1" logs --tail 200 -f informes; }
@@ -241,9 +382,17 @@ cmd_actualizar() {
 cmd_post_actualizar() {
   local n primera; primera="$(instancias | head -n1)"
   [ -n "$primera" ] && dc "$primera" build informes   # la imagen de la app es la misma para todos los PACS
+  # Agenda: se actualiza si algún PACS la tiene
+  local con_agenda=""
+  for n in $(instancias); do [ -n "$(leer "$INST/$n/.env" AGENDA_DOMINIO)" ] && con_agenda="$n"; done
+  if [ -n "$con_agenda" ]; then traer_agenda || echo "Aviso: no se pudo actualizar la agenda"; dc "$con_agenda" build agenda || true; fi
   for n in $(instancias); do
     # PACS creados antes de existir esta opción: son los propios
     grep -qE "^ADMINISTRA_SERVIDOR=" "$INST/$n/.env" || poner "$INST/$n/.env" ADMINISTRA_SERVIDOR true
+    # Variables de la integración con la agenda (PACS creados antes de esta versión)
+    [ -n "$(leer "$INST/$n/.env" INTEGRACION_TOKEN)" ] || poner "$INST/$n/.env" INTEGRACION_TOKEN "$(openssl rand -hex 24)"
+    grep -qE "^PORTAL_URL=" "$INST/$n/.env" || poner "$INST/$n/.env" PORTAL_URL "https://$(leer "$INST/$n/.env" DOMINIO)/paciente"
+    mkdir -p "$INST/$n/data/worklists"
     escribir_version "$n"
     [ "$(leer "$INST/$n/.env" ACTIVO)" = "false" ] && continue
     dc "$n" pull -q orthanc postgres || true
@@ -321,6 +470,11 @@ cmd_respaldo() {
     docker exec "pacs-$n-informes-1" python -c \
       "import sqlite3; sqlite3.connect('/data/informes.db').backup(sqlite3.connect('/data/respaldo.db'))" \
       && mv "$INST/$n/data/informes/respaldo.db" "$RESPALDOS/$n/informes_$hoy.db" || echo "[$n] fallo respaldo informes"
+    if [ -n "$(leer "$INST/$n/.env" AGENDA_DOMINIO)" ]; then
+      docker exec "pacs-$n-agenda-1" node --no-warnings -e \
+        "new (require('node:sqlite').DatabaseSync)('/data/agenda.db').exec(\"VACUUM INTO '/data/respaldo.db'\")" \
+        && mv "$INST/$n/data/agenda/respaldo.db" "$RESPALDOS/$n/agenda_$hoy.db" || echo "[$n] fallo respaldo agenda"
+    fi
   done
   find "$RESPALDOS" -type f -mtime +14 -delete
   echo "Respaldos en $RESPALDOS"
@@ -341,5 +495,8 @@ case "$c" in
   instalar-cron) instalar_cron;;
   firewall) cmd_firewall;;
   respaldo) cmd_respaldo;;
-  *) sed -n '2,14p' "$0"; exit 1;;
+  agenda) cmd_agenda "$@";;
+  agenda-importar) cmd_agenda_importar "$@";;
+  portal) cmd_portal "$@";;
+  *) sed -n '2,18p' "$0"; exit 1;;
 esac

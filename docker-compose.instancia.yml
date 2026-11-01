@@ -26,6 +26,8 @@ services:
       - "${DICOM_PUERTO_PUBLICO}:4242"
     volumes:
       - ${INSTANCIA_DIR}/data/orthanc:/var/lib/orthanc/db
+      # Lista de trabajo (worklist) que arma la app a partir de la agenda
+      - ${INSTANCIA_DIR}/data/worklists:/worklists:ro
     environment:
       ORTHANC__NAME: ${PACS_NOMBRE:-PACS}
       ORTHANC__DICOM_AET: ${PACS_AET:-PACS}
@@ -48,6 +50,8 @@ services:
       STONE_WEB_VIEWER_PLUGIN_ENABLED: "true"
       GDCM_PLUGIN_ENABLED: "true"
       HOUSEKEEPER_PLUGIN_ENABLED: "true"
+      WORKLISTS_PLUGIN_ENABLED: "true"
+      ORTHANC__WORKLISTS__DATABASE: /worklists
     networks:
       default: {}
       proxy:
@@ -65,12 +69,39 @@ services:
       ORTHANC_URL: http://${INSTANCIA}-orthanc:8042
       DATA_DIR: /data
       WEB_WORKERS: ${WEB_WORKERS:-2}
+      WORKLIST_DIR: /worklists
     volumes:
       - ${INSTANCIA_DIR}/data/informes:/data
+      - ${INSTANCIA_DIR}/data/worklists:/worklists
     networks:
       default: {}
       proxy:
         aliases: ["${INSTANCIA}-informes"]
+
+  # Agenda del centro (solo si el PACS tiene agenda: 'pacs agenda <nombre> <dominio>')
+  agenda:
+    profiles: ["agenda"]
+    build: ${AGENDA_CODIGO:-/opt/agenda-imagenes}
+    image: agenda-imagenes:latest        # una sola imagen para todas las agendas del servidor
+    restart: unless-stopped
+    environment:
+      DATA_DIR: /data
+      TZ: America/Santiago
+      CENTRO_NOMBRE: ${CENTRO_NOMBRE}
+      ADMIN_CLAVE: ${AGENDA_ADMIN_CLAVE:-}
+      COOKIE_SECURE: "1"
+      TRUST_PROXY: "1"
+      # La agenda habla con la app de informes por la red interna del servidor
+      PACS_URL: http://${INSTANCIA}-informes:8000
+      INTEGRACION_TOKEN: ${INTEGRACION_TOKEN:-}
+      PORTAL_URL: ${PORTAL_URL:-}
+      ACCESION_PREFIJO: ${ACCESION_PREFIJO:-AG}
+    volumes:
+      - ${INSTANCIA_DIR}/data/agenda:/data
+    networks:
+      default: {}
+      proxy:
+        aliases: ["${INSTANCIA}-agenda"]
 
 networks:
   proxy:

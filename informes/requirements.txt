@@ -3,3 +3,4 @@ requests>=2.31
 reportlab>=4.0
 gunicorn>=22.0
 pypdf>=4.0
+pydicom>=2.4

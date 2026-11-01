@@ -37,6 +37,36 @@
     <div><span>N° examen</span>{{ est.accession or '—' }}</div>
     <div><span>Centro</span>{{ est.institucion or '—' }}</div>
     <div><span>Solicitante</span>{{ (inf.solicitante if inf else est.solicitante) or '—' }}</div>
+    {% set orden = orden_agenda(est) %}
+    {% if orden %}
+    <div class="orden-agenda"><span>Orden de agenda · {{ orden.accesion }}</span>
+      <b>{{ orden.examen or '—' }}</b>
+      <span class="suave peq">{{ orden.fecha }} {{ orden.hora }}{% if orden.medico %} · Solicita: {{ orden.medico }}{% endif %}{% if orden.prevision %} · {{ orden.prevision }}{% endif %}{% if orden.pagado %} · pagado{% endif %}</span>
+      {% if orden.notas %}<span class="peq">Notas de recepción: {{ orden.notas }}</span>{% endif %}
+      {% if puede('editar_paciente') %}
+      <form method="post" action="{{ url_for('unir_orden', estudio_id=est.id) }}" class="fila" style="margin-top:4px">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="quitar">
+        <button class="btn peq" type="submit" onclick="return confirm('¿Separar este estudio de la cita? La agenda dejará de ver su avance.')">No es esta cita</button>
+      </form>
+      {% endif %}
+    </div>
+    {% elif puede('editar_paciente') %}
+    {% set cands = citas_candidatas(est) %}
+    {% if cands %}
+    <details class="orden-agenda sin-orden" {{ 'open' if cands[0].mismo_rut }}>
+      <summary>Sin cita de agenda · {% if cands[0].mismo_rut %}hay una cita de este paciente{% else %}unir con una cita{% endif %}</summary>
+      <form method="post" action="{{ url_for('unir_orden', estudio_id=est.id) }}">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        {% for c in cands %}
+        <label class="cand"><input type="radio" name="accesion" value="{{ c.accesion }}" required {{ 'checked' if loop.first and c.mismo_rut and (cands|selectattr('mismo_rut')|list|length) == 1 }}>
+          <span><b>{{ c.paciente }}</b> · {{ c.rut }} · {{ c.examen or c.equipo|upper }}
+          <span class="suave peq">{{ c.fecha }} {{ c.hora }} · {{ c.accesion }}{% if c.mismo_rut %} · mismo RUT{% endif %}</span></span></label>
+        {% endfor %}
+        <button class="btn" type="submit" style="margin-top:6px">Unir con la cita elegida</button>
+      </form>
+    </details>
+    {% endif %}
+    {% endif %}
     {% if puede('editar_paciente') %}
     <div class="corregir"><button type="button" class="btn peq" data-editar-paciente="{{ est.id }}">✎ Corregir datos</button></div>
     {% endif %}
