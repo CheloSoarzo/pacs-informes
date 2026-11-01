@@ -34,7 +34,8 @@ services:
       ORTHANC__DICOM_CHECK_CALLED_AET: "false"
       ORTHANC__DICOM_ALWAYS_ALLOW_STORE: "false"
       ORTHANC__DICOM_ALWAYS_ALLOW_ECHO: "false"
-      ORTHANC__DICOM_CHECK_MODALITY_HOST: "true"
+      # false en modo "solo AE Title" (pacs dicom-modo <nombre> aetitle)
+      ORTHANC__DICOM_CHECK_MODALITY_HOST: "${DICOM_VERIFICAR_IP:-true}"
       ORTHANC__DICOM_MODALITIES_IN_DATABASE: "true"
       ORTHANC__DICOM_ASSOCIATION_CLOSE_DELAY: "5"
       ORTHANC__OVERWRITE_INSTANCES: "true"

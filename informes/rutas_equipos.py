@@ -3,6 +3,9 @@
 Cada equipo se registra con su AE Title y la IP pública fija de su centro. Con eso:
   1. Orthanc solo acepta envíos (C-STORE) de equipos registrados y desde su IP (DicomCheckModalityHost).
   2. El script firewall/sincronizar_firewall.sh abre el puerto DICOM solo a esas IPs.
+
+Modo "solo AE Title" (DICOM_SOLO_AETITLE=true): el puerto queda abierto a cualquier IP y Orthanc acepta a los
+equipos solo por su AE Title. La IP del equipo pasa a ser opcional. El AE Title funciona como una clave.
 """
 import ipaddress
 import re
@@ -32,6 +35,14 @@ def _validar_ip(texto):
     return str(ip), None
 
 
+HOST_CUALQUIERA = "0.0.0.0"   # equipos sin IP (modo solo AE Title)
+
+
+def aet_debil(aet):
+    """AE Title fácil de adivinar: corto, o sin números."""
+    return len(aet) < 8 or not re.search(r"\d", aet) or not re.search(r"[A-Za-z]", aet)
+
+
 def sincronizar():
     """Deja en Orthanc exactamente los equipos activos de la lista. Devuelve (n_ok, errores)."""
     equipos = get_db().execute("SELECT * FROM equipos WHERE activo=1").fetchall()
@@ -50,11 +61,13 @@ def sincronizar():
     ok = 0
     for nombre, e in deseados.items():
         a = actuales.get(nombre) or {}
-        if a.get("AET") == e["aet"] and a.get("Host") == e["ip"] and a.get("AllowStore", True):
+        host = e["ip"] or HOST_CUALQUIERA
+        if (a.get("AET") == e["aet"] and a.get("Host") == host and a.get("AllowStore", True)
+                and a.get("AllowFindWorklist", False)):
             ok += 1
             continue
         try:
-            pacs.guardar_modalidad(nombre, e["aet"], e["ip"])
+            pacs.guardar_modalidad(nombre, e["aet"], host)
             ok += 1
         except OrthancError as err:
             errores.append(f"{e['nombre']}: {err}")
@@ -84,7 +97,11 @@ def admin_equipos():
 
         nombre = f.get("nombre", "").strip()[:60]
         aet = f.get("aet", "").strip().upper()
-        ip, err = _validar_ip(f.get("ip", ""))
+        solo_aet = Config.DICOM_SOLO_AETITLE
+        if solo_aet and not f.get("ip", "").strip():
+            ip, err = "", None
+        else:
+            ip, err = _validar_ip(f.get("ip", ""))
         if not nombre:
             err = "Ponle un nombre al equipo (ej: TC Rancagua)."
         elif not RE_AET.match(aet):
@@ -92,8 +109,12 @@ def admin_equipos():
         if err:
             flash(err, "error")
             return redirect(url_for("admin_equipos"))
-        repetido = db.execute("SELECT nombre FROM equipos WHERE aet=? AND ip=? AND id!=?",
-                              (aet, ip, int(f.get("id") or 0))).fetchone()
+        if solo_aet:   # sin IP, el AE Title es lo único que distingue a cada equipo
+            repetido = db.execute("SELECT nombre FROM equipos WHERE aet=? AND id!=?",
+                                  (aet, int(f.get("id") or 0))).fetchone()
+        else:
+            repetido = db.execute("SELECT nombre FROM equipos WHERE aet=? AND ip=? AND id!=?",
+                                  (aet, ip, int(f.get("id") or 0))).fetchone()
         if repetido:
             flash(f"Ya existe un equipo con ese AE Title e IP ({repetido['nombre']}). "
                   "Cada equipo de un mismo centro necesita un AE Title distinto.", "error")
@@ -113,6 +134,9 @@ def admin_equipos():
             flash("Equipo guardado, pero no se pudo actualizar el PACS: " + "; ".join(errores), "error")
         else:
             flash(f"Equipo «{nombre}» guardado y habilitado en el PACS.", "ok")
+            if solo_aet and aet_debil(aet):
+                flash(f"Ojo: el AE Title «{aet}» es fácil de adivinar. Como el PACS acepta equipos desde cualquier IP, "
+                      "conviene uno de 8 o más letras y números (ej: INSICT7K2Q).", "error")
         return redirect(url_for("admin_equipos"))
 
     equipos = db.execute("SELECT * FROM equipos ORDER BY activo DESC, centro, nombre").fetchall()
@@ -124,7 +148,14 @@ def admin_equipos():
     return render_template("admin_equipos.html", equipos=equipos, en_pacs=en_pacs, estado_pacs=estado_pacs,
                            prefijo=PREFIJO, pacs_aet=Config.PACS_AET, puerto=Config.DICOM_PUERTO_PUBLICO,
                            ip_servidor=Config.SERVIDOR_IP_PUBLICA, firewall_token=bool(Config.FIREWALL_TOKEN),
-                           token_sugerido=secrets.token_urlsafe(24))
+                           token_sugerido=secrets.token_urlsafe(24), solo_aet=Config.DICOM_SOLO_AETITLE,
+                           aet_debil=aet_debil, aet_sugerido=_aet_sugerido())
+
+
+def _aet_sugerido():
+    letras = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+    base = "".join(c for c in (Config.INSTANCIA or "PACS").upper() if c.isalnum())[:5]
+    return base + "".join(secrets.choice(letras) for _ in range(5))
 
 
 @app.route("/api/equipos/ips")
@@ -135,5 +166,7 @@ def ips_firewall():
     if not Config.FIREWALL_TOKEN or not secrets.compare_digest(token, Config.FIREWALL_TOKEN):
         abort(404)
     sincronizar()
-    ips = sorted({e["ip"] for e in get_db().execute("SELECT ip FROM equipos WHERE activo=1").fetchall()})
+    ips = sorted({e["ip"] for e in get_db().execute("SELECT ip FROM equipos WHERE activo=1").fetchall() if e["ip"]})
+    if Config.DICOM_SOLO_AETITLE:
+        ips = ["ABIERTO"] + ips      # el script deja el puerto abierto a cualquier IP
     return Response("\n".join(ips) + ("\n" if ips else ""), mimetype="text/plain")

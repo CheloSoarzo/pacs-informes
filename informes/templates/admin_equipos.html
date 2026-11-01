@@ -12,8 +12,8 @@
       <input type="text" id="e-centro-{{ k }}" name="centro" value="{{ e.centro if e }}" placeholder="Ej: Rancagua"></div>
     <div><label for="e-aet-{{ k }}">AE Title del equipo (el que tiene configurado el equipo)</label>
       <input type="text" id="e-aet-{{ k }}" name="aet" value="{{ e.aet if e }}" maxlength="16" placeholder="Ej: CT_RANCAGUA" required class="mono"></div>
-    <div><label for="e-ip-{{ k }}">IP pública fija del centro</label>
-      <input type="text" id="e-ip-{{ k }}" name="ip" value="{{ e.ip if e }}" placeholder="Ej: 200.29.15.195" required class="mono" inputmode="decimal"></div>
+    <div><label for="e-ip-{{ k }}">IP pública fija del centro{% if solo_aet %} (opcional){% endif %}</label>
+      <input type="text" id="e-ip-{{ k }}" name="ip" value="{{ e.ip if e }}" placeholder="{{ 'Déjala vacía para aceptar desde cualquier IP' if solo_aet else 'Ej: 200.29.15.195' }}" {{ '' if solo_aet else 'required' }} class="mono" inputmode="decimal"></div>
   </div>
   <label for="e-notas-{{ k }}">Notas</label>
   <input type="text" id="e-notas-{{ k }}" name="notas" value="{{ e.notas if e }}" placeholder="Ej: Siemens Somatom, configurado por el técnico el 26-10">
@@ -36,7 +36,15 @@
   <form method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
     <button class="btn" name="sincronizar" value="1">Volver a sincronizar con el PACS</button></form>
 </div>
+{% if solo_aet %}
+<div class="panel aviso-info">
+  <b>Modo «solo AE Title»:</b> el PACS acepta a los equipos de esta lista por su AE Title, desde cualquier IP.
+  El AE Title funciona como una clave: usa uno de 8 o más letras y números, distinto para cada equipo
+  (ej: <span class="mono">{{ aet_sugerido }}</span>). Si un equipo tiene IP fija, ponla igual: queda más protegido.
+</div>
+{% else %}
 <p class="suave">Solo los equipos de esta lista pueden enviar estudios al PACS, y solo desde la IP de su centro. Cualquier otro envío se rechaza.</p>
+{% endif %}
 
 <div class="panel config-equipo">
   <h2>Datos para configurar en cada equipo</h2>
@@ -61,9 +69,9 @@
       <td><b>{{ e.nombre }}</b>{% if e.notas %}<br><span class="peq suave">{{ e.notas }}</span>{% endif %}</td>
       <td class="peq">{{ e.centro or '—' }}</td>
       <td class="mono">{{ e.aet }}</td>
-      <td class="mono">{{ e.ip }}</td>
+      <td class="mono">{{ e.ip or 'Cualquier IP' }}{% if solo_aet and aet_debil(e.aet) %} <span class="badge pendiente" title="AE Title fácil de adivinar">AE débil</span>{% endif %}</td>
       <td>{% if not e.activo %}<span class="badge pendiente">Deshabilitado</span>
-          {% elif en and en.AET == e.aet and en.Host == e.ip %}<span class="badge firmado">Habilitado</span>
+          {% elif en and en.AET == e.aet and en.Host == (e.ip or '0.0.0.0') %}<span class="badge firmado">Habilitado</span>
           {% else %}<span class="badge borrador">Falta sincronizar</span>{% endif %}</td>
     </tr>
   {% else %}
@@ -74,7 +82,7 @@
 </div>
 
 {% for e in equipos %}
-  <details class="edit"><summary>Editar · {{ e.nombre }} <span class="suave peq">· {{ e.aet }} · {{ e.ip }}</span></summary>{{ form_equipo(e) }}</details>
+  <details class="edit"><summary>Editar · {{ e.nombre }} <span class="suave peq">· {{ e.aet }} · {{ e.ip or 'cualquier IP' }}</span></summary>{{ form_equipo(e) }}</details>
 {% endfor %}
 <details class="edit" {{ 'open' if not equipos }}>
   <summary>+ Agregar equipo</summary>
@@ -84,7 +92,11 @@
 <div class="panel mt-grande">
   <h2>Firewall del servidor</h2>
   {% if firewall_token %}
+    {% if solo_aet %}
+    <p class="peq aviso-info">Modo «solo AE Title»: el puerto {{ puerto }} está abierto a cualquier IP. El PACS rechaza a los equipos que no están en esta lista.</p>
+    {% else %}
     <p class="peq aviso-ok">El script de firewall está configurado: el puerto {{ puerto }} se abre solo a las IPs de esta lista (se actualiza cada 5 minutos).</p>
+    {% endif %}
   {% else %}
     <p class="peq aviso-info">Falta activar el firewall automático. En el archivo <span class="mono">.env</span> del servidor agrega
       <span class="mono">FIREWALL_TOKEN={{ token_sugerido }}</span> y sigue los pasos de «Recibir estudios por internet» en el README.

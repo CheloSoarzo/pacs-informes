@@ -169,6 +169,20 @@ porcentaje sobre ese límite:
 pacs cuota rismed 50
 ```
 
+## Aceptar equipos solo por AE Title (sin IP fija)
+
+Si la IP pública de un centro cambia (por ejemplo, porque su red sale a internet a través de un servicio de
+seguridad o de dos proveedores), el PACS puede aceptar a los equipos **solo por su AE Title**, desde cualquier IP:
+
+```
+pacs dicom-modo insi aetitle
+```
+
+En **Administración → Equipos DICOM** la IP pasa a ser opcional. Como el puerto queda abierto a internet, el AE Title
+funciona como una clave: usa uno de 8 o más letras y números, distinto para cada equipo (la pantalla sugiere uno).
+Los AE Title fáciles de adivinar aparecen marcados como **AE débil**. Para volver a exigir la IP:
+`pacs dicom-modo insi ip`.
+
 ## Equipos sin worklist
 
 El worklist es lo ideal, pero no es obligatorio. Los equipos que no lo usen (o mientras lo configuras) igual quedan

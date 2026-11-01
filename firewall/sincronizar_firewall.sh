@@ -30,6 +30,9 @@ fi
 if ! IPS="$(curl -fsS --max-time 20 -H "X-Token: ${FIREWALL_TOKEN}" "$URL")"; then
   echo "$(date '+%F %T') No se pudo consultar la app; se mantienen las reglas actuales"; exit 0
 fi
+# Modo "solo AE Title": la app pide dejar el puerto abierto a cualquier IP (Orthanc filtra por AE Title)
+ABIERTO=false
+echo "$IPS" | grep -qx "ABIERTO" && ABIERTO=true
 # Solo IPv4 válidas
 IPS="$(echo "$IPS" | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || true)"
 
@@ -39,7 +42,11 @@ iptables -F "$CADENA"
 for ip in $IPS; do
   iptables -A "$CADENA" -s "$ip" -j RETURN
 done
-iptables -A "$CADENA" -j DROP
+if [ "$ABIERTO" = true ]; then
+  iptables -A "$CADENA" -j RETURN
+else
+  iptables -A "$CADENA" -j DROP
+fi
 
 # 3) Enviar a la cadena todo lo que llega al puerto DICOM público (una sola vez)
 REGLA=(-p tcp -m conntrack --ctorigdstport "$PUERTO" --ctdir ORIGINAL -j "$CADENA")
@@ -47,7 +54,9 @@ if ! iptables -C DOCKER-USER "${REGLA[@]}" 2>/dev/null; then
   iptables -I DOCKER-USER 1 "${REGLA[@]}"
 fi
 
-if [ -n "$IPS" ]; then
+if [ "$ABIERTO" = true ]; then
+  echo "$(date '+%F %T') Puerto $PUERTO abierto a cualquier IP (modo solo AE Title)"
+elif [ -n "$IPS" ]; then
   echo "$(date '+%F %T') Puerto $PUERTO abierto solo para: $(echo $IPS)"
 else
   echo "$(date '+%F %T') Puerto $PUERTO cerrado: no hay equipos habilitados"

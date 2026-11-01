@@ -19,6 +19,7 @@
 #   pacs panel-clave [usuario] clave del panel de servidores (<portal>/panel): espacio, estudios e informes de cada PACS
 #   pacs cuota <nombre> <GB>   espacio contratado de un PACS (se muestra en el panel; 0 = sin límite)
 #   pacs estado                actualiza los números del panel (lo hace cron cada 5 min)
+#   pacs dicom-modo <nombre> aetitle|ip   cómo acepta equipos: solo por AE Title (cualquier IP) o por AE Title + IP
 #   pacs base                  (interno) crea la red compartida y la entrada web HTTPS
 set -euo pipefail
 
@@ -454,6 +455,24 @@ cmd_cuota() {
   echo "PACS $n: espacio contratado ${g} GB"
 }
 
+cmd_dicom_modo() {
+  local n="${1:-}" m="${2:-}"; existe "$n"
+  local e="$INST/$n/.env"
+  case "$m" in
+    aetitle) poner "$e" DICOM_SOLO_AETITLE true; poner "$e" DICOM_VERIFICAR_IP false;;
+    ip)      poner "$e" DICOM_SOLO_AETITLE false; poner "$e" DICOM_VERIFICAR_IP true;;
+    *) error "uso: pacs dicom-modo <nombre> aetitle|ip";;
+  esac
+  dc "$n" up -d
+  sleep 5
+  bash "$CODIGO/firewall/sincronizar_firewall.sh" "$e" | sed "s/^/[$n] /" || true
+  if [ "$m" = aetitle ]; then
+    echo "PACS $n: acepta equipos por AE Title desde cualquier IP. Usa AE Title difíciles de adivinar."
+  else
+    echo "PACS $n: acepta equipos solo por AE Title + IP pública registrada."
+  fi
+}
+
 cmd_iniciar() { existe "${1:-}"; poner "$INST/$1/.env" ACTIVO true; dc "$1" up -d; recargar_caddy; echo "PACS $1 iniciado"; }
 cmd_detener() { existe "${1:-}"; poner "$INST/$1/.env" ACTIVO false; dc "$1" stop; recargar_caddy; echo "PACS $1 detenido (sus datos se conservan)"; }
 cmd_logs() { existe "${1:-}"; dc "$1" logs --tail 200 -f informes; }
@@ -587,5 +606,6 @@ case "$c" in
   panel-clave) cmd_panel_clave "$@";;
   cuota) cmd_cuota "$@";;
   estado) cmd_estado;;
-  *) sed -n '2,21p' "$0"; exit 1;;
+  dicom-modo) cmd_dicom_modo "$@";;
+  *) sed -n '2,22p' "$0"; exit 1;;
 esac

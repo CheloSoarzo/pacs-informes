@@ -52,6 +52,9 @@ class Config:
     DICOM_PUERTO_PUBLICO = os.environ.get("DICOM_PUERTO_PUBLICO", "46429")
     SERVIDOR_IP_PUBLICA = os.environ.get("SERVIDOR_IP_PUBLICA", "")   # solo para mostrar en pantalla
     FIREWALL_TOKEN = os.environ.get("FIREWALL_TOKEN", "")             # clave del script de firewall
+    # Modo "solo AE Title": los equipos se aceptan por su AE Title desde cualquier IP (para centros cuya IP
+    # pública cambia). Lo activa `pacs dicom-modo <nombre> aetitle`.
+    DICOM_SOLO_AETITLE = _bool(os.environ.get("DICOM_SOLO_AETITLE"), False)
 
     # Este PACS puede pedir actualizar todo el servidor desde la web (Ajustes → Sistema).
     # Solo los PACS propios; a los PACS arrendados a terceros no se les da.
