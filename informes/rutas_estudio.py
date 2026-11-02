@@ -13,9 +13,10 @@ from core import (app, estudio_visible, guardar_meta, informe_por_estudio, link_
                   meta_de, pacs, radiologos, registrar, url_link, usuario_actual, usuario_por_id, ve_informe)
 from correo import configurado as correo_configurado
 from db import ahora, get_db
+from orthanc import OrthancError
 from pdf import generar_pdf
 from permisos import puede, ve_estudio
-from servicios import asignar, enviar_correo_informe, registrar_entrega, validar_informe
+from servicios import asignar, enviar_correo_informe, medico_dictante, registrar_entrega, validar_informe
 
 EXT_AUDIO = {"audio/webm": ".webm", "audio/ogg": ".ogg", "audio/mp4": ".m4a", "audio/mpeg": ".mp3",
              "audio/wav": ".wav", "audio/x-wav": ".wav", "audio/aac": ".aac"}
@@ -64,13 +65,14 @@ def estudio(estudio_id):
     firmante = usuario_por_id(inf["firmado_por"]) if inf and inf["firmado_por"] else None
     transcriptor = usuario_por_id(inf["transcrito_por"]) if inf and inf["transcrito_por"] else None
     radiologo = usuario_por_id(meta["radiologo_id"]) if meta["radiologo_id"] else None
+    dictante = medico_dictante(estudio_id) if dictados else None
 
     historial = _historial(u, est)
 
     registrar("abrir_estudio", f"{estudio_id} {est['paciente_id']}")
     return render_template(
         "estudio.html", est=est, inf=inf if (inf and (ve_informe(u, inf) or puede(u, "redactar"))) else None,
-        meta=meta, radiologo=radiologo, radiologos=radiologos(), series=series, plantillas=plantillas,
+        meta=meta, radiologo=radiologo, radiologos=radiologos(), series=series, plantillas=plantillas, dictante=dictante,
         frases=frases, dictados=dictados, notas=notas, entregas=entregas, link=link, url_link=url_link(link),
         versiones=versiones, firmante=firmante, transcriptor=transcriptor, historial=historial,
         visor_ohif=f"{Config.PACS_PUBLIC_URL}/ohif/viewer?StudyInstanceUIDs={est['uid']}",
@@ -204,6 +206,14 @@ def enviar_validacion(estudio_id):
                "transcrito_en=? WHERE estudio_id=? AND estado IN ('pendiente','tomado')",
                (u["id"], ahora(), estudio_id))
     db.commit()
+    medico = medico_dictante(estudio_id)
+    if medico and medico["id"] != u["id"]:
+        # El dictado del médico cuenta como su autorización: queda validado y firmado a su nombre
+        inf = informe_por_estudio(estudio_id)
+        inf, aviso = validar_informe(inf, firmante_id=medico["id"])
+        registrar("validado_al_transcribir", f"informe {inf['id']} {inf['paciente_id']} firmado por {medico['nombre']} "
+                                              f"(dictado) · transcrito por {u['nombre']}")
+        return jsonify(ok=True, validado=True, firmante=medico["nombre"], aviso=aviso)
     registrar("enviar_validacion", f"informe {inf['id']} {inf['paciente_id']}")
     return jsonify(ok=True)
 
@@ -220,6 +230,111 @@ def firmar(estudio_id):
         return jsonify(error=err), 409
     inf, aviso = validar_informe(inf)
     return jsonify(ok=True, aviso=aviso)
+
+
+@app.route("/estudio/<estudio_id>/corregir", methods=["POST"])
+@login_requerido("corregir_validado")
+def corregir_validado(estudio_id):
+    """Corrige un error en un informe validado (TM o transcripcionista). Queda como nueva versión, validada por el
+    mismo médico; la versión anterior va al historial y el paciente conserva su link y su QR."""
+    estudio_visible(estudio_id)
+    inf = informe_por_estudio(estudio_id)
+    if not inf or inf["estado"] != "firmado":
+        abort(400)
+    if inf["archivo"]:
+        flash("Este informe se subió como archivo firmado: para cambiarlo usa «Rectificar» y sube el archivo corregido.",
+              "error")
+        return _volver(estudio_id, "informe")
+    cuerpo = request.form.get("cuerpo", "")
+    motivo = request.form.get("motivo", "").strip()
+    if len(cuerpo.strip()) < 10:
+        flash("El informe corregido está vacío.", "error")
+        return _volver(estudio_id, "informe")
+    if not motivo:
+        flash("Indica qué se corrigió.", "error")
+        return _volver(estudio_id, "informe")
+    if cuerpo.strip() == (inf["cuerpo"] or "").strip():
+        flash("No hay cambios en el texto.", "error")
+        return _volver(estudio_id, "informe")
+    u = usuario_actual()
+    db = get_db()
+    db.execute(
+        """INSERT INTO informe_versiones (informe_id, version, cuerpo, firmado_por, firmado_en,
+           reabierto_por, reabierto_en, motivo, archivo) VALUES (?,?,?,?,?,?,?,?,?)""",
+        (inf["id"], inf["version"], inf["cuerpo"], inf["firmado_por"], inf["firmado_en"], u["id"], ahora(),
+         "CORRECCIÓN: " + motivo[:300], ""))
+    db.execute("UPDATE informes SET cuerpo=?, version=version+1, actualizado_por=?, actualizado=?, firmado_en=? "
+               "WHERE id=?", (cuerpo, u["id"], ahora(), ahora(), inf["id"]))
+    db.commit()
+    firmante = usuario_por_id(inf["firmado_por"])
+    registrar("corregir_validado", f"informe {inf['id']} v{inf['version'] + 1} {inf['paciente_id']} · "
+                                   f"firmado por {firmante['nombre'] if firmante else '?'} · {motivo[:200]}")
+    flash(f"Corrección guardada: el informe sigue validado por {firmante['nombre'] if firmante else 'el mismo médico'} "
+          f"(versión {inf['version'] + 1}). El paciente ve la versión corregida con el mismo link.", "ok")
+    return _volver(estudio_id, "informe")
+
+
+@app.route("/estudio/<estudio_id>/borrar", methods=["POST"])
+@login_requerido("borrar_examen")
+def borrar_examen(estudio_id):
+    """Borra el examen completo: imágenes del PACS, informe (y sus versiones y links), dictados, notas y entregas.
+    No se puede deshacer; queda el registro en la auditoría. Si estaba unido a una cita, la agenda vuelve a
+    mostrarla «sin imágenes» y el próximo estudio que llegue para esa cita se une solo."""
+    est = estudio_visible(estudio_id)
+    inf = informe_por_estudio(estudio_id)
+    f = request.form
+    motivo = f.get("motivo", "").strip()
+    if f.get("confirmar", "").strip().upper() != "BORRAR":
+        flash("Para borrar el examen escribe BORRAR en el recuadro de confirmación.", "error")
+        return _volver(estudio_id, "borrar")
+    if not motivo:
+        flash("Indica por qué se borra el examen.", "error")
+        return _volver(estudio_id, "borrar")
+    validado = bool(inf and inf["estado"] == "firmado")
+    if validado and not f.get("validado_ok"):
+        flash("Este examen tiene un informe validado: marca la casilla que confirma que igual quieres borrarlo.",
+              "error")
+        return _volver(estudio_id, "borrar")
+    try:
+        pacs.borrar_estudio(estudio_id)
+    except OrthancError as e:
+        flash(f"No se pudo borrar del PACS: {e}", "error")
+        return _volver(estudio_id, "borrar")
+
+    db = get_db()
+    archivos = []
+    for carpeta, sql in (("dictados", "SELECT archivo FROM dictados WHERE estudio_id=?"),
+                         ("adjuntos", "SELECT archivo FROM notas WHERE estudio_id=?")):
+        archivos += [(carpeta, r[0]) for r in db.execute(sql, (estudio_id,)) if r[0]]
+    firmante = ""
+    if inf:
+        archivos += [("informes_firmados", r[0]) for r in db.execute(
+            "SELECT archivo FROM informes WHERE id=? UNION SELECT archivo FROM informe_versiones WHERE informe_id=?",
+            (inf["id"], inf["id"])) if r[0]]
+        fu = usuario_por_id(inf["firmado_por"]) if inf["firmado_por"] else None
+        firmante = fu["nombre"] if fu else ""
+        db.execute("DELETE FROM links WHERE informe_id=?", (inf["id"],))
+        db.execute("DELETE FROM informe_versiones WHERE informe_id=?", (inf["id"],))
+        db.execute("DELETE FROM informes WHERE id=?", (inf["id"],))
+    for tabla in ("dictados", "notas", "entregas", "estudio_meta"):
+        db.execute(f"DELETE FROM {tabla} WHERE estudio_id=?", (estudio_id,))
+    cita = db.execute("SELECT accesion FROM ordenes WHERE estudio_id=?", (estudio_id,)).fetchone()
+    db.execute("UPDATE ordenes SET estudio_id='', borrado_en=? WHERE estudio_id=?", (ahora(), estudio_id))
+    db.commit()
+    for carpeta, nombre in archivos:
+        try:
+            os.remove(os.path.join(Config.DATA_DIR, carpeta, os.path.basename(nombre)))
+        except OSError:
+            pass
+
+    resumen = (f"{est['paciente_nombre']} RUT {est['paciente_id']} · {est['fecha']} · {est['modalidad']} "
+               f"{est['descripcion']} · acceso {est['accession'] or '-'}")
+    estado_inf = ("sin informe" if not inf else
+                  f"informe VALIDADO v{inf['version']} por {firmante or '?'}" if validado else f"informe {inf['estado']}")
+    registrar("borrar_examen", f"{resumen} · {estado_inf}{' · cita ' + cita[0] if cita else ''} · motivo: {motivo[:300]}")
+    flash(f"Examen borrado: {est['paciente_nombre']} · {est['fecha']} · {est['modalidad']} {est['descripcion']}."
+          + (" La cita de la agenda vuelve a quedar sin imágenes." if cita else ""), "ok")
+    return redirect(url_for("lista"))
 
 
 def _rectificar(estudio_id, invalidar):

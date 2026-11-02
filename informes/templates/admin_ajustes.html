@@ -22,6 +22,15 @@
   </div>
 
   <div class="panel">
+    <h2>Validación de informes dictados</h2>
+    <label class="permiso"><input type="checkbox" name="validar_al_transcribir" {{ 'checked' if v.validar_al_transcribir == '1' }}>
+      Cuando la transcripcionista termina un dictado, el informe queda <b>validado y firmado a nombre del médico que lo dictó</b>
+      (sin pasar por «Por validar»)</label>
+    <p class="peq suave">El dictado del médico cuenta como su autorización. Queda registrado en la auditoría, y el médico puede
+      rectificar el informe si encuentra un error. Si no hay dictado, el informe sigue el camino normal de validación.</p>
+  </div>
+
+  <div class="panel">
     <h2>Alertas de tiempo sin informar</h2>
     <div class="grid2">
       <div><label for="horas_alerta">Estudios normales: alerta en rojo después de (horas)</label>

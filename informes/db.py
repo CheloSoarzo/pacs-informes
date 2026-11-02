@@ -314,6 +314,8 @@ AJUSTES_INICIALES = {
     "webhook_url": "",                           # URL que recibe un aviso (POST JSON) al validar
     "horas_alerta": "24",                        # horas sin informar antes de marcar en rojo
     "horas_alerta_urgente": "2",
+    # 1 = al terminar la transcripción de un dictado, el informe queda validado a nombre del médico que dictó
+    "validar_al_transcribir": "1",
 }
 
 

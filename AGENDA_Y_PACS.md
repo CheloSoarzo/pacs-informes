@@ -199,10 +199,40 @@ solo ven los exámenes que tienen asignados (lista, búsqueda, estudio, visor y 
 su cuenta. Se configura en **Administración → Perfiles y permisos** con la casilla «Solo ve los estudios que tiene
 asignados»; el permiso para asignar es «Asignar radiólogo».
 
+## Informe dictado: validado por el médico al terminar la transcripción
+
+Con el ajuste **Administración → Correo y ajustes → «Validación de informes dictados»** (activo por defecto), cuando la
+transcripcionista termina un dictado su botón dice **✓ Terminar y validar (Dr. X)**: el informe queda validado y
+firmado a nombre del médico que dictó, sin pasar por «Por validar». En el PDF sale su imagen de firma (se carga en
+**Administración → Usuarios**), nombre, título y registro. Queda en la auditoría y el médico puede rectificarlo.
+Si no hay dictado, o el ajuste está desactivado, el informe sigue el camino normal de validación.
+
+## Corregir un error en un informe validado
+
+Los **tecnólogos** y las **transcripcionistas** ven en el estudio **Corregir error en el informe**: editan el texto,
+indican qué se corrigió y guardan. El informe vuelve a quedar validado por el **mismo médico** como nueva versión;
+la versión anterior queda en el historial, la corrección en la auditoría, y el paciente la ve con el mismo link y QR.
+Permiso: «Corregir errores en informes validados». Los informes subidos como archivo firmado se cambian con
+**Rectificar** y subiendo el archivo corregido.
+
 ## Código QR en el informe
 
 Todo informe validado trae un código QR que abre el informe y las **imágenes** en el celular, con la **clave de
 acceso** impresa al lado. En los informes subidos ya firmados, el QR va en una página final agregada al archivo.
+
+## Borrar un examen
+
+Para exámenes de prueba, enviados al paciente equivocado o duplicados. Al final de la ficha del estudio está
+**«Borrar examen»** (lo ven el administrador y los tecnólogos; permiso «Borrar exámenes completos»).
+
+- Hay que escribir el **motivo** y la palabra **BORRAR** para confirmar.
+- Si el examen tiene un **informe validado**, además hay que marcar la casilla «Entiendo que el informe validado
+  también se borra». El link y la clave del paciente dejan de mostrarlo.
+- Se borran las imágenes del PACS, el informe con su historial y links, los dictados, las notas y las entregas.
+  **No se puede deshacer.**
+- Queda en la auditoría: paciente, RUT, fecha, examen, número de acceso, si tenía informe validado y por quién, y el motivo.
+- Si estaba unido a una cita, la agenda la vuelve a mostrar **sin imágenes**; si después llega el estudio correcto,
+  se une solo como siempre. Lo mismo pasa al **separar** un estudio de una cita.
 
 ## Equipos sin worklist
 

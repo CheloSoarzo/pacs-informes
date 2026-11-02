@@ -63,6 +63,20 @@ def validar_informe(inf, firmante_id=None):
     return inf, aviso
 
 
+def medico_dictante(estudio_id):
+    """Médico (con permiso de firmar) que grabó el último dictado del estudio, si el ajuste está activo."""
+    from core import usuario_por_id
+    from permisos import puede
+    if ajuste("validar_al_transcribir") != "1":
+        return None
+    for d in get_db().execute("SELECT creado_por FROM dictados WHERE estudio_id=? AND estado!='anulado' "
+                              "ORDER BY id DESC", (estudio_id,)).fetchall():
+        m = usuario_por_id(d["creado_por"])
+        if m and m["activo"] and puede(m, "firmar"):
+            return m
+    return None
+
+
 def asignar(estudio_id, radiologo_id):
     u = usuario_actual()
     guardar_meta(estudio_id, radiologo_id=radiologo_id or None, asignado_por=u["id"],
@@ -74,5 +88,5 @@ def contexto_correo_ok():
     return configurado()
 
 
-__all__ = ["registrar_entrega", "enviar_correo_informe", "validar_informe", "asignar", "contexto_correo_ok",
+__all__ = ["registrar_entrega", "enviar_correo_informe", "validar_informe", "asignar", "contexto_correo_ok", "medico_dictante",
            "Config"]

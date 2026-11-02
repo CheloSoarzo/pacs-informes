@@ -256,7 +256,11 @@
           <button class="btn" id="btn-previa" type="button">Vista previa PDF</button>
           <span class="espacio"></span>
           {% if puede('transcribir') or not puede('firmar') %}
+            {% if dictante and dictante.id != usuario.id %}
+            <button class="btn ok" id="btn-enviar-validacion" type="button" data-firmante="{{ dictante.nombre }}">✓ Terminar y validar ({{ dictante.nombre }})</button>
+            {% else %}
             <button class="btn prim" id="btn-enviar-validacion" type="button">Enviar a validación →</button>
+            {% endif %}
           {% endif %}
           {% if puede('firmar') %}
             <button class="btn ok" id="btn-firmar" type="button">✓ Validar y firmar</button>
@@ -294,6 +298,21 @@
         <p class="suave">Este estudio aún no tiene informe.</p>
       {% endif %}
 
+      {% if firmado and inf and not inf.archivo and puede('corregir_validado') %}
+        <details class="edit" id="corregir">
+          <summary>Corregir error en el informe</summary>
+          <form method="post" action="{{ url_for('corregir_validado', estudio_id=est.id) }}">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+            <label for="corr-cuerpo">Texto corregido</label>
+            <textarea id="corr-cuerpo" name="cuerpo" rows="12" required spellcheck="true" lang="es">{{ inf.cuerpo }}</textarea>
+            <label for="corr-motivo">¿Qué se corrigió?</label>
+            <input type="text" id="corr-motivo" name="motivo" required maxlength="300" placeholder="Ej: lateralidad, nombre del examen, error de tipeo">
+            <p class="peq suave">El informe vuelve a quedar validado por <b>{{ firmante.nombre if firmante }}</b> como nueva versión.
+              La versión anterior queda en el historial, y el paciente ve la corrección con el mismo link y QR.</p>
+            <button class="btn ok" type="submit">Guardar corrección</button>
+          </form>
+        </details>
+      {% endif %}
       {% if firmado %}
         {% set puede_rect = puede('rectificar_todos') or (puede('rectificar') and inf.firmado_por == usuario.id) %}
         {% if puede_rect %}
@@ -413,6 +432,25 @@
       </table></div>
       {% endif %}
     </div>
+    {% endif %}
+
+    {% if puede('borrar_examen') %}
+    <details class="edit zona-peligro" id="borrar">
+      <summary>Borrar examen</summary>
+      <form method="post" action="{{ url_for('borrar_examen', estudio_id=est.id) }}" autocomplete="off">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <p class="peq">Se borran del PACS <b>todas las imágenes</b> de este examen{% if inf %}, el informe con su historial y el link del paciente{% endif %}, los dictados y las notas. <b>No se puede deshacer.</b> Queda registrado en la auditoría.</p>
+        {% if firmado %}
+        <p class="aviso-borrar">⚠ Este examen tiene un <b>informe validado</b>{% if firmante %} por {{ firmante.nombre }}{% endif %}. Si el paciente ya lo recibió, su link y su clave dejarán de mostrarlo.</p>
+        <label class="permiso destacado"><input type="checkbox" name="validado_ok" value="1" required> Entiendo que el informe validado también se borra</label>
+        {% endif %}
+        <label for="motivo-borrar">Motivo</label>
+        <input type="text" id="motivo-borrar" name="motivo" maxlength="300" placeholder="Ej: examen de prueba, enviado a otro paciente, duplicado" required>
+        <label for="confirmar-borrar">Escribe <b>BORRAR</b> para confirmar</label>
+        <input type="text" id="confirmar-borrar" name="confirmar" autocapitalize="characters" spellcheck="false" required pattern="[Bb][Oo][Rr][Rr][Aa][Rr]">
+        <button class="btn peligro" type="submit">Borrar examen definitivamente</button>
+      </form>
+    </details>
     {% endif %}
   </section>
 </div>

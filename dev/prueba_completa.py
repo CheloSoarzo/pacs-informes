@@ -23,6 +23,26 @@ def _radiologos_ven_todo(adm):
 
 
 _radiologos_ven_todo(adm)
+
+
+# Esta prueba recorre el flujo clásico (transcripción → «Por validar» → firma del radiólogo): se desactiva
+# «validar al transcribir» (ese camino lo prueba dev/prueba_validar_dictado.py)
+def _sin_validar_al_transcribir(adm):
+    import html
+    t = adm.get(B + "/admin/ajustes").text
+    datos = {"csrf": adm.csrf}
+    for n, v in re.findall(r'<input[^>]*name="([a-z_]+)"[^>]*value="([^"]*)"', t):
+        datos.setdefault(n, html.unescape(v))
+    for n, v in re.findall(r'<textarea[^>]*name="([a-z_]+)"[^>]*>(.*?)</textarea>', t, re.S):
+        datos[n] = html.unescape(v)
+    for n in re.findall(r'<input type="checkbox" name="([a-z_]+)" checked', t):
+        if n != "validar_al_transcribir":
+            datos[n] = "on"
+    datos["csrf"] = adm.csrf
+    adm.post(B + "/admin/ajustes", data=datos)
+
+
+_sin_validar_al_transcribir(adm)
 t = adm.get(B + "/admin/perfiles").text
 chk("Transcripcionistas - Avanzado" in t and "Médicos de Consultas" in t and "Tecnólogos de Ecografías" in t, "10 perfiles iniciales (como pacs4me)")
 perf = dict((n, int(i)) for i, n in re.findall(r'<option value="(\d+)"[^>]*>([^<]+)</option>', adm.get(B + "/admin/usuarios").text))

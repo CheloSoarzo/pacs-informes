@@ -258,9 +258,12 @@
     $('#c-si').focus();
   }
   const ev = $('#btn-enviar-validacion');
-  ev && ev.addEventListener('click', () => confirmar(
-    'El informe pasará a «Por validar» y lo revisará el radiólogo.', 'Enviar a validación', 'prim',
-    () => post(cfg.urls.enviarValidacion, datos())));
+  ev && ev.addEventListener('click', () => ev.dataset.firmante
+    ? confirmar(`El informe quedará <b>validado y firmado por ${ev.dataset.firmante.replace(/[<>&]/g, '')}</b>, que lo dictó. ` +
+                'Se bloquea y queda disponible para el paciente.', '✓ Sí, terminar y validar', 'ok',
+                () => post(cfg.urls.enviarValidacion, datos()))
+    : confirmar('El informe pasará a «Por validar» y lo revisará el radiólogo.', 'Enviar a validación', 'prim',
+                () => post(cfg.urls.enviarValidacion, datos())));
   const fi = $('#btn-firmar');
   fi && fi.addEventListener('click', () => confirmar(
     'Al validar, el informe queda firmado con tu nombre, se bloquea y queda disponible para el paciente.', '✓ Sí, validar y firmar', 'ok',

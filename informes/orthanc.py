@@ -204,6 +204,10 @@ class Orthanc:
             self._req("DELETE", f"/studies/{estudio_id}")
         return nuevo
 
+    def borrar_estudio(self, estudio_id):
+        """Borra el estudio completo del PACS (todas sus series e imágenes). No se puede deshacer."""
+        self._req("DELETE", f"/studies/{estudio_id}", timeout=300)
+
     # ---- equipos remotos (modalidades DICOM) ----
     def modalidades(self):
         return self.get_json("/modalities", params={"expand": ""}) or {}

@@ -222,7 +222,7 @@ def admin_frases():
 @login_requerido("ajustes")
 def admin_ajustes():
     db = get_db()
-    claves = ["correo_asunto", "correo_cuerpo", "envio_auto_email", "webhook_url", "horas_alerta",
+    claves = ["correo_asunto", "correo_cuerpo", "envio_auto_email", "validar_al_transcribir", "webhook_url", "horas_alerta",
               "horas_alerta_urgente"]
     if request.method == "POST":
         f = request.form
@@ -230,6 +230,7 @@ def admin_ajustes():
             "correo_asunto": f.get("correo_asunto", "").strip()[:200],
             "correo_cuerpo": f.get("correo_cuerpo", "")[:5000],
             "envio_auto_email": "1" if f.get("envio_auto_email") else "0",
+            "validar_al_transcribir": "1" if f.get("validar_al_transcribir") else "0",
             "webhook_url": f.get("webhook_url", "").strip()[:300],
             "horas_alerta": str(max(1, min(720, int(f.get("horas_alerta") or 24)))),
             "horas_alerta_urgente": str(max(1, min(72, int(f.get("horas_alerta_urgente") or 2)))),

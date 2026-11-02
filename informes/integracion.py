@@ -73,6 +73,9 @@ def preparar_db():
     path = os.path.join(Config.DATA_DIR, "informes.db")
     con = sqlite3.connect(path, timeout=30)
     con.executescript(SCHEMA)
+    # borrado_en: el estudio unido se borró del PACS; la agenda vuelve a «sin imágenes» hasta que llegue otro
+    if "borrado_en" not in {r[1] for r in con.execute("PRAGMA table_info(ordenes)")}:
+        con.execute("ALTER TABLE ordenes ADD COLUMN borrado_en TEXT DEFAULT ''")
     con.commit()
     con.close()
 
@@ -182,6 +185,10 @@ def estados_para_agenda():
            for o, e, d in (estado_de(o) for o in get_db().execute(
                "SELECT * FROM ordenes WHERE fecha>=? AND eliminada=0 AND estudio_id!=''", (desde,)).fetchall())
            if e]
+    # Exámenes cuyo estudio se borró del PACS: la agenda debe volver a mostrarlos sin imágenes
+    out += [{"accesion": o["accesion"], "estado": "sin_imagenes", "detalle": {}}
+            for o in get_db().execute("SELECT accesion FROM ordenes WHERE fecha>=? AND eliminada=0 AND estudio_id='' "
+                                      "AND COALESCE(borrado_en,'')!=''", (desde,)).fetchall()]
     return jsonify(estados=out)
 
 
@@ -304,7 +311,8 @@ def unir_orden(estudio_id):
     estudio_visible(estudio_id)
     db = get_db()
     if request.form.get("accion") == "quitar":
-        db.execute("UPDATE ordenes SET estudio_id='' WHERE estudio_id=?", (estudio_id,))
+        # borrado_en: la agenda vuelve a mostrar la cita «sin imágenes»
+        db.execute("UPDATE ordenes SET estudio_id='', borrado_en=? WHERE estudio_id=?", (ahora(), estudio_id))
         db.commit()
         registrar("separar_orden", estudio_id)
         flash("El estudio quedó separado de la cita de la agenda.", "ok")

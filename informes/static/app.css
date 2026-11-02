@@ -467,3 +467,11 @@ table.lista tbody tr.sel > td { background: var(--aviso-bg) !important; }
 .fecha-cl .fecha-cl-txt { padding-left: 8px; padding-right: 6px; }
 .fecha-cl-btn { width: 32px; }
 .filtros { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+
+/* Borrar examen (zona de peligro, al final de la ficha del estudio) */
+details.zona-peligro { margin-top: 18px; border-color: color-mix(in srgb, var(--error) 35%, var(--borde)); }
+details.zona-peligro summary { color: var(--error); }
+details.zona-peligro form { display: grid; gap: 6px; margin-top: 8px; }
+details.zona-peligro form label { margin: 6px 0 0; }
+details.zona-peligro .btn.peligro { justify-self: start; margin-top: 8px; border-color: var(--error); }
+.aviso-borrar { background: var(--aviso-bg); color: var(--aviso); border-radius: 6px; padding: 8px 10px; margin: 4px 0; font-size: 14px; }

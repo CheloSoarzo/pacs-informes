@@ -19,6 +19,7 @@ CATALOGO = [
     ("Estudios", "editar_paciente", "Corregir datos del paciente y del examen (nombre, RUT, nacimiento, examen…)"),
     ("Estudios", "asignar", "Asignar radiólogo y marcar estudios urgentes"),
     ("Estudios", "pacs_subir", "Subir estudios y usar el explorador del PACS"),
+    ("Estudios", "borrar_examen", "Borrar exámenes completos (imágenes, informe, dictados y notas)"),
     ("Estudios", "pacs_borrar", "Borrar o modificar estudios en el PACS"),
     ("Dictados", "dictar", "Grabar dictados de audio"),
     ("Dictados", "dictados_escuchar", "Escuchar dictados de audio"),
@@ -30,6 +31,7 @@ CATALOGO = [
     ("Informes", "firmar", "Validar y firmar informes (médico radiólogo)"),
     ("Informes", "firmar_lote", "Validar varios informes a la vez"),
     ("Informes", "rectificar", "Rectificar informes firmados por uno mismo"),
+    ("Informes", "corregir_validado", "Corregir errores en informes validados (vuelven a quedar validados por el mismo médico)"),
     ("Informes", "rectificar_todos", "Rectificar informes firmados por otros"),
     ("Informes", "invalidar", "Invalidar informes (los retira y desactiva el link del paciente)"),
     ("Informes", "plantillas", "Administrar plantillas de informe"),
@@ -51,8 +53,10 @@ DESCRIPCION = {c: d for _, c, d in CATALOGO}
 _RADIOLOGO = ["visor", "descargar", "exportar", "notas", "datos_contacto", "dictar", "dictados_escuchar",
               "dictados_anular", "ver_borrador", "redactar", "firmar", "firmar_lote", "rectificar", "links",
               "email", "entregas", "plantillas", "frases", "estadisticas", "subir_firmado"]
-_TRANSCRIPCION = ["notas", "dictados_escuchar", "transcribir", "ver_borrador", "redactar", "subir_firmado"]
-_TECNOLOGO = ["visor", "descargar", "notas", "datos_contacto", "editar_paciente", "pacs_subir", "asignar"]
+_TRANSCRIPCION = ["notas", "dictados_escuchar", "transcribir", "ver_borrador", "redactar", "subir_firmado",
+                  "corregir_validado"]
+_TECNOLOGO = ["visor", "descargar", "notas", "datos_contacto", "editar_paciente", "pacs_subir", "asignar",
+              "corregir_validado", "borrar_examen"]
 _RECEPCION = ["exportar", "notas", "datos_contacto", "editar_paciente", "links", "email", "entregas"]
 
 PERFILES_INICIALES = [
@@ -78,7 +82,7 @@ PERFILES_INICIALES = [
 
 # Permisos agregados en versiones posteriores: al actualizar, se suman a los perfiles iniciales que los
 # traen de fábrica (los perfiles creados por el administrador no se tocan).
-PERMISOS_NUEVOS = ["editar_paciente", "subir_firmado", "asignar"]
+PERMISOS_NUEVOS = ["editar_paciente", "subir_firmado", "asignar", "corregir_validado", "borrar_examen"]
 
 # Migración desde la versión con 5 roles fijos
 ROL_A_PERFIL = {"admin": "admin", "radiologo": "radiologos", "tecnologo": "tecnologos",

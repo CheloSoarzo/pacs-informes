@@ -178,6 +178,14 @@ chk(esperar(lambda: cita_de(e2["id"]).get("pacs_estado") == "imagenes", 30) and 
     "la agenda ve el avance solo en la cita unida")
 r = adm.post(P + "/estudio/est-doble1/orden", data={"csrf": cs, "accion": "quitar"})
 chk("quedó separado" in r.text, "separar si se unió mal")
+chk(esperar(lambda: not cita_de(e2["id"]).get("pacs_estado"), 30), "al separar, la agenda vuelve a «sin imágenes»")
+
+# --- borrar el examen del PACS: la cita vuelve a quedar sin imágenes
+r = adm.post(P + "/estudio/est-doble1/orden", data={"csrf": cs, "accesion": e2["accesion"]})
+chk(esperar(lambda: cita_de(e2["id"]).get("pacs_estado") == "imagenes", 30), "se vuelve a unir")
+r = adm.post(P + "/estudio/est-doble1/borrar", data={"csrf": cs, "confirmar": "BORRAR", "motivo": "duplicado"})
+chk("Examen borrado" in r.text and "vuelve a quedar sin imágenes" in r.text, "borrar el examen unido a una cita")
+chk(esperar(lambda: not cita_de(e2["id"]).get("pacs_estado"), 30), "la agenda vuelve a mostrar la cita «sin imágenes»")
 
 # --- bloqueo por intentos
 s4 = requests.Session()
