@@ -64,7 +64,7 @@ def _qr(url, size=24 * mm):
     return d
 
 
-def generar_pdf(informe, firmante, centro, url_verificacion=None, logo_path=None):
+def generar_pdf(informe, firmante, centro, url_verificacion=None, logo_path=None, clave_link=""):
     """informe: dict con datos del estudio y cuerpo. firmante: dict del radiólogo o None."""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -138,9 +138,11 @@ def generar_pdf(informe, firmante, centro, url_verificacion=None, logo_path=None
 
     celdas = [[bloque_firma, ""]]
     if url_verificacion:
-        celdas = [[bloque_firma, [_qr(url_verificacion),
-                                  Paragraph("Ver informe e imágenes en línea", ESTILOS["pie"])]]]
-    t = Table(celdas, colWidths=[doc.width - 32 * mm, 32 * mm])
+        txt_qr = "Escanee para ver su informe e imágenes en línea"
+        if clave_link:
+            txt_qr += f"<br/><b>Clave: {escape(clave_link)}</b>"
+        celdas = [[bloque_firma, [_qr(url_verificacion), Paragraph(txt_qr, ESTILOS["pie"])]]]
+    t = Table(celdas, colWidths=[doc.width - 36 * mm, 36 * mm])
     t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
                            ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
     el.append(KeepTogether(t))
@@ -162,3 +164,47 @@ def generar_pdf(informe, firmante, centro, url_verificacion=None, logo_path=None
 
     doc.build(el, onFirstPage=pie, onLaterPages=pie)
     return buf.getvalue()
+
+
+def pagina_acceso(informe, centro, url, clave="", logo_path=None):
+    """Página final con el código QR de acceso, para agregar al informe subido ya firmado."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=LETTER, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=20 * mm,
+                            bottomMargin=20 * mm)
+    el = []
+    if logo_path and os.path.exists(logo_path):
+        el.append(Image(logo_path, width=40 * mm, height=20 * mm, kind="proportional"))
+        el.append(Spacer(1, 4 * mm))
+    el.append(Paragraph(escape(centro["nombre"]), ESTILOS["centro"]))
+    el.append(Spacer(1, 10 * mm))
+    el.append(Paragraph("ACCESO EN LÍNEA A SU EXAMEN", ESTILOS["titulo"]))
+    el.append(Paragraph(escape(f"{informe.get('paciente_nombre', '')} · {informe.get('paciente_id', '')} · "
+                               f"{informe.get('descripcion') or ''} · {informe.get('fecha', '')}"), ESTILOS["val"]))
+    el.append(Spacer(1, 8 * mm))
+    filas = [[_qr(url, size=55 * mm),
+              [Paragraph("Escanee el código con la cámara de su celular para ver su informe y sus imágenes, "
+                         "o escriba esta dirección en el navegador:", ESTILOS["val"]),
+               Spacer(1, 3 * mm), Paragraph(f"<font face='Courier'>{escape(url)}</font>", ESTILOS["val"]),
+               Spacer(1, 4 * mm)] + ([Paragraph(f"<b>Clave de acceso: {escape(clave)}</b>", ESTILOS["firma_b"])]
+                                     if clave else [])]]
+    t = Table(filas, colWidths=[62 * mm, None])
+    t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("BOX", (0, 0), (-1, -1), 0.5, LINEA),
+                           ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F3F6F9")),
+                           ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                           ("LEFTPADDING", (0, 0), (-1, -1), 8)]))
+    el.append(t)
+    doc.build(el)
+    return buf.getvalue()
+
+
+def agregar_pagina(pdf_original, pdf_extra):
+    """Une el informe subido con la página de acceso al final."""
+    from pypdf import PdfReader, PdfWriter
+    w = PdfWriter()
+    for p in PdfReader(io.BytesIO(pdf_original)).pages:
+        w.add_page(p)
+    for p in PdfReader(io.BytesIO(pdf_extra)).pages:
+        w.add_page(p)
+    out = io.BytesIO()
+    w.write(out)
+    return out.getvalue()

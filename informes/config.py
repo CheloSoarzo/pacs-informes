@@ -7,7 +7,16 @@ def _bool(v, default=False):
     return str(v).strip().lower() in ("1", "true", "si", "sí", "yes", "on")
 
 
+def _version():
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "VERSION"), encoding="utf-8") as f:
+            return f.read().strip() or "1.0.0"
+    except OSError:
+        return "1.0.0"
+
+
 class Config:
+    VERSION = _version()          # versión del sistema que se muestra al pie de cada página
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-cambia-esto")
     # Nombre corto de este PACS cuando hay varios en el mismo servidor (ej: rancagua, insi)
     INSTANCIA = "".join(c for c in os.environ.get("INSTANCIA", "").lower() if c.isalnum() or c == "-")

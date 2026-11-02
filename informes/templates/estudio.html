@@ -204,6 +204,28 @@
       </div>
       {% endif %}
 
+      {# ---------- Informe final firmado fuera del sistema ---------- #}
+      {% if puede('subir_firmado') and not firmado %}
+      <div class="subir-firmado" id="subir-firmado" {{ 'hidden' if puede_editar }}>
+        <h3>Subir informe firmado</h3>
+        <p class="peq suave">Para informes que ya vienen terminados y firmados por el médico. El archivo se guarda tal cual:
+          es el que verá y descargará el paciente, y el estudio queda <b>validado</b> a nombre del médico que elijas.</p>
+        <form method="post" action="{{ url_for('subir_informe_firmado', estudio_id=est.id) }}" enctype="multipart/form-data">
+          <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+          <div class="grid2">
+            <div><label for="sf-archivo">Informe firmado (PDF, JPG o PNG)</label>
+              <input type="file" id="sf-archivo" name="archivo" accept=".pdf,.jpg,.jpeg,.png" required></div>
+            <div><label for="sf-firmante">Médico que firmó</label>
+              <select id="sf-firmante" name="firmante_id" required>
+                <option value="">Elige…</option>
+                {% for r in radiologos %}<option value="{{ r.id }}" {{ 'selected' if meta.radiologo_id == r.id }}>{{ r.nombre }}</option>{% endfor %}
+              </select></div>
+          </div>
+          <div class="fila"><button class="btn ok" type="submit">Subir y dejar validado</button></div>
+        </form>
+      </div>
+      {% endif %}
+
       {# ---------- Informe ---------- #}
       {% if puede_editar %}
         <h2>Informe</h2>
@@ -214,8 +236,10 @@
             {% for p in plantillas %}<option value="{{ p.id }}">{{ p.nombre }}</option>{% endfor %}
           </select>
           <button class="btn" id="btn-frases" type="button" aria-expanded="false" aria-controls="panel-frases">Frases</button>
-          <label class="btn" for="archivo-informe" title="Cargar un informe escrito en Word, LibreOffice, PDF o texto">📄 Subir informe</label>
-          <input type="file" id="archivo-informe" accept=".docx,.odt,.pdf,.txt" hidden>
+          {% if puede('subir_firmado') %}
+          <button class="btn" type="button" id="btn-subir-firmado" aria-controls="subir-firmado" aria-expanded="false"
+                  title="Subir el informe final ya firmado por el médico (PDF, JPG o PNG)">📄 Subir informe firmado</button>
+          {% endif %}
           <span class="estado-guardado" id="estado-guardado">{% if inf %}Guardado {{ inf.actualizado|fh }}{% endif %}</span>
         </div>
         <div class="panel-frases" id="panel-frases" hidden>
@@ -257,9 +281,14 @@
         <p class="peq suave">
           {% if firmado %}Validado por <b>{{ firmante.nombre if firmante }}</b> el {{ inf.firmado_en|fh }}{% if inf.version > 1 %} · versión {{ inf.version }}{% endif %}
           {% else %}{{ ESTADOS[inf.estado] }}{% endif %}
-          {% if transcriptor %} · transcrito por {{ transcriptor.nombre }}{% endif %}
+          {% if transcriptor %} · {{ 'subido' if inf.archivo else 'transcrito' }} por {{ transcriptor.nombre }}{% endif %}
         </p>
+        {% if inf.archivo %}
+        <p class="peq">📄 Informe firmado subido como archivo: es el PDF oficial que recibe el paciente.</p>
+        <iframe class="pdf-informe" src="{{ url_for('informe_pdf', inf_id=inf.id) }}" title="Informe firmado"></iframe>
+        {% else %}
         <div class="texto-informe">{{ inf.cuerpo }}</div>
+        {% endif %}
       {% elif not dictados %}
         <h2>Informe</h2>
         <p class="suave">Este estudio aún no tiene informe.</p>
@@ -418,5 +447,15 @@
   {% endfor %}
 </script>
 <script src="{{ url_for('static', filename='editor.js') }}"></script>
+<script>
+  (function () {
+    const b = document.getElementById('btn-subir-firmado'), box = document.getElementById('subir-firmado');
+    if (!b || !box) return;
+    b.addEventListener('click', () => {
+      box.hidden = !box.hidden; b.setAttribute('aria-expanded', String(!box.hidden));
+      if (!box.hidden) { box.scrollIntoView({ block: 'nearest' }); document.getElementById('sf-archivo').focus(); }
+    });
+  })();
+</script>
 {% if puede('editar_paciente') %}{% include "_editar_paciente.html" %}{% endif %}
 {% endblock %}

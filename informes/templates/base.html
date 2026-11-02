@@ -56,6 +56,7 @@
   {% endfor %}
   {% block contenido %}{% endblock %}
 </main>
+{% include "_pie.html" %}
 <script>
   // Cierra el menú de administración al hacer clic fuera
   document.addEventListener('click', e => document.querySelectorAll('details.menu[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; }));

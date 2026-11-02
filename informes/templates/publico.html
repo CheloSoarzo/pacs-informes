@@ -37,8 +37,13 @@
   {% if inf.estado == 'firmado' %}
   <div class="panel" style="margin-bottom:16px">
     <h2>Informe</h2>
+    {% if inf.archivo %}
+    <p><a class="btn prim" href="{{ url_for('publico_pdf', token=token) }}" target="_blank" rel="noopener">Abrir informe (PDF)</a></p>
+    <iframe class="pdf-informe" src="{{ url_for('publico_pdf', token=token) }}" title="Informe"></iframe>
+    {% else %}
     <div class="texto-informe">{{ inf.cuerpo }}</div>
-    {% if firmante %}
+    {% endif %}
+    {% if firmante and not inf.archivo %}
     <div class="firma-pub">
       <b>{{ firmante.nombre }}</b>{% if firmante.titulo %}<br>{{ firmante.titulo }}{% endif %}{% if firmante.registro %}<br><span class="suave">{{ firmante.registro }}</span>{% endif %}
       <br><span class="suave peq">Validado electrónicamente el {{ d.firmado_en_txt }}</span>
@@ -59,5 +64,6 @@
     {{ url_for('publico_series', token=token)|tojson }},
     {{ (url_for('publico_img', token=token, instancia_id='X')[:-1])|tojson }});
 </script>
+{% include "_pie.html" %}
 </body>
 </html>

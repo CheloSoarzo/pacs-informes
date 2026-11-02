@@ -26,6 +26,7 @@ CATALOGO = [
     ("Dictados", "dictados_anular", "Anular dictados"),
     ("Informes", "ver_borrador", "Ver informes que aún no están validados"),
     ("Informes", "redactar", "Escribir y editar informes (borrador)"),
+    ("Informes", "subir_firmado", "Subir el informe final ya firmado por el médico (PDF o imagen) y dejarlo validado"),
     ("Informes", "firmar", "Validar y firmar informes (médico radiólogo)"),
     ("Informes", "firmar_lote", "Validar varios informes a la vez"),
     ("Informes", "rectificar", "Rectificar informes firmados por uno mismo"),
@@ -49,8 +50,8 @@ DESCRIPCION = {c: d for _, c, d in CATALOGO}
 # Perfiles iniciales (copiados de la organización que usabas en pacs4me)
 _RADIOLOGO = ["visor", "descargar", "exportar", "notas", "datos_contacto", "dictar", "dictados_escuchar",
               "dictados_anular", "ver_borrador", "redactar", "firmar", "firmar_lote", "rectificar", "links",
-              "email", "entregas", "plantillas", "frases", "estadisticas"]
-_TRANSCRIPCION = ["notas", "dictados_escuchar", "transcribir", "ver_borrador", "redactar"]
+              "email", "entregas", "plantillas", "frases", "estadisticas", "subir_firmado"]
+_TRANSCRIPCION = ["notas", "dictados_escuchar", "transcribir", "ver_borrador", "redactar", "subir_firmado"]
 _TECNOLOGO = ["visor", "descargar", "notas", "datos_contacto", "editar_paciente", "pacs_subir"]
 _RECEPCION = ["exportar", "notas", "datos_contacto", "editar_paciente", "links", "email", "entregas"]
 
@@ -77,7 +78,7 @@ PERFILES_INICIALES = [
 
 # Permisos agregados en versiones posteriores: al actualizar, se suman a los perfiles iniciales que los
 # traen de fábrica (los perfiles creados por el administrador no se tocan).
-PERMISOS_NUEVOS = ["editar_paciente"]
+PERMISOS_NUEVOS = ["editar_paciente", "subir_firmado"]
 
 # Migración desde la versión con 5 roles fijos
 ROL_A_PERFIL = {"admin": "admin", "radiologo": "radiologos", "tecnologo": "tecnologos",

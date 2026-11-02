@@ -242,11 +242,11 @@ def _rectificar(estudio_id, invalidar):
     db = get_db()
     db.execute(
         """INSERT INTO informe_versiones (informe_id, version, cuerpo, firmado_por, firmado_en,
-           reabierto_por, reabierto_en, motivo) VALUES (?,?,?,?,?,?,?,?)""",
+           reabierto_por, reabierto_en, motivo, archivo) VALUES (?,?,?,?,?,?,?,?,?)""",
         (inf["id"], inf["version"], inf["cuerpo"], inf["firmado_por"], inf["firmado_en"], u["id"], ahora(),
-         ("INVALIDADO: " if invalidar else "") + motivo))
-    db.execute("UPDATE informes SET estado='borrador', version=version+1, firmado_por=NULL, firmado_en=NULL "
-               "WHERE id=?", (inf["id"],))
+         ("INVALIDADO: " if invalidar else "") + motivo, inf["archivo"] or ""))
+    db.execute("UPDATE informes SET estado='borrador', version=version+1, firmado_por=NULL, firmado_en=NULL, "
+               "archivo='' WHERE id=?", (inf["id"],))
     if invalidar:
         db.execute("UPDATE links SET revocado=1 WHERE informe_id=? AND revocado=0", (inf["id"],))
     db.commit()
@@ -682,3 +682,79 @@ def importar_informe(estudio_id):
 
 
 MAX_SUBIDA = 15 * 1024 * 1024
+
+
+@app.route("/estudio/<estudio_id>/subir-informe-firmado", methods=["POST"])
+@login_requerido("subir_firmado")
+def subir_informe_firmado(estudio_id):
+    """Informe final escrito y firmado fuera del sistema: se guarda el archivo tal cual y el estudio queda
+    validado a nombre del radiólogo que lo firmó. Ese archivo es el que ve, descarga y recibe el paciente."""
+    import uuid
+    from io import BytesIO
+    from importar import ImportarError, extraer_texto
+    estudio_visible(estudio_id)
+    inf = informe_por_estudio(estudio_id)
+    if inf and inf["estado"] == "firmado":
+        flash("El informe ya está validado. Para reemplazarlo, primero usa «Rectificar informe».", "error")
+        return _volver(estudio_id, "informe")
+    f = request.files.get("archivo")
+    try:
+        firmante_id = int(request.form.get("firmante_id") or 0)
+    except ValueError:
+        firmante_id = 0
+    firmante = usuario_por_id(firmante_id)
+    if not firmante or not firmante["activo"] or not puede(firmante, "firmar"):
+        flash("Elige el médico radiólogo que firmó el informe.", "error")
+        return _volver(estudio_id, "informe")
+    if not f or not f.filename:
+        flash("Elige el archivo del informe firmado.", "error")
+        return _volver(estudio_id, "informe")
+    datos = f.read(MAX_SUBIDA + 1)
+    if len(datos) > MAX_SUBIDA:
+        flash("El archivo supera los 15 MB.", "error")
+        return _volver(estudio_id, "informe")
+    ext = os.path.splitext(f.filename.lower())[1]
+    if datos[:4] == b"%PDF":
+        pdf = datos
+    elif ext in (".jpg", ".jpeg", ".png") or datos[:3] == b"\xff\xd8\xff" or datos[:8] == b"\x89PNG\r\n\x1a\n":
+        try:   # foto o escaneo del informe firmado → PDF
+            from PIL import Image
+            im = Image.open(BytesIO(datos))
+            im.load()
+            buf = BytesIO()
+            im.convert("RGB").save(buf, "PDF", resolution=150.0)
+            pdf = buf.getvalue()
+        except Exception:  # noqa: BLE001
+            flash("No se pudo leer la imagen. Sube el informe en PDF, JPG o PNG.", "error")
+            return _volver(estudio_id, "informe")
+    elif ext in (".doc", ".docx", ".odt"):
+        flash("Sube el informe firmado en PDF: en Word usa «Archivo → Guardar como → PDF».", "error")
+        return _volver(estudio_id, "informe")
+    else:
+        flash("Formato no permitido. Sube el informe firmado en PDF, JPG o PNG.", "error")
+        return _volver(estudio_id, "informe")
+    # Texto del PDF para búsquedas y vista rápida (si el PDF es un escaneo, puede venir vacío)
+    try:
+        texto = extraer_texto("informe.pdf", pdf).strip()
+    except ImportarError:
+        texto = ""
+    cuerpo = texto or "(Informe firmado adjunto en PDF.)"
+    inf, err = _crear_o_actualizar(estudio_id, cuerpo, None)
+    if err:
+        flash(err, "error")
+        return _volver(estudio_id, "informe")
+    nombre = f"{inf['id']}_v{inf['version']}_{uuid.uuid4().hex[:8]}.pdf"
+    with open(os.path.join(Config.DATA_DIR, "informes_firmados", nombre), "wb") as out:
+        out.write(pdf)
+    u = usuario_actual()
+    db = get_db()
+    db.execute("UPDATE informes SET archivo=?, transcrito_por=?, transcrito_en=? WHERE id=?",
+               (nombre, u["id"], ahora(), inf["id"]))
+    db.commit()
+    inf = informe_por_estudio(estudio_id)
+    inf, aviso = validar_informe(inf, firmante_id=firmante["id"])
+    registrar("subir_informe_firmado", f"informe {inf['id']} {inf['paciente_id']} firmado por {firmante['nombre']} "
+                                       f"| {f.filename[:80]}")
+    flash(f"Informe firmado por {firmante['nombre']} subido: el estudio quedó validado." + (f" {aviso}" if aviso else ""),
+          "ok")
+    return _volver(estudio_id, "informe")

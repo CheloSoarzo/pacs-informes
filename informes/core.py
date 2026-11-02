@@ -126,7 +126,8 @@ def contexto():
 
     return {"usuario": u, "csrf_token": csrf_token, "centro": Config.CENTRO_NOMBRE, "n_dictados": n_dictados,
             "puede": lambda accion: puede(u, accion), "ESTADOS": ESTADOS, "TIPOS_ENTREGA": TIPOS_ENTREGA,
-            "PACS_PUBLIC_URL": Config.PACS_PUBLIC_URL, "CATALOGO": CATALOGO, "logo_url": logo_url()}
+            "PACS_PUBLIC_URL": Config.PACS_PUBLIC_URL, "CATALOGO": CATALOGO, "logo_url": logo_url(),
+            "VERSION": Config.VERSION}
 
 
 @app.after_request
@@ -300,9 +301,32 @@ def nuevo_link(inf_id):
     return token, clave
 
 
+def archivo_informe(inf):
+    """Ruta del informe final subido ya firmado, si el informe tiene uno."""
+    nombre = inf["archivo"] if "archivo" in inf.keys() else ""
+    if not nombre:
+        return None
+    p = os.path.join(Config.DATA_DIR, "informes_firmados", os.path.basename(nombre))
+    return p if os.path.exists(p) else None
+
+
 def pdf_de(inf, con_qr=True):
-    link = link_vigente(inf["id"]) if con_qr else None
-    return generar_pdf(datos_pdf(inf), firmante_de(inf), centro_info(), url_link(link) or None, logo_path())
+    """PDF oficial del informe, con el código QR de acceso al informe y las imágenes (y su clave)."""
+    link = link_vigente(inf["id"]) if con_qr and inf["estado"] == "firmado" else None
+    subido = archivo_informe(inf)
+    if subido:   # informe firmado por el médico fuera del sistema: se entrega tal cual + página con el QR
+        with open(subido, "rb") as f:
+            original = f.read()
+        if not link:
+            return original
+        from pdf import agregar_pagina, pagina_acceso
+        try:
+            return agregar_pagina(original, pagina_acceso(datos_pdf(inf), centro_info(), url_link(link),
+                                                          link["clave"] or "", logo_path()))
+        except Exception:  # noqa: BLE001  (PDF raro o protegido: se entrega igual, sin la página extra)
+            return original
+    return generar_pdf(datos_pdf(inf), firmante_de(inf), centro_info(), url_link(link) or None, logo_path(),
+                       clave_link=(link["clave"] or "") if link else "")
 
 
 def nombre_archivo(inf):

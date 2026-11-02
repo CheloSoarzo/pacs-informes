@@ -341,9 +341,12 @@ def _migrar(con):
         con.execute("ALTER TABLE usuarios ADD COLUMN perfil_id INTEGER")
     cols = _columnas(con, "informes")
     for col, tipo in (("hora_estudio", "TEXT DEFAULT ''"), ("transcrito_por", "INTEGER"),
-                      ("transcrito_en", "TEXT")):
+                      ("transcrito_en", "TEXT"), ("archivo", "TEXT DEFAULT ''")):
         if col not in cols:
             con.execute(f"ALTER TABLE informes ADD COLUMN {col} {tipo}")
+    # archivo: informe final subido ya firmado (PDF). Si existe, es el PDF oficial del informe.
+    if "archivo" not in _columnas(con, "informe_versiones"):
+        con.execute("ALTER TABLE informe_versiones ADD COLUMN archivo TEXT DEFAULT ''")
 
     # Permisos nuevos de esta versión → a los perfiles de fábrica que ya existían (una sola vez por permiso)
     hay_perfiles = con.execute("SELECT COUNT(*) FROM perfiles").fetchone()[0] > 0
@@ -392,7 +395,7 @@ def close_db(_=None):
 
 def init_db(app):
     os.makedirs(app.config["DATA_DIR"], exist_ok=True)
-    for sub in ("firmas", "dictados", "adjuntos"):
+    for sub in ("firmas", "dictados", "adjuntos", "informes_firmados"):
         os.makedirs(os.path.join(app.config["DATA_DIR"], sub), exist_ok=True)
     path = os.path.join(app.config["DATA_DIR"], "informes.db")
     con = sqlite3.connect(path, timeout=30)

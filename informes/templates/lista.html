@@ -106,6 +106,8 @@
       <td class="peq nowrap">{{ e.fecha }}<br><span class="suave">{{ e.hora }}</span></td>
       <td>
         {% if e.urgente and e.estado != 'firmado' %}<span class="tag-urgente">URGENTE</span>{% endif %}
+        {% if e.estado == 'firmado' and e.informe_id %}<a class="ico-informe" href="{{ url_for('informe_pdf', inf_id=e.informe_id) }}" target="_blank" rel="noopener"
+           title="Abrir el informe para ver o imprimir" aria-label="Abrir informe de {{ e.paciente_nombre }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="#1F5FA8"/><path d="M14 2v5h5" fill="#9DBFE6"/><path d="M7.5 11h9M7.5 14h9M7.5 17h6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg></a>{% endif %}
         <span class="paciente">{{ e.paciente_nombre or '(sin nombre)' }}</span>
         <br><span class="suave peq">{{ e.edad }}{% if e.paciente_sexo %} · {{ e.paciente_sexo }}{% endif %}
         {% if e.notas %} · <span title="Notas">📝 {{ e.notas }}</span>{% endif %}

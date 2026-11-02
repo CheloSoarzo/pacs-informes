@@ -167,7 +167,7 @@ chk("Hígado normal" in p.get(B + "/r/" + tok).text, "paciente abre informe con 
 r = S["sec"].get(B + "/estudios/exportar.csv")
 chk(r.status_code == 200 and r.content.startswith(b"\xef\xbb\xbf") and "Radiólogo asignado" in r.text, "exportar a Excel (CSV)")
 chk(S["tec"].get(B + "/estudios/exportar.csv").status_code == 403, "tecnólogo no exporta")
-t = adm.get(B + "/estadisticas").text
+t = adm.get(B + "/estadisticas?desde=2000-01-01").text
 chk("Validados" in t and "Carla Muñoz" in t and "Dr. Andrés López" in t, "estadísticas con radiólogos y transcripcionistas")
 chk(S["trans"].get(B + "/estadisticas").status_code == 403, "transcripcionista sin estadísticas")
 r = S["rad"].post(B + "/filtros", data={"csrf": S["rad"].csrf, "nombre": "Mis TC", "query": "modalidad=CT&asignado=mio"})

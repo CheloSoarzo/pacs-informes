@@ -98,7 +98,7 @@ footer{max-width:1240px;margin:0 auto;padding:0 16px 24px;color:var(--muted);fon
   </div>
   <div id="lista"><div class="vacio">Cargando…</div></div>
 </main>
-<footer><span id="generado"></span><span>Se actualiza solo cada 5 minutos</span></footer>
+<footer><span id="generado"></span><span id="firma"></span><span>Se actualiza solo cada 5 minutos</span></footer>
 
 <script>
 const IC={
@@ -125,6 +125,7 @@ function pintar(){
   const lista=(d.pacs||[]).filter(p=>(inact||p.activo)&&(!q||[p.nombre,p.centro,p.dominio].join(" ").toLowerCase().includes(q)));
   $("#cuantos span").textContent=`${(d.pacs||[]).filter(p=>p.activo).length} PACS activos`;
   $("#generado").textContent=d.generado?`Datos del ${fecha(d.generado)}`:"";
+  $("#firma").textContent=`${location.host} · Versión ${d.version||""} · © 2026 MSC26`;
   if(!lista.length){$("#lista").innerHTML=`<div class="vacio">${q?"Ningún PACS coincide con la búsqueda.":"No hay PACS para mostrar."}</div>`;return}
   $("#lista").innerHTML=lista.map((p,i)=>{
     const x=p.datos||{}, total=p.cuota_gb?p.cuota_gb*1e9:(s.disco_total||0), pct=total?Math.min(100,Math.round(p.usado*100/total)):0;

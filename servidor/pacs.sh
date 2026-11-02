@@ -182,9 +182,11 @@ h2{font-size:16px;margin:0 0 12px}.b{display:block;text-align:center;padding:14p
 img{background:#fff;border-radius:8px;object-fit:contain}.fila b img{height:34px;max-width:90px;padding:3px 5px;border:1px solid var(--b)}
 .b.centro{display:flex;align-items:center;justify-content:center;gap:14px;background:var(--p);color:var(--t);border:2px solid var(--a);padding:12px}
 .b.centro img{height:56px;max-width:150px;padding:4px 6px}.b.centro span{font-size:17px}
+footer{text-align:center;color:var(--s);font-size:12px;margin-top:22px}
 </style></head><body><main><h1>Exámenes en línea</h1><p>Elija dónde se realizó su examen</p>
 <section><h2>Pacientes</h2>$botones_p<small>Ingrese con su RUT y la clave de la hoja que recibió en recepción.</small></section>
-<section><h2>Personal</h2>$botones_s<a class="b" href="/panel/">Panel de servidores</a></section></main></body></html>
+<section><h2>Personal</h2>$botones_s<a class="b" href="/panel/">Panel de servidores</a></section>
+<footer>$(leer "$INST/servidor.env" PORTAL_DOMINIO || true) · Versión $(version_sistema) · © 2026 MSC26</footer></main></body></html>
 EOF
 }
 
@@ -410,8 +412,8 @@ cmd_estado() {
   copiar_logos
   read -r total usado <<<"$(df -B1 --output=size,used "$INST" | tail -n1)"
   {
-    printf '{"generado":"%s","servidor":{"ip":"%s","disco_total":%s,"disco_usado":%s},"pacs":[' \
-      "$(date '+%F %T')" "$(js "$(ip_publica)")" "${total:-0}" "${usado:-0}"
+    printf '{"generado":"%s","version":"%s","servidor":{"ip":"%s","disco_total":%s,"disco_usado":%s},"pacs":[' \
+      "$(date '+%F %T')" "$(js "$(version_sistema)")" "$(js "$(ip_publica)")" "${total:-0}" "${usado:-0}"
     for n in $(instancias); do
       local e="$INST/$n/.env" u datos creado cuota activo=true
       u="$(du -sb "$INST/$n/data" 2>/dev/null | cut -f1)"
@@ -509,6 +511,7 @@ cmd_post_actualizar() {
   echo "Todos los PACS actualizados a la versión $(version)"
 }
 
+version_sistema() { tr -d '[:space:]' < "$CODIGO/informes/VERSION" 2>/dev/null || echo "1.0.0"; }
 version() { git -C "$CODIGO" log -1 --format='%h del %cd' --date=format:'%d-%m-%Y %H:%M' 2>/dev/null || echo "?"; }
 escribir_version() {
   mkdir -p "$INST/$1/data/informes"

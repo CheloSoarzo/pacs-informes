@@ -38,13 +38,13 @@ def enviar_correo_informe(inf, para):
     return True, f"Informe enviado a {direccion}."
 
 
-def validar_informe(inf):
-    """Marca el informe como validado por el usuario actual y dispara las acciones posteriores.
-    El llamador ya verificó permisos y que el texto sea válido."""
+def validar_informe(inf, firmante_id=None):
+    """Marca el informe como validado (por el usuario actual, o por el médico indicado cuando se sube un
+    informe ya firmado) y dispara las acciones posteriores. El llamador ya verificó permisos."""
     u = usuario_actual()
     db = get_db()
     db.execute("UPDATE informes SET estado='firmado', firmado_por=?, firmado_en=? WHERE id=?",
-               (u["id"], ahora(), inf["id"]))
+               (firmante_id or u["id"], ahora(), inf["id"]))
     # Los dictados del estudio quedan cerrados
     db.execute("UPDATE dictados SET estado='transcrito', transcrito_en=COALESCE(transcrito_en, ?) "
                "WHERE estudio_id=? AND estado IN ('pendiente','tomado')", (ahora(), inf["estudio_id"]))

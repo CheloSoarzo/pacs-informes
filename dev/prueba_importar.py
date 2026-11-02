@@ -66,7 +66,7 @@ def subir(s, nombre, datos):
     return s.post(URL, files={"archivo": (nombre, datos)}, headers={"X-CSRF": s.csrf})
 
 
-chk("📄 Subir informe" in tr.get(B + "/estudio/est-ct").text, "transcripcionista ve el botón Subir informe")
+chk("📄 Subir informe firmado" in tr.get(B + "/estudio/est-ct").text, "transcripcionista ve el botón Subir informe firmado")
 for nombre, datos in (("informe.docx", docx()), ("informe.odt", odt()), ("informe.pdf", pdf()),
                       ("informe.txt", "\r\n".join(TEXTO).encode("cp1252"))):
     r = subir(tr, nombre, datos); t = r.json().get("texto", "") if r.ok else ""

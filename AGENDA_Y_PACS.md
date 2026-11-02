@@ -183,6 +183,19 @@ funciona como una clave: usa uno de 8 o más letras y números, distinto para ca
 Los AE Title fáciles de adivinar aparecen marcados como **AE débil**. Para volver a exigir la IP:
 `pacs dicom-modo insi ip`.
 
+## Informe ya firmado por el médico (Subir informe firmado)
+
+Cuando el informe viene terminado y firmado fuera del sistema, en el estudio se usa **📄 Subir informe firmado**:
+se elige el archivo (PDF, o foto/escaneo JPG o PNG) y el médico que lo firmó. El archivo se guarda tal cual, el
+estudio queda **validado** a nombre de ese médico y ese archivo es el que recibe el paciente. Word no se acepta:
+hay que guardarlo como PDF. Para cambiarlo: **Rectificar** y subir el nuevo. Permiso: «Subir el informe final ya
+firmado» (Transcripcionistas, Radiólogos y Administradores).
+
+## Código QR en el informe
+
+Todo informe validado trae un código QR que abre el informe y las **imágenes** en el celular, con la **clave de
+acceso** impresa al lado. En los informes subidos ya firmados, el QR va en una página final agregada al archivo.
+
 ## Equipos sin worklist
 
 El worklist es lo ideal, pero no es obligatorio. Los equipos que no lo usen (o mientras lo configuras) igual quedan
