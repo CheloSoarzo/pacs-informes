@@ -222,8 +222,8 @@ acceso** impresa al lado. En los informes subidos ya firmados, el QR va en una p
 
 ## Botón «Ver en el PACS» en la agenda
 
-Cuando una cita ya tiene imágenes (imágenes, informado o entregado), al abrirla en la agenda aparece abajo el botón
-**«Ver en el PACS ↗»**. Abre en otra pestaña la ficha de ese estudio en el PACS del centro (imágenes, informe, PDF).
+Al abrir una cita en la agenda aparece abajo el botón **«Ver en el PACS ↗»** (en gris si las imágenes aún no llegan).
+La agenda aprende sola la dirección del PACS al consultar el avance de los exámenes. Abre en otra pestaña la ficha de ese estudio en el PACS del centro (imágenes, informe, PDF).
 Se entra con el usuario del PACS, así que cada uno ve solo lo que su perfil permite (un radiólogo, solo lo asignado).
 Si el estudio aún no llegó, el PACS lo avisa y muestra la lista buscando ese número de acceso.
 

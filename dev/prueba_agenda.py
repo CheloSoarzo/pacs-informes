@@ -110,7 +110,8 @@ chk("Orden de agenda" in t and "Creatinina 0,9" in t and "Dra. Rojas" in t, "el 
 csrf_adm = re.search(r'name="csrf" value="([^"]+)"', t).group(1)
 
 # --- botón «Ver en el PACS» de la agenda
-chk(ag.get(A + "/api/me").json().get("pacs_publico") == "http://localhost:8000", "la agenda conoce la dirección del PACS")
+chk(esperar(lambda: ag.get(A + "/api/me").json().get("pacs_publico") == "http://localhost:8000", 30),
+    "la agenda aprende la dirección del PACS (botón «Ver en el PACS»)")
 r = adm.get(P + f"/agenda/{acc}")
 chk(r.url.endswith(f"/estudio/{eid}"), "«Ver en el PACS» abre el estudio de la cita")
 r = adm.get(P + "/agenda/NOEXISTE123")

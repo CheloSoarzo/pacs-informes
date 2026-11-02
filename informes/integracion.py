@@ -189,7 +189,8 @@ def estados_para_agenda():
     out += [{"accesion": o["accesion"], "estado": "sin_imagenes", "detalle": {}}
             for o in get_db().execute("SELECT accesion FROM ordenes WHERE fecha>=? AND eliminada=0 AND estudio_id='' "
                                       "AND COALESCE(borrado_en,'')!=''", (desde,)).fetchall()]
-    return jsonify(estados=out)
+    # pacs_url: la agenda la usa para el botón «Ver en el PACS»
+    return jsonify(estados=out, pacs_url=Config.PUBLIC_BASE_URL)
 
 
 # Modalidades DICOM que puede enviar cada equipo de la agenda
