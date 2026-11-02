@@ -122,13 +122,16 @@
       <td class="ocultar-movil peq">{{ e.radiologo or '—' }}</td>
       <td class="ocultar-movil peq nowrap tiempo {{ e.alerta }}">{{ e.horas|dur if e.horas is not none else '' }}</td>
       {% set a_dictar = puede('dictar') and e.estado in ('pendiente', 'dictado', 'borrador') %}
-      <td><a class="btn {{ 'prim' if e.estado != 'firmado' and (puede('redactar') or puede('firmar') or puede('dictar')) }}"
+      <td class="nowrap celda-acciones"><a class="btn {{ 'prim' if e.estado != 'firmado' and (puede('redactar') or puede('firmar') or puede('dictar')) }}"
              href="{{ url_for('dictar', estudio_id=e.id) if a_dictar else url_for('estudio', estudio_id=e.id) }}"
              {% if a_dictar %}data-dictar="{{ e.id }}" title="Abrir en pantalla de dictado"{% endif %}>
         {% if e.estado == 'firmado' or not (puede('redactar') or puede('firmar') or puede('dictar')) %}Ver
         {% elif e.estado == 'por_validar' and puede('firmar') %}Validar
         {% elif e.estado == 'dictado' and puede('transcribir') %}Transcribir
-        {% else %}Informar{% endif %}</a></td>
+        {% else %}Informar{% endif %}</a>{% if puede('borrar_examen') %}<button type="button" class="ico-borrar" data-borrar="{{ url_for('borrar_examen', estudio_id=e.id) }}"
+          data-paciente="{{ e.paciente_nombre or '(sin nombre)' }}" data-detalle="{{ e.fecha }} · {{ e.modalidad }} {{ e.descripcion }}"
+          data-validado="{{ '1' if e.estado == 'firmado' else '' }}" data-firmante="{{ e.firmante or '' }}"
+          title="Borrar examen" aria-label="Borrar examen de {{ e.paciente_nombre }}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14M10 11v6M14 11v6"/></svg></button>{% endif %}</td>
     </tr>
   {% else %}
     <tr><td colspan="11" class="suave vacio-tabla">No hay estudios con estos filtros.</td></tr>
@@ -166,4 +169,5 @@
 <script src="{{ url_for('static', filename='audio.js') }}"></script>
 <script src="{{ url_for('static', filename='panel_lista.js') }}"></script>
 {% if puede('editar_paciente') %}{% include "_editar_paciente.html" %}{% endif %}
+{% if puede('borrar_examen') %}{% include "_borrar_examen.html" %}{% endif %}
 {% endblock %}

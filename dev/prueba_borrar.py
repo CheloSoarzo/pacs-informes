@@ -77,4 +77,16 @@ chk(pac.status_code in (404, 410) or "no está disponible" in pac.text.lower() o
     "el link del paciente deja de funcionar")
 aud = adm.get(B + "/admin/auditoria").text
 chk("informe VALIDADO" in aud and "Dr. Andrés López" in aud, "la auditoría registra que tenía informe validado y por quién")
+
+# --- Desde la lista: tarro de basura al final de cada fila
+t = adm.get(B + "/?desde=2000-01-01").text
+chk('data-borrar="/estudio/est-rx/borrar"' in t and 'id="dlg-borrar"' in t, "la lista muestra el tarro de basura y la ventana de borrado")
+chk("data-borrar" not in S["sec"].get(B + "/?desde=2000-01-01").text, "la secretaria no ve el tarro de basura")
+chk("data-borrar" in S["tec"].get(B + "/?desde=2000-01-01").text, "el TM ve el tarro de basura")
+r = adm.post(B + "/estudio/est-rx/borrar", data={"csrf": adm.csrf, "confirmar": "no", "motivo": "x", "volver": "lista",
+                                                "siguiente": "/?desde=2000-01-01"})
+chk(r.url.endswith("/?desde=2000-01-01") and "escribe BORRAR" in r.text, "un error desde la lista vuelve a la lista")
+r = adm.post(B + "/estudio/est-rx/borrar", data={"csrf": adm.csrf, "confirmar": "BORRAR", "motivo": "duplicado",
+                                                "volver": "lista", "siguiente": "//evil.com/"})
+chk(r.url.rstrip("/") == B and "Examen borrado" in r.text, "borra desde la lista (y no redirige fuera del sistema)")
 print("\nFALLAS:", fallas)

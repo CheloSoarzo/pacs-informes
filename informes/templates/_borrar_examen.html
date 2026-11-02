@@ -1,0 +1,60 @@
+{# Ventana para borrar un examen desde la lista (tarro de basura al final de cada fila). La misma
+   validación que en la ficha del estudio: motivo + escribir BORRAR (+ casilla si tiene informe validado). #}
+<dialog id="dlg-borrar" class="dialogo dlg-borrar" aria-labelledby="dlg-borrar-titulo">
+  <form method="post" id="form-borrar" autocomplete="off">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="volver" value="lista">
+    <input type="hidden" name="siguiente" id="borrar-siguiente">
+    <h2 id="dlg-borrar-titulo">Borrar examen</h2>
+    <div class="borrar-quien"><b id="borrar-paciente"></b><span id="borrar-detalle" class="suave peq"></span></div>
+    <p class="peq">Se borran del PACS <b>todas las imágenes</b> de este examen, el informe con su historial y el link
+      del paciente, los dictados y las notas. <b>No se puede deshacer.</b> Queda registrado en la auditoría.</p>
+    <div id="borrar-validado" hidden>
+      <p class="aviso-borrar">⚠ Este examen tiene un <b>informe validado</b><span id="borrar-firmante"></span>.
+        Si el paciente ya lo recibió, su link y su clave dejarán de mostrarlo.</p>
+      <label class="permiso destacado"><input type="checkbox" name="validado_ok" value="1" id="borrar-validado-ok">
+        Entiendo que el informe validado también se borra</label>
+    </div>
+    <label for="borrar-motivo">Motivo
+      <input type="text" id="borrar-motivo" name="motivo" maxlength="300" required
+             placeholder="Ej: examen de prueba, enviado a otro paciente, duplicado"></label>
+    <label for="borrar-confirmar">Escribe <b>BORRAR</b> para confirmar
+      <input type="text" id="borrar-confirmar" name="confirmar" autocapitalize="characters" spellcheck="false" required
+             pattern="[Bb][Oo][Rr][Rr][Aa][Rr]"></label>
+    <div class="fila fin">
+      <button type="button" class="btn" id="borrar-cancelar">Cancelar</button>
+      <button type="submit" class="btn peligro-lleno" id="borrar-ok" disabled>Borrar examen definitivamente</button>
+    </div>
+  </form>
+</dialog>
+<script>
+(function () {
+  const dlg = document.getElementById('dlg-borrar'), f = document.getElementById('form-borrar');
+  const $ = id => document.getElementById(id);
+  const listo = () => {
+    $('borrar-ok').disabled = !($('borrar-motivo').value.trim() && $('borrar-confirmar').value.trim().toUpperCase() === 'BORRAR' &&
+      ($('borrar-validado').hidden || $('borrar-validado-ok').checked));
+  };
+  document.addEventListener('click', e => {
+    const b = e.target.closest('button[data-borrar]');
+    if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    f.reset();
+    f.action = b.dataset.borrar;
+    $('borrar-siguiente').value = location.pathname + location.search;
+    $('borrar-paciente').textContent = b.dataset.paciente;
+    $('borrar-detalle').textContent = b.dataset.detalle;
+    const val = !!b.dataset.validado;
+    $('borrar-validado').hidden = !val;
+    $('borrar-validado-ok').required = val;
+    $('borrar-firmante').textContent = b.dataset.firmante ? ' por ' + b.dataset.firmante : '';
+    listo();
+    dlg.showModal();
+    $('borrar-motivo').focus();
+  });
+  f.addEventListener('input', listo);
+  f.addEventListener('change', listo);
+  $('borrar-cancelar').addEventListener('click', () => dlg.close());
+  f.addEventListener('submit', () => { $('borrar-ok').disabled = true; $('borrar-ok').textContent = 'Borrando…'; });
+})();
+</script>

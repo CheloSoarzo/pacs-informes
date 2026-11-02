@@ -475,3 +475,18 @@ details.zona-peligro form { display: grid; gap: 6px; margin-top: 8px; }
 details.zona-peligro form label { margin: 6px 0 0; }
 details.zona-peligro .btn.peligro { justify-self: start; margin-top: 8px; border-color: var(--error); }
 .aviso-borrar { background: var(--aviso-bg); color: var(--aviso); border-radius: 6px; padding: 8px 10px; margin: 4px 0; font-size: 14px; }
+
+/* Tarro de basura al final de cada fila de la lista */
+.ico-borrar { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; margin-left: 6px;
+  width: 30px; height: 30px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: none;
+  color: var(--suave); cursor: pointer; }
+.ico-borrar svg { width: 18px; height: 18px; }
+.ico-borrar:hover, .ico-borrar:focus-visible { color: var(--error); background: var(--error-bg); border-color: color-mix(in srgb, var(--error) 30%, transparent); }
+.dlg-borrar { width: min(520px, calc(100vw - 32px)); }
+.dlg-borrar h2 { color: var(--error); }
+.dlg-borrar label { margin: 0; }
+.dlg-borrar label input[type=text] { margin-top: 4px; width: 100%; box-sizing: border-box; font-weight: 400; }
+.borrar-quien { display: grid; gap: 2px; padding: 10px 12px; background: var(--pend-bg); border-radius: 8px; }
+.btn.peligro-lleno { background: var(--error); border-color: var(--error); color: #fff; }
+.btn.peligro-lleno:disabled { opacity: .45; cursor: not-allowed; }
+table.lista td.celda-acciones { text-align: right; }

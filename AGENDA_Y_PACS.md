@@ -222,8 +222,9 @@ acceso** impresa al lado. En los informes subidos ya firmados, el QR va en una p
 
 ## Borrar un examen
 
-Para exámenes de prueba, enviados al paciente equivocado o duplicados. Al final de la ficha del estudio está
-**«Borrar examen»** (lo ven el administrador y los tecnólogos; permiso «Borrar exámenes completos»).
+Para exámenes de prueba, enviados al paciente equivocado o duplicados. En la **lista de estudios**, al final de cada
+fila hay un **tarro de basura** que abre la ventana de borrado; también está **«Borrar examen»** al final de la ficha
+del estudio (lo ven el administrador y los tecnólogos; permiso «Borrar exámenes completos»).
 
 - Hay que escribir el **motivo** y la palabra **BORRAR** para confirmar.
 - Si el examen tiene un **informe validado**, además hay que marcar la casilla «Entiendo que el informe validado

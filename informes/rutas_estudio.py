@@ -283,6 +283,14 @@ def borrar_examen(estudio_id):
     est = estudio_visible(estudio_id)
     inf = informe_por_estudio(estudio_id)
     f = request.form
+    # Desde la lista (tarro de basura) se vuelve a la lista con los mismos filtros
+    sig = f.get("siguiente", "")
+    lista_url = sig if sig.startswith("/") and not sig.startswith("//") and "\\" not in sig else url_for("lista")
+
+    def _volver(eid, ancla=""):
+        if f.get("volver") == "lista":
+            return redirect(lista_url)
+        return redirect(url_for("estudio", estudio_id=eid) + (f"#{ancla}" if ancla else ""))
     motivo = f.get("motivo", "").strip()
     if f.get("confirmar", "").strip().upper() != "BORRAR":
         flash("Para borrar el examen escribe BORRAR en el recuadro de confirmación.", "error")
@@ -334,7 +342,7 @@ def borrar_examen(estudio_id):
     registrar("borrar_examen", f"{resumen} · {estado_inf}{' · cita ' + cita[0] if cita else ''} · motivo: {motivo[:300]}")
     flash(f"Examen borrado: {est['paciente_nombre']} · {est['fecha']} · {est['modalidad']} {est['descripcion']}."
           + (" La cita de la agenda vuelve a quedar sin imágenes." if cita else ""), "ok")
-    return redirect(url_for("lista"))
+    return redirect(lista_url)
 
 
 def _rectificar(estudio_id, invalidar):
