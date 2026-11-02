@@ -27,7 +27,7 @@ from datetime import date, datetime, timedelta
 from flask import abort, flash, jsonify, redirect, render_template, request, session, url_for
 
 from config import Config
-from core import app, centro_info, link_vigente, login_requerido, nuevo_link, pacs, registrar
+from core import app, centro_info, link_vigente, login_requerido, nuevo_link, pacs, registrar, usuario_actual
 from db import ahora, auditar, get_db
 
 TOKEN = os.environ.get("INTEGRACION_TOKEN", "").strip()
@@ -308,17 +308,61 @@ def candidatas(est):
 @app.route("/agenda/<accesion>")
 @login_requerido()
 def desde_agenda(accesion):
-    """Botón «Ver en el PACS» de la agenda: abre el estudio unido a esa cita (con los permisos de quien entra)."""
+    """Botón «Ver en el PACS» de la agenda: abre la ficha del paciente (todos sus exámenes), marcando ese examen."""
     db = get_db()
-    o = db.execute("SELECT estudio_id FROM ordenes WHERE accesion=? AND eliminada=0", (accesion,)).fetchone()
+    o = db.execute("SELECT rut_norm, estudio_id FROM ordenes WHERE accesion=? AND eliminada=0", (accesion,)).fetchone()
     if o and not o["estudio_id"]:
         unir_estudios()
-        o = db.execute("SELECT estudio_id FROM ordenes WHERE accesion=? AND eliminada=0", (accesion,)).fetchone()
+        o = db.execute("SELECT rut_norm, estudio_id FROM ordenes WHERE accesion=? AND eliminada=0", (accesion,)).fetchone()
+    if o and len(o["rut_norm"] or "") >= 7:
+        return redirect(url_for("ficha_paciente", rut=rut_con_guion(o["rut_norm"]), acc=accesion))
     if o and o["estudio_id"]:
         return redirect(url_for("estudio", estudio_id=o["estudio_id"]))
-    flash(f"El examen N° {accesion} aún no tiene imágenes en el PACS." if o else
-          f"No se encontró el examen N° {accesion} en el PACS.", "error")
+    flash(f"No se encontró el examen N° {accesion} en el PACS.", "error")
     return redirect(url_for("lista", q=accesion, desde="2000-01-01"))
+
+
+@app.route("/ficha/<rut>")
+@login_requerido()
+def ficha_paciente(rut):
+    """Ficha del paciente: todos sus exámenes en el PACS (de cualquier fecha) y sus citas de la agenda,
+    unidos por el RUT. Cada usuario ve solo los exámenes que su perfil le permite."""
+    from permisos import restringido
+    from rutas_trabajo import armar_lista
+    rn = norm_rut(rut)
+    if len(rn) < 7:
+        abort(404)
+    u = usuario_actual()
+    estudios, _ = armar_lista({"q": rut_con_guion(rn)})
+    estudios = [e for e in estudios if norm_rut(e["paciente_id"]) == rn]
+    estudios.sort(key=lambda e: -(e["llegada"].timestamp() if e["llegada"] else 0))
+    db = get_db()
+    ordenes = db.execute("SELECT * FROM ordenes WHERE rut_norm=? AND eliminada=0 ORDER BY fecha DESC, hora DESC",
+                         (rn,)).fetchall()
+    por_estudio = {o["estudio_id"]: o for o in ordenes if o["estudio_id"]}
+    for e in estudios:
+        o = por_estudio.get(e["id"])
+        e["accesion_agenda"] = o["accesion"] if o else ""
+    # Citas de la agenda que aún no tienen imágenes (solo para quien ve todo el archivo)
+    citas = [] if restringido(u) else [o for o in ordenes if not o["estudio_id"]
+                                       and (o["estado_agenda"] or "") not in ("cancelado",)]
+    base = estudios[0] if estudios else None
+    o0 = ordenes[0] if ordenes else None
+    paciente = {
+        "nombre": (base["paciente_nombre"] if base else "") or (o0["paciente"] if o0 else "") or "(sin nombre)",
+        "rut": (base["paciente_id"] if base else "") or rut_con_guion(rn),
+        "edad": base["edad"] if base else "",
+        "sexo": base["paciente_sexo"] if base else "",
+        "fnac": (base["paciente_fnac"] if base else "") or (
+            "/".join(reversed(o0["fecha_nac"].split("-"))) if o0 and o0["fecha_nac"] else ""),
+        "telefono": "" if restringido(u) else next((o["telefono"] for o in ordenes if o["telefono"]), ""),
+        "email": "" if restringido(u) else next((o["email"] for o in ordenes if o["email"]), ""),
+    }
+    if not estudios and not citas:
+        flash("No hay exámenes de ese RUT que puedas ver.", "error")
+        return redirect(url_for("lista"))
+    registrar("ver_ficha", rut_con_guion(rn))
+    return render_template("ficha.html", p=paciente, estudios=estudios, citas=citas, marcar=request.args.get("acc", ""))
 
 
 @app.route("/estudio/<estudio_id>/orden", methods=["POST"])

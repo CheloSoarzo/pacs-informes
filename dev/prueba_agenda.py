@@ -113,7 +113,8 @@ csrf_adm = re.search(r'name="csrf" value="([^"]+)"', t).group(1)
 chk(esperar(lambda: ag.get(A + "/api/me").json().get("pacs_publico") == "http://localhost:8000", 30),
     "la agenda aprende la dirección del PACS (botón «Ver en el PACS»)")
 r = adm.get(P + f"/agenda/{acc}")
-chk(r.url.endswith(f"/estudio/{eid}"), "«Ver en el PACS» abre el estudio de la cita")
+chk("/ficha/" in r.url and "Ficha del paciente" in r.text and f"/estudio/{eid}" in r.text and "desde la agenda" in r.text,
+    "«Ver en el PACS» abre la ficha del paciente (por RUT) marcando el examen de la cita")
 r = adm.get(P + "/agenda/NOEXISTE123")
 chk("No se encontró el examen" in r.text, "un número de acceso desconocido avisa y vuelve a la lista")
 r = requests.get(P + f"/agenda/{acc}")

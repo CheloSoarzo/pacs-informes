@@ -220,12 +220,18 @@ Permiso: «Corregir errores en informes validados». Los informes subidos como a
 Todo informe validado trae un código QR que abre el informe y las **imágenes** en el celular, con la **clave de
 acceso** impresa al lado. En los informes subidos ya firmados, el QR va en una página final agregada al archivo.
 
-## Botón «Ver en el PACS» en la agenda
+## Ficha del paciente y botón «Ver en el PACS»
 
-Al abrir una cita en la agenda aparece abajo el botón **«Ver en el PACS ↗»** (en gris si las imágenes aún no llegan).
-La agenda aprende sola la dirección del PACS al consultar el avance de los exámenes. Abre en otra pestaña la ficha de ese estudio en el PACS del centro (imágenes, informe, PDF).
-Se entra con el usuario del PACS, así que cada uno ve solo lo que su perfil permite (un radiólogo, solo lo asignado).
-Si el estudio aún no llegó, el PACS lo avisa y muestra la lista buscando ese número de acceso.
+La **ficha del paciente** reúne por **RUT** todos sus exámenes en el PACS, de cualquier fecha y modalidad
+(con su estado, el ícono para abrir el informe y el botón «Ver»), más sus citas de la agenda que aún no tienen
+imágenes. Se abre:
+
+- desde la agenda, con **«Ver en el PACS ↗»** al abrir una cita: llega a la ficha con ese examen marcado
+  («desde la agenda»);
+- desde la ficha de cualquier estudio en el PACS, con el botón **«Ficha del paciente»**.
+
+Se entra con el usuario del PACS: cada uno ve solo los exámenes que su perfil permite (un radiólogo, solo los
+asignados; los perfiles restringidos no ven teléfono, correo ni citas de la agenda). Queda en la auditoría.
 
 ## Borrar un examen
 

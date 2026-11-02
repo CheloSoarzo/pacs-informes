@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block titulo %}Ficha · {{ p.nombre }}{% endblock %}
+{% block contenido %}
+<div class="cabecera-estudio">
+  <div>
+    <a href="{{ url_for('lista') }}" class="peq">← Volver a estudios</a>
+    <h1>{{ p.nombre }}</h1>
+    <p class="suave">Ficha del paciente · todos sus exámenes</p>
+  </div>
+</div>
+
+<div class="panel datos-panel">
+  <div class="datos">
+    <div><span>RUT / ID</span><b class="mono">{{ p.rut }}</b></div>
+    <div><span>Edad · Sexo</span>{{ p.edad or '—' }} · {{ p.sexo or '—' }}</div>
+    <div><span>Fecha de nacimiento</span>{{ p.fnac or '—' }}</div>
+    {% if p.telefono %}<div><span>Teléfono</span>{{ p.telefono }}</div>{% endif %}
+    {% if p.email %}<div><span>Correo</span>{{ p.email }}</div>{% endif %}
+    <div><span>Exámenes en el PACS</span><b>{{ estudios|length }}</b></div>
+  </div>
+</div>
+
+<section class="panel ficha-examenes">
+  <h2>Exámenes</h2>
+  {% if estudios %}
+  <div class="tabla-wrap sin-borde">
+  <table class="lista">
+    <thead><tr><th>Fecha</th><th>Mod.</th><th>Examen</th><th class="ocultar-movil">Centro</th><th class="ocultar-movil">N° examen</th>
+      <th>Estado</th><th class="ocultar-movil">Radiólogo</th><th></th></tr></thead>
+    <tbody>
+    {% for e in estudios %}
+      {% set marcado = marcar and (marcar == e.accession or marcar == e.accesion_agenda) %}
+      <tr class="{{ 'fila-marcada' if marcado }}"{% if marcado %} id="marcado"{% endif %}>
+        <td class="peq nowrap">{{ e.fecha }}<br><span class="suave">{{ e.hora }}</span></td>
+        <td>{% for m in e.modalidad.split('/') if m %}<span class="mod">{{ m }}</span> {% endfor %}</td>
+        <td>{% if e.estado == 'firmado' and e.informe_id %}<a class="ico-informe" href="{{ url_for('informe_pdf', inf_id=e.informe_id) }}" target="_blank" rel="noopener"
+             title="Abrir el informe para ver o imprimir" aria-label="Abrir informe"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="#1F5FA8"/><path d="M14 2v5h5" fill="#9DBFE6"/><path d="M7.5 11h9M7.5 14h9M7.5 17h6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg></a>{% endif %}
+          {{ e.descripcion or '—' }}{% if marcado %} <span class="tag-marcado">desde la agenda</span>{% endif %}</td>
+        <td class="ocultar-movil peq suave">{{ e.institucion }}</td>
+        <td class="ocultar-movil mono peq">{{ e.accession or '—' }}</td>
+        <td><span class="badge {{ e.estado }}">{{ ESTADOS[e.estado] }}</span>
+          {% if e.firmante %}<br><span class="suave peq">{{ e.firmante }}</span>{% endif %}</td>
+        <td class="ocultar-movil peq">{{ e.radiologo or '—' }}</td>
+        <td class="nowrap celda-acciones"><a class="btn {{ 'prim' if marcado }}" href="{{ url_for('estudio', estudio_id=e.id) }}">Ver</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="suave">Aún no hay exámenes de este paciente en el PACS.</p>
+  {% endif %}
+</section>
+
+{% if citas %}
+<section class="panel ficha-examenes">
+  <h2>Citas en la agenda sin imágenes</h2>
+  <div class="tabla-wrap sin-borde">
+  <table class="lista compacta">
+    <thead><tr><th>Fecha</th><th>Examen</th><th class="ocultar-movil">N° acceso</th><th>Estado en la agenda</th></tr></thead>
+    <tbody>
+    {% for o in citas %}
+      <tr class="{{ 'fila-marcada' if marcar == o.accesion }}">
+        <td class="peq nowrap">{{ o.fecha[8:10] }}/{{ o.fecha[5:7] }}/{{ o.fecha[:4] }}<br><span class="suave">{{ o.hora }}</span></td>
+        <td>{{ o.examen or '—' }}{% if marcar == o.accesion %} <span class="tag-marcado">desde la agenda</span>{% endif %}</td>
+        <td class="ocultar-movil mono peq">{{ o.accesion }}</td>
+        <td class="peq">{{ {'agendado':'Agendado','confirmado':'Confirmado','llego':'Llegó','atendido':'Atendido','ausente':'No asistió','cancelado':'Cancelado'}.get(o.estado_agenda or 'agendado', o.estado_agenda) }}{% if o.pagado %} · pagado{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>(function(){const m=document.getElementById('marcado');if(m)m.scrollIntoView({block:'center'});})();</script>
+{% endblock %}

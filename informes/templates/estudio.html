@@ -19,6 +19,7 @@
     </h1>
   </div>
   <div class="acciones">
+    {% if est.paciente_id %}<a class="btn" href="{{ url_for('ficha_paciente', rut=est.paciente_id) }}" title="Todos los exámenes de este paciente">Ficha del paciente</a>{% endif %}
     {% if puede('visor') %}
     <a class="btn prim" href="{{ visor_ohif }}" target="_blank" rel="noopener">Abrir en visor OHIF ↗</a>
     <a class="btn" href="{{ visor_stone }}" target="_blank" rel="noopener">Visor Stone ↗</a>
