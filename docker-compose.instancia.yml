@@ -96,6 +96,8 @@ services:
       PACS_URL: http://${INSTANCIA}-informes:8000
       INTEGRACION_TOKEN: ${INTEGRACION_TOKEN:-}
       PORTAL_URL: ${PORTAL_URL:-}
+      # Dirección del PACS para el botón «Ver en el PACS» de la agenda
+      PACS_PUBLICO_URL: ${PUBLIC_BASE_URL:-}
       ACCESION_PREFIJO: ${ACCESION_PREFIJO:-AG}
     volumes:
       - ${INSTANCIA_DIR}/data/agenda:/data

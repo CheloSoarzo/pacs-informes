@@ -304,6 +304,22 @@ def candidatas(est):
     return [dict(o, mismo_rut=(o["rut_norm"] == rut and bool(rut))) for o in filas]
 
 
+@app.route("/agenda/<accesion>")
+@login_requerido()
+def desde_agenda(accesion):
+    """Botón «Ver en el PACS» de la agenda: abre el estudio unido a esa cita (con los permisos de quien entra)."""
+    db = get_db()
+    o = db.execute("SELECT estudio_id FROM ordenes WHERE accesion=? AND eliminada=0", (accesion,)).fetchone()
+    if o and not o["estudio_id"]:
+        unir_estudios()
+        o = db.execute("SELECT estudio_id FROM ordenes WHERE accesion=? AND eliminada=0", (accesion,)).fetchone()
+    if o and o["estudio_id"]:
+        return redirect(url_for("estudio", estudio_id=o["estudio_id"]))
+    flash(f"El examen N° {accesion} aún no tiene imágenes en el PACS." if o else
+          f"No se encontró el examen N° {accesion} en el PACS.", "error")
+    return redirect(url_for("lista", q=accesion, desde="2000-01-01"))
+
+
 @app.route("/estudio/<estudio_id>/orden", methods=["POST"])
 @login_requerido("editar_paciente")
 def unir_orden(estudio_id):

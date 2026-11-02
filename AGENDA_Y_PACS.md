@@ -220,6 +220,13 @@ Permiso: «Corregir errores en informes validados». Los informes subidos como a
 Todo informe validado trae un código QR que abre el informe y las **imágenes** en el celular, con la **clave de
 acceso** impresa al lado. En los informes subidos ya firmados, el QR va en una página final agregada al archivo.
 
+## Botón «Ver en el PACS» en la agenda
+
+Cuando una cita ya tiene imágenes (imágenes, informado o entregado), al abrirla en la agenda aparece abajo el botón
+**«Ver en el PACS ↗»**. Abre en otra pestaña la ficha de ese estudio en el PACS del centro (imágenes, informe, PDF).
+Se entra con el usuario del PACS, así que cada uno ve solo lo que su perfil permite (un radiólogo, solo lo asignado).
+Si el estudio aún no llegó, el PACS lo avisa y muestra la lista buscando ese número de acceso.
+
 ## Borrar un examen
 
 Para exámenes de prueba, enviados al paciente equivocado o duplicados. En la **lista de estudios**, al final de cada
