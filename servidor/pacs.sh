@@ -512,7 +512,7 @@ cmd_post_actualizar() {
 }
 
 version_sistema() { tr -d '[:space:]' < "$CODIGO/informes/VERSION" 2>/dev/null || echo "1.0.0"; }
-version() { git -C "$CODIGO" log -1 --format='%h del %cd' --date=format:'%d-%m-%Y %H:%M' 2>/dev/null || echo "?"; }
+version() { git -C "$CODIGO" log -1 --format='%h del %cd' --date=format:'%d/%m/%Y %H:%M' 2>/dev/null || echo "?"; }
 escribir_version() {
   mkdir -p "$INST/$1/data/informes"
   version > "$INST/$1/data/informes/version.txt"
@@ -545,10 +545,10 @@ cmd_revisar() {
   echo "$(date '+%F %T') actualización pedida desde el PACS $pedido"
   local res
   if res="$(bash "$CODIGO/servidor/pacs.sh" actualizar 2>&1)"; then
-    res="$(date '+%d-%m-%Y %H:%M') OK, versión $(version)"
+    res="$(date '+%d/%m/%Y %H:%M') OK, versión $(version)"
   else
     echo "$res"
-    res="$(date '+%d-%m-%Y %H:%M') FALLÓ: $(echo "$res" | tail -n 3 | tr '\n' ' ' | cut -c1-300)"
+    res="$(date '+%d/%m/%Y %H:%M') FALLÓ: $(echo "$res" | tail -n 3 | tr '\n' ' ' | cut -c1-300)"
   fi
   echo "$res"
   for n in $(instancias); do

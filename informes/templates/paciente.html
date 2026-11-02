@@ -64,7 +64,7 @@
   {% for e in examenes %}
   <div class="examen">
     <div class="t">{{ e.examen }}</div>
-    <div class="f">{{ e.fecha[8:10] }}-{{ e.fecha[5:7] }}-{{ e.fecha[:4] }}{% if e.hora %} · {{ e.hora }}{% endif %}</div>
+    <div class="f">{{ e.fecha[8:10] }}/{{ e.fecha[5:7] }}/{{ e.fecha[:4] }}{% if e.hora %} · {{ e.hora }}{% endif %}</div>
     <span class="estado {{ e.estado }}">{{ e.estado_txt }}</span>
     {% if e.informe_id %}
     <div class="acc"><a class="btn prim" href="{{ url_for('portal_ver', inf_id=e.informe_id) }}">Ver informe e imágenes</a></div>

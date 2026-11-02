@@ -434,7 +434,7 @@ table.lista tbody tr.sel > td { background: var(--aviso-bg) !important; }
 .login-logo { text-align: center; margin-bottom: 10px; }
 .login-logo img { max-width: 220px; max-height: 100px; object-fit: contain; }
 .pub-marca { display: flex; align-items: center; gap: 14px; }
-.pub-marca img { max-height: 56px; max-width: 150px; object-fit: contain; }
+.pub-marca img { max-height: 72px; max-width: 220px; object-fit: contain; }
 .logo-fila { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .logo-muestra { width: 180px; height: 90px; border: 1px dashed var(--borde); border-radius: var(--radio); display: flex; align-items: center; justify-content: center; background: #fff; }
 .logo-muestra img { max-width: 170px; max-height: 80px; object-fit: contain; }
@@ -456,3 +456,14 @@ table.lista tbody tr.sel > td { background: var(--aviso-bg) !important; }
 .ico-informe { display: inline-flex; vertical-align: -3px; margin-right: 5px; padding: 2px; border-radius: 4px; }
 .ico-informe svg { width: 18px; height: 18px; display: block; }
 .ico-informe:hover, .ico-informe:focus-visible { background: var(--primario-claro); }
+
+/* Fechas en formato chileno dd/mm/aaaa (fecha-cl.js) */
+.fecha-cl { position: relative; display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; }
+.fecha-cl .fecha-cl-txt { flex: 1; min-width: 0; width: auto; font-variant-numeric: tabular-nums; }
+.fecha-cl-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid var(--borde); background: var(--panel); color: var(--suave); border-radius: var(--radio); cursor: pointer; }
+.fecha-cl-btn:hover { color: var(--texto); border-color: var(--suave); }
+.fecha-cl-oculto { position: absolute !important; right: 0; bottom: 0; width: 1px !important; height: 1px !important; opacity: 0; pointer-events: none; border: 0 !important; padding: 0 !important; margin: 0 !important; }
+.fecha-cl-txt.fecha-cl-error { border-color: var(--error) !important; color: var(--error); }
+.fecha-cl .fecha-cl-txt { padding-left: 8px; padding-right: 6px; }
+.fecha-cl-btn { width: 32px; }
+.filtros { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }

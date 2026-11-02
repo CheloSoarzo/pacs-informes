@@ -344,6 +344,9 @@ def _migrar(con):
                       ("transcrito_en", "TEXT"), ("archivo", "TEXT DEFAULT ''")):
         if col not in cols:
             con.execute(f"ALTER TABLE informes ADD COLUMN {col} {tipo}")
+    # Perfiles que solo ven los estudios que tienen asignados (radiólogos)
+    if "solo_asignados" not in _columnas(con, "perfiles"):
+        con.execute("ALTER TABLE perfiles ADD COLUMN solo_asignados INTEGER NOT NULL DEFAULT 0")
     # archivo: informe final subido ya firmado (PDF). Si existe, es el PDF oficial del informe.
     if "archivo" not in _columnas(con, "informe_versiones"):
         con.execute("ALTER TABLE informe_versiones ADD COLUMN archivo TEXT DEFAULT ''")
@@ -371,6 +374,10 @@ def _migrar(con):
     for clave, nombre, desc, permisos, solo in PERFILES_INICIALES:
         con.execute("INSERT OR IGNORE INTO perfiles (clave, nombre, descripcion, permisos, solo_solicitados) "
                     "VALUES (?,?,?,?,?)", (clave, nombre, desc, ",".join(permisos), solo))
+    # Una sola vez: el perfil Radiólogos pasa a ver solo lo asignado (los tecnólogos asignan)
+    if not con.execute("SELECT 1 FROM ajustes WHERE clave='solo_asignados_migrado'").fetchone():
+        con.execute("UPDATE perfiles SET solo_asignados=1 WHERE clave='radiologos'")
+        con.execute("INSERT OR REPLACE INTO ajustes (clave, valor) VALUES ('solo_asignados_migrado', '1')")
     # Usuarios de la versión con roles fijos → perfil equivalente
     for uid, rol in con.execute("SELECT id, rol FROM usuarios WHERE perfil_id IS NULL").fetchall():
         clave = ROL_A_PERFIL.get(rol or "", "tecnico")

@@ -21,9 +21,9 @@ def nombre_dicom(valor):
 
 
 def fecha_dicom(valor):
-    """'20261023' -> '23-10-2026'."""
+    """'20261023' -> '23/10/2026' (formato chileno)."""
     if valor and len(valor) >= 8 and valor[:8].isdigit():
-        return f"{valor[6:8]}-{valor[4:6]}-{valor[0:4]}"
+        return f"{valor[6:8]}/{valor[4:6]}/{valor[0:4]}"
     return valor or ""
 
 

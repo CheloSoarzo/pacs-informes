@@ -332,7 +332,7 @@ def cola_dictados():
     ahora_dt = datetime.now()
     dictados = []
     for d in filas:
-        if not ve_estudio(u, {"institucion": d["institucion"], "solicitante": d["solicitante"]}):
+        if not ve_estudio(u, {"id": d["estudio_id"], "institucion": d["institucion"], "solicitante": d["solicitante"]}):
             continue
         x = dict(d)
         x["espera"] = fmt_duracion((ahora_dt - datetime.strptime(d["creado"], "%Y-%m-%d %H:%M:%S")).total_seconds() / 3600)

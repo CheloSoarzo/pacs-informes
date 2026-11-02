@@ -56,7 +56,7 @@ TIPOS_ENTREGA = {
 }
 
 SQL_USUARIO = """SELECT u.*, p.clave AS perfil_clave, p.nombre AS perfil_nombre, p.permisos,
-                        p.solo_solicitados
+                        p.solo_solicitados, p.solo_asignados
                  FROM usuarios u LEFT JOIN perfiles p ON p.id = u.perfil_id"""
 
 
@@ -153,7 +153,7 @@ def fmt_fecha_hora(ts):
     if not ts:
         return ""
     try:
-        return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").strftime("%d-%m-%Y %H:%M")
+        return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y %H:%M")
     except ValueError:
         return ts
 

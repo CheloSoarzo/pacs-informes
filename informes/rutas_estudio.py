@@ -303,6 +303,9 @@ def asignar_estudio(estudio_id):
 @app.route("/estudio/<estudio_id>/tomar", methods=["POST"])
 @login_requerido("firmar")
 def tomar_estudio(estudio_id):
+    from permisos import solo_asignados
+    if solo_asignados(usuario_actual()):
+        abort(403)   # los estudios se los asigna un tecnólogo
     estudio_visible(estudio_id)
     asignar(estudio_id, usuario_actual()["id"])
     flash("El estudio quedó asignado a ti.", "ok")
@@ -387,7 +390,7 @@ def _dictado_visible(did):
     if not d:
         abort(404)
     u = usuario_actual()
-    if not ve_estudio(u, {"institucion": d["institucion"], "solicitante": d["solicitante"]}):
+    if not ve_estudio(u, {"id": d["estudio_id"], "institucion": d["institucion"], "solicitante": d["solicitante"]}):
         abort(403)
     return d
 

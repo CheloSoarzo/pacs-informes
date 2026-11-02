@@ -45,7 +45,7 @@
         </select>
         <button class="btn peq" type="submit">Guardar</button>
       </form>
-      {% elif puede('firmar') and not firmado and meta.radiologo_id != usuario.id %}
+      {% elif puede('firmar') and not firmado and meta.radiologo_id != usuario.id and not usuario.solo_asignados %}
       <form method="post" action="{{ url_for('tomar_estudio', estudio_id=est.id) }}">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="volver" value="dictar">
         <button class="btn peq" type="submit">Tomar este estudio</button>

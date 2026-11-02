@@ -52,7 +52,7 @@ _RADIOLOGO = ["visor", "descargar", "exportar", "notas", "datos_contacto", "dict
               "dictados_anular", "ver_borrador", "redactar", "firmar", "firmar_lote", "rectificar", "links",
               "email", "entregas", "plantillas", "frases", "estadisticas", "subir_firmado"]
 _TRANSCRIPCION = ["notas", "dictados_escuchar", "transcribir", "ver_borrador", "redactar", "subir_firmado"]
-_TECNOLOGO = ["visor", "descargar", "notas", "datos_contacto", "editar_paciente", "pacs_subir"]
+_TECNOLOGO = ["visor", "descargar", "notas", "datos_contacto", "editar_paciente", "pacs_subir", "asignar"]
 _RECEPCION = ["exportar", "notas", "datos_contacto", "editar_paciente", "links", "email", "entregas"]
 
 PERFILES_INICIALES = [
@@ -78,7 +78,7 @@ PERFILES_INICIALES = [
 
 # Permisos agregados en versiones posteriores: al actualizar, se suman a los perfiles iniciales que los
 # traen de fábrica (los perfiles creados por el administrador no se tocan).
-PERMISOS_NUEVOS = ["editar_paciente", "subir_firmado"]
+PERMISOS_NUEVOS = ["editar_paciente", "subir_firmado", "asignar"]
 
 # Migración desde la versión con 5 roles fijos
 ROL_A_PERFIL = {"admin": "admin", "radiologo": "radiologos", "tecnologo": "tecnologos",
@@ -113,9 +113,28 @@ def solo_solicitados(u):
     return bool(u) and not es_admin(u) and bool(u["solo_solicitados"])
 
 
+def solo_asignados(u):
+    """Radiólogos que solo ven los estudios que un tecnólogo (u otro usuario con permiso) les asignó."""
+    try:
+        return bool(u) and not es_admin(u) and bool(u["solo_asignados"])
+    except (IndexError, KeyError):
+        return False
+
+
+def _asignados(u):
+    """Estudios asignados al usuario (una consulta por petición)."""
+    from flask import g
+    from db import get_db
+    cache = g.setdefault("asignados", {})
+    if u["id"] not in cache:
+        cache[u["id"]] = {r[0] for r in get_db().execute(
+            "SELECT estudio_id FROM estudio_meta WHERE radiologo_id=?", (u["id"],))}
+    return cache[u["id"]]
+
+
 def restringido(u):
     """True si el usuario no puede ver todo el archivo."""
-    return solo_solicitados(u) or bool(centros_de(u))
+    return solo_solicitados(u) or solo_asignados(u) or bool(centros_de(u))
 
 
 def ve_estudio(u, est):
@@ -125,6 +144,10 @@ def ve_estudio(u, est):
     centros = centros_de(u)
     if centros and _normal(est.get("institucion", "")) not in centros:
         return False
+    if solo_asignados(u):
+        eid = est.get("id") or est.get("estudio_id")
+        if not eid or eid not in _asignados(u):
+            return False
     if solo_solicitados(u):
         filtro = [p for p in _normal(u["filtro_solicitante"] or "").replace("^", " ").split() if p]
         if not filtro:

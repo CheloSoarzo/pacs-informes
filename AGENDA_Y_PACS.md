@@ -191,6 +191,14 @@ estudio queda **validado** a nombre de ese médico y ese archivo es el que recib
 hay que guardarlo como PDF. Para cambiarlo: **Rectificar** y subir el nuevo. Permiso: «Subir el informe final ya
 firmado» (Transcripcionistas, Radiólogos y Administradores).
 
+## Asignación de exámenes a radiólogos
+
+Los **tecnólogos** asignan cada examen a un radiólogo: en el estudio (recuadro «Radiólogo asignado», con prioridad
+normal o urgente) o varios a la vez desde la lista (casillas → Asignar). Los usuarios del perfil **Radiólogos**
+solo ven los exámenes que tienen asignados (lista, búsqueda, estudio, visor y dictado) y ya no pueden tomarlos por
+su cuenta. Se configura en **Administración → Perfiles y permisos** con la casilla «Solo ve los estudios que tiene
+asignados»; el permiso para asignar es «Asignar radiólogo».
+
 ## Código QR en el informe
 
 Todo informe validado trae un código QR que abre el informe y las **imágenes** en el celular, con la **clave de

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titulo %}Informes{% endblock %} · {{ centro }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <script src="{{ url_for('static', filename='fecha-cl.js') }}"></script>
 </head>
 <body>
 {% if usuario %}

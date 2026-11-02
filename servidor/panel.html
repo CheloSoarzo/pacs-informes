@@ -113,7 +113,7 @@ const $=s=>document.querySelector(s);
 const esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num=v=>Number(v||0).toLocaleString("es-CL");
 function gb(b){const g=Number(b||0)/1e9; if(g<1){const m=Number(b||0)/1e6; return (m<10?m.toFixed(1):Math.round(m)).toString().replace(".",",")+" MB"} return (g<100?g.toFixed(1):Math.round(g)).toString().replace(".",",")+" GB"}
-function fecha(t){if(!t)return"—";const m=String(t).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}:\d{2})/);return m?`${m[3]}-${m[2]}-${m[1]} ${m[4]}`:esc(t)}
+function fecha(t){if(!t)return"—";const m=String(t).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}:\d{2})/);return m?`${m[3]}/${m[2]}/${m[1]} ${m[4]}`:esc(t)}
 let DATOS=null;
 try{const v=localStorage.getItem("panel_inactivos");if(v==="1")$("#inactivos").checked=true}catch(e){}
 

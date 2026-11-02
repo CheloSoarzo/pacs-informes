@@ -103,9 +103,9 @@ def admin_perfiles():
             p = db.execute("SELECT * FROM perfiles WHERE id=?", (f["duplicar"],)).fetchone()
             if p:
                 clave = f"{p['clave']}_copia_{int(db.execute('SELECT MAX(id) FROM perfiles').fetchone()[0]) + 1}"
-                db.execute("INSERT INTO perfiles (clave, nombre, descripcion, permisos, solo_solicitados) "
-                           "VALUES (?,?,?,?,?)", (clave, p["nombre"] + " (copia)", p["descripcion"],
-                                                  p["permisos"], p["solo_solicitados"]))
+                db.execute("INSERT INTO perfiles (clave, nombre, descripcion, permisos, solo_solicitados, solo_asignados) "
+                           "VALUES (?,?,?,?,?,?)", (clave, p["nombre"] + " (copia)", p["descripcion"],
+                                                    p["permisos"], p["solo_solicitados"], p["solo_asignados"]))
                 db.commit()
                 flash("Perfil duplicado. Ajusta su nombre y permisos.", "ok")
             return redirect(url_for("admin_perfiles"))
@@ -130,20 +130,22 @@ def admin_perfiles():
             return redirect(url_for("admin_perfiles"))
         permisos = ",".join(p for p in f.getlist("permisos") if p in TODOS)
         solo = 1 if f.get("solo_solicitados") else 0
+        solo_asig = 1 if f.get("solo_asignados") else 0
         if pid:
             p = db.execute("SELECT * FROM perfiles WHERE id=?", (pid,)).fetchone()
             if not p:
                 abort(404)
             if p["clave"] == "admin":
-                permisos, solo = ",".join(TODOS), 0  # el perfil administrador siempre tiene todo
-            db.execute("UPDATE perfiles SET nombre=?, descripcion=?, permisos=?, solo_solicitados=? WHERE id=?",
-                       (nombre, f.get("descripcion", "").strip(), permisos, solo, pid))
+                permisos, solo, solo_asig = ",".join(TODOS), 0, 0  # el perfil administrador siempre tiene todo
+            db.execute("UPDATE perfiles SET nombre=?, descripcion=?, permisos=?, solo_solicitados=?, solo_asignados=? "
+                       "WHERE id=?", (nombre, f.get("descripcion", "").strip(), permisos, solo, solo_asig, pid))
         else:
             clave = re.sub(r"[^a-z0-9]+", "_", nombre.lower()).strip("_")[:30] or "perfil"
             if db.execute("SELECT 1 FROM perfiles WHERE clave=?", (clave,)).fetchone():
                 clave += f"_{int(db.execute('SELECT MAX(id) FROM perfiles').fetchone()[0]) + 1}"
-            db.execute("INSERT INTO perfiles (clave, nombre, descripcion, permisos, solo_solicitados) "
-                       "VALUES (?,?,?,?,?)", (clave, nombre, f.get("descripcion", "").strip(), permisos, solo))
+            db.execute("INSERT INTO perfiles (clave, nombre, descripcion, permisos, solo_solicitados, solo_asignados) "
+                       "VALUES (?,?,?,?,?,?)", (clave, nombre, f.get("descripcion", "").strip(), permisos, solo,
+                                               solo_asig))
         db.commit()
         registrar("editar_perfil", nombre)
         flash(f"Perfil «{nombre}» guardado.", "ok")

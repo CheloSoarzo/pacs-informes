@@ -12,6 +12,17 @@ def H(s): return {"X-CSRF": s.csrf}
 def n_filas(t): return t.count('class="paciente"')
 
 adm = sesion("admin", "clave-prueba-123")
+
+# Estas pruebas usan radiólogos sobre estudios sin asignar: se quita «solo ve lo asignado» al perfil Radiólogos
+# (esa restricción la prueba dev/prueba_asignacion.py)
+def _radiologos_ven_todo(adm):
+    pid = re.search(r'<option value="(\d+)"[^>]*>Radiólogos</option>', adm.get(B + "/admin/usuarios").text).group(1)
+    form = next(f for f in adm.get(B + "/admin/perfiles").text.split("<form") if f'name="id" value="{pid}"' in f)
+    adm.post(B + "/admin/perfiles", data={"csrf": adm.csrf, "id": pid, "nombre": "Radiólogos",
+                                          "permisos": re.findall(r'name="permisos" value="([^"]+)" checked', form)})
+
+
+_radiologos_ven_todo(adm)
 t = adm.get(B + "/admin/perfiles").text
 chk("Transcripcionistas - Avanzado" in t and "Médicos de Consultas" in t and "Tecnólogos de Ecografías" in t, "10 perfiles iniciales (como pacs4me)")
 perf = dict((n, int(i)) for i, n in re.findall(r'<option value="(\d+)"[^>]*>([^<]+)</option>', adm.get(B + "/admin/usuarios").text))

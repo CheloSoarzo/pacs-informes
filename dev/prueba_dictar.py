@@ -19,6 +19,17 @@ def sesion(u, c):
 
 
 adm = sesion("admin", "clave-prueba-123")
+
+# Estas pruebas usan radiólogos sobre estudios sin asignar: se quita «solo ve lo asignado» al perfil Radiólogos
+# (esa restricción la prueba dev/prueba_asignacion.py)
+def _radiologos_ven_todo(adm):
+    pid = re.search(r'<option value="(\d+)"[^>]*>Radiólogos</option>', adm.get(B + "/admin/usuarios").text).group(1)
+    form = next(f for f in adm.get(B + "/admin/perfiles").text.split("<form") if f'name="id" value="{pid}"' in f)
+    adm.post(B + "/admin/perfiles", data={"csrf": adm.csrf, "id": pid, "nombre": "Radiólogos",
+                                          "permisos": re.findall(r'name="permisos" value="([^"]+)" checked', form)})
+
+
+_radiologos_ven_todo(adm)
 perf = dict((n, int(i)) for i, n in re.findall(r'<option value="(\d+)"[^>]*>([^<]+)</option>', adm.get(B + "/admin/usuarios").text))
 for u, p in (("rad9", "Radiólogos"), ("tra9", "Transcripcionistas")):
     adm.post(B + "/admin/usuarios", data={"csrf": adm.csrf, "usuario": u, "nombre": u.upper(), "perfil_id": perf[p],

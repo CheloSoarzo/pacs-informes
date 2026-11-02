@@ -79,10 +79,10 @@ def generar_pdf(informe, firmante, centro, url_verificacion=None, logo_path=None
     cab = [Paragraph(escape(centro["nombre"]), ESTILOS["centro"]),
            Paragraph(escape(contacto), ESTILOS["contacto"])]
     if logo_path and os.path.exists(logo_path):
-        t = Table([[Image(logo_path, width=28 * mm, height=14 * mm, kind="proportional"), cab]],
-                  colWidths=[32 * mm, None])
-        t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
-        el.append(t)
+        # Con logo, el encabezado es solo el logo (sin el nombre del centro al lado)
+        logo = Image(logo_path, width=46 * mm, height=20 * mm, kind="proportional")
+        logo.hAlign = "LEFT"
+        el.append(logo)
     else:
         el.extend(cab)
     el.append(Spacer(1, 3 * mm))
@@ -173,9 +173,11 @@ def pagina_acceso(informe, centro, url, clave="", logo_path=None):
                             bottomMargin=20 * mm)
     el = []
     if logo_path and os.path.exists(logo_path):
-        el.append(Image(logo_path, width=40 * mm, height=20 * mm, kind="proportional"))
-        el.append(Spacer(1, 4 * mm))
-    el.append(Paragraph(escape(centro["nombre"]), ESTILOS["centro"]))
+        logo = Image(logo_path, width=46 * mm, height=20 * mm, kind="proportional")
+        logo.hAlign = "LEFT"
+        el.append(logo)
+    else:
+        el.append(Paragraph(escape(centro["nombre"]), ESTILOS["centro"]))
     el.append(Spacer(1, 10 * mm))
     el.append(Paragraph("ACCESO EN LÍNEA A SU EXAMEN", ESTILOS["titulo"]))
     el.append(Paragraph(escape(f"{informe.get('paciente_nombre', '')} · {informe.get('paciente_id', '')} · "

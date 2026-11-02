@@ -23,6 +23,8 @@
       </fieldset>
     {% endfor %}
   </div>
+  <label class="permiso destacado"><input type="checkbox" name="solo_asignados" {{ 'checked' if p and p.solo_asignados }}>
+    Solo ve los estudios que tiene asignados (radiólogos: los asigna un tecnólogo u otro usuario con permiso «Asignar radiólogo»)</label>
   <label class="permiso destacado"><input type="checkbox" name="solo_solicitados" {{ 'checked' if p and p.solo_solicitados }}>
     Solo ve los exámenes que el usuario solicitó (médicos de consulta), y solo cuando el informe está validado</label>
   {% endif %}
