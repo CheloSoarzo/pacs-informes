@@ -76,6 +76,15 @@ def preparar_db():
     # borrado_en: el estudio unido se borró del PACS; la agenda vuelve a «sin imágenes» hasta que llegue otro
     if "borrado_en" not in {r[1] for r in con.execute("PRAGMA table_info(ordenes)")}:
         con.execute("ALTER TABLE ordenes ADD COLUMN borrado_en TEXT DEFAULT ''")
+    # Exámenes siempre en MAYÚSCULAS (así se ven en los equipos); corrige órdenes antiguas
+    for acc, ex, exs in con.execute("SELECT accesion, examen, examenes FROM ordenes").fetchall():
+        try:
+            lista = json.loads(exs or "[]")
+            nueva = json.dumps([dict(e, nombre=str(e.get("nombre") or "").upper()) for e in lista], ensure_ascii=False)
+        except (ValueError, AttributeError):
+            nueva = exs
+        if (ex or "") != (ex or "").upper() or (exs or "[]") != nueva:
+            con.execute("UPDATE ordenes SET examen=?, examenes=? WHERE accesion=?", ((ex or "").upper(), nueva, acc))
     con.commit()
     con.close()
 
@@ -143,8 +152,8 @@ def recibir_ordenes():
             "paciente": _txt(o.get("paciente"), 120), "rut": _txt(o.get("rut"), 20), "rut_norm": rut_n,
             "fecha_nac": _txt(o.get("fecha_nac"), 10), "email": _txt(o.get("email"), 120),
             "telefono": _txt(o.get("telefono"), 30), "medico": _txt(o.get("medico"), 120),
-            "prevision": _txt(o.get("prevision"), 40), "examen": _txt(o.get("examen"), 600),
-            "examenes": json.dumps([{"codigo": _txt(e.get("codigo"), 20), "nombre": _txt(e.get("nombre"), 160)}
+            "prevision": _txt(o.get("prevision"), 40), "examen": _txt(o.get("examen"), 600).upper(),
+            "examenes": json.dumps([{"codigo": _txt(e.get("codigo"), 20), "nombre": _txt(e.get("nombre"), 160).upper()}
                                     for e in examenes[:10] if isinstance(e, dict)], ensure_ascii=False),
             "notas": _txt(o.get("notas"), 2000), "estado_agenda": _txt(o.get("estado"), 20),
             "pagado": 1 if o.get("pagado") else 0, "eliminada": 1 if o.get("eliminada") else 0, "ts": ahora(),
@@ -447,7 +456,7 @@ def escribir_worklist():
             ds.PatientSex = ""
             ds.ReferringPhysicianName = (o["medico"] or "").upper().replace("^", " ")
             ds.RequestedProcedureID = o["accesion"]
-            ds.RequestedProcedureDescription = (o["examen"] or "")[:64]
+            ds.RequestedProcedureDescription = (o["examen"] or "").upper()[:64]
             ds.StudyInstanceUID = _uid_estudio(o["accesion"])
             ds.InstitutionName = (Config.CENTRO_NOMBRE or "")[:64]
             sps = Dataset()
@@ -455,7 +464,7 @@ def escribir_worklist():
             sps.ScheduledStationAETitle = AET_EQUIPO.get(o["equipo"], "")
             sps.ScheduledProcedureStepStartDate = _fecha(o["fecha"])
             sps.ScheduledProcedureStepStartTime = re.sub(r"\D", "", o["hora"] or "")[:4] + "00"
-            sps.ScheduledProcedureStepDescription = (o["examen"] or "")[:64]
+            sps.ScheduledProcedureStepDescription = (o["examen"] or "").upper()[:64]
             sps.ScheduledProcedureStepID = o["accesion"]
             sps.ScheduledPerformingPhysicianName = ""
             ds.ScheduledProcedureStepSequence = [sps]

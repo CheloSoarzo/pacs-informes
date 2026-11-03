@@ -83,7 +83,10 @@ ok = esperar(lambda: "informe en proceso" in pac.post(P + "/paciente", data={"cs
                                                                           "clave": clave.lower()}).text)
 chk(ok, "paciente entra con RUT + clave y ve 'informe en proceso'")
 t = pac.get(P + "/paciente/examenes").text
-chk(t.count('class="examen"') == 2 and "TC de tórax" in t and "RX de tórax" in t, "ve sus 2 exámenes")
+chk(t.count('class="examen"') == 2 and "TC DE TÓRAX" in t and "RX DE TÓRAX" in t, "ve sus 2 exámenes (en mayúsculas)")
+c_ag = next(c for c in ag.get(A + f"/api/citas?fecha={hoy}").json() if c["id"] == cita["id"])
+chk(c_ag["examen"] == "TC DE TÓRAX", "la agenda guarda el examen en mayúsculas")
+chk(all(a["nombre"] == a["nombre"].upper() for a in ag.get(A + "/api/aranceles").json()), "el arancel está en mayúsculas")
 chk("Ver informe" not in t, "sin informe firmado no hay botón para verlo")
 
 # --- otra persona no entra con esa clave
