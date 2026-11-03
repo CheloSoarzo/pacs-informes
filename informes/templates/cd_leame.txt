@@ -1,0 +1,19 @@
+{{ d.centro }}
+{% if d.direccion %}{{ d.direccion }}
+{% endif %}{% if d.telefono %}Teléfono: {{ d.telefono }}
+{% endif %}
+Paciente: {{ d.paciente }}
+RUT: {{ d.rut }}
+Examen: {{ d.examen }} ({{ d.modalidad }})
+Fecha del examen: {{ d.fecha }}
+{% if d.acceso %}N° de examen: {{ d.acceso }}
+{% endif %}
+CÓMO VER LAS IMÁGENES
+---------------------
+1. Abra el archivo ABRIR_VISOR.HTML (doble clic). Se abre en su navegador (Chrome, Edge, Safari o Firefox),
+   sin instalar nada. Ahí puede recorrer las imágenes y abrir el informe.
+2. Para su médico: las imágenes originales (formato DICOM) están en este disco, con su índice DICOMDIR.
+   Se abren con cualquier visor médico (Horos, OsiriX, RadiAnt, Weasis, MicroDicom u otro).
+{% if d.informe %}3. El informe del médico radiólogo está en el archivo INFORME.PDF.
+{% endif %}
+Disco grabado el {{ d.grabado }}.

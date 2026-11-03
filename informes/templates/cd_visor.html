@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visor de imágenes</title>
+<style>
+  :root { --fondo:#0d141c; --panel:#16212c; --linea:#2a3947; --texto:#e8eef4; --suave:#93a3b2; --azul:#4c9be8; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--fondo); color: var(--texto);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .app { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+  header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--linea); flex-wrap: wrap; }
+  header img { height: 40px; background: #fff; border-radius: 6px; padding: 3px 6px; }
+  .pac b { font-size: 16px; display: block; }
+  .pac span { color: var(--suave); font-size: 12.5px; }
+  .esp { flex: 1; }
+  .btn { background: var(--azul); color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; font-weight: 600; text-decoration: none; cursor: pointer; font-size: 13.5px; }
+  .btn.sec { background: transparent; border: 1px solid var(--linea); color: var(--texto); }
+  main { display: grid; grid-template-columns: 210px 1fr; min-height: 0; }
+  aside { border-right: 1px solid var(--linea); overflow: auto; padding: 10px; }
+  .serie { display: block; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; padding: 6px; color: var(--texto); cursor: pointer; margin-bottom: 6px; }
+  .serie img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #000; border-radius: 4px; display: block; }
+  .serie span { display: block; font-size: 12px; margin-top: 4px; }
+  .serie small { color: var(--suave); }
+  .serie.sel { border-color: var(--azul); background: rgba(76,155,232,.12); }
+  .visor { display: grid; grid-template-rows: auto 1fr auto; min-height: 0; }
+  .barra { display: flex; gap: 14px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--linea); flex-wrap: wrap; font-size: 13px; color: var(--suave); }
+  .barra label { display: flex; align-items: center; gap: 6px; }
+  .lienzo { position: relative; overflow: hidden; background: #000; display: grid; place-items: center; cursor: grab; }
+  .lienzo img { max-width: 100%; max-height: 100%; transform-origin: center; user-select: none; -webkit-user-drag: none; }
+  .info { position: absolute; left: 10px; top: 8px; font-size: 12px; color: #cfd8e0; text-shadow: 0 0 3px #000; pointer-events: none; }
+  .pie { display: flex; gap: 12px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--linea); }
+  .pie input[type=range] { flex: 1; }
+  .aviso { font-size: 11.5px; color: var(--suave); padding: 6px 12px; border-top: 1px solid var(--linea); }
+  @media (max-width: 700px) { main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } aside { display: flex; gap: 6px; border-right: 0; border-bottom: 1px solid var(--linea); } .serie { width: 110px; flex: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <img id="logo" alt="" hidden>
+    <div class="pac"><b id="paciente"></b><span id="datos"></span></div>
+    <div class="esp"></div>
+    <a class="btn" id="btn-informe" href="INFORME.PDF" target="_blank" hidden>Ver informe (PDF)</a>
+  </header>
+  <main>
+    <aside id="series"></aside>
+    <section class="visor">
+      <div class="barra">
+        <label>Brillo <input type="range" id="brillo" min="40" max="200" value="100"></label>
+        <label>Contraste <input type="range" id="contraste" min="40" max="250" value="100"></label>
+        <label>Zoom <input type="range" id="zoom" min="50" max="400" value="100"></label>
+        <label><input type="checkbox" id="invertir"> Invertir</label>
+        <button class="btn sec" id="reset" type="button">Restablecer</button>
+      </div>
+      <div class="lienzo" id="lienzo"><img id="img" alt="Imagen del examen"><div class="info" id="info"></div></div>
+      <div class="pie">
+        <button class="btn sec" id="ant" type="button" title="Imagen anterior (↑)">◀</button>
+        <input type="range" id="corte" min="1" value="1" aria-label="Imagen">
+        <button class="btn sec" id="sig" type="button" title="Imagen siguiente (↓)">▶</button>
+        <span id="num"></span>
+      </div>
+      <div class="aviso">Vista de referencia para el paciente y su médico. Para diagnóstico use un visor DICOM con las imágenes originales
+        de este disco (archivo DICOMDIR). Rueda del mouse o flechas ↑ ↓: recorrer imágenes · Arrastrar: mover la imagen.</div>
+    </section>
+  </main>
+</div>
+<script src="VISOR/DATOS.JS"></script>
+<script>
+(function () {
+  var CD = window.CD || { series: [] };
+  var $ = function (id) { return document.getElementById(id); };
+  $("paciente").textContent = CD.paciente || "";
+  $("datos").textContent = [CD.rut && "RUT " + CD.rut, CD.fecha, CD.modalidad, CD.examen, CD.centro].filter(Boolean).join(" · ");
+  document.title = (CD.paciente || "Paciente") + " · " + (CD.examen || "Imágenes");
+  if (CD.logo) { $("logo").src = "VISOR/LOGO.PNG"; $("logo").hidden = false; }
+  if (CD.informe) $("btn-informe").hidden = false;
+  var serie = 0, corte = 0, dx = 0, dy = 0;
+  var lista = $("series");
+  CD.series.forEach(function (s, i) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "serie";
+    var im = document.createElement("img"); im.src = "VISOR/" + s.imagenes[Math.floor(s.imagenes.length / 2)]; im.alt = "";
+    var t = document.createElement("span"); t.textContent = s.titulo;
+    var n = document.createElement("small"); n.textContent = s.imagenes.length + " imágenes";
+    t.appendChild(document.createElement("br")); t.appendChild(n);
+    b.appendChild(im); b.appendChild(t);
+    b.onclick = function () { verSerie(i); };
+    lista.appendChild(b);
+  });
+  function filtros() {
+    var f = "brightness(" + $("brillo").value / 100 + ") contrast(" + $("contraste").value / 100 + ")" + ($("invertir").checked ? " invert(1)" : "");
+    $("img").style.filter = f;
+    $("img").style.transform = "translate(" + dx + "px," + dy + "px) scale(" + $("zoom").value / 100 + ")";
+  }
+  function mostrar() {
+    var s = CD.series[serie]; if (!s) return;
+    corte = Math.max(0, Math.min(s.imagenes.length - 1, corte));
+    $("img").src = "VISOR/" + s.imagenes[corte];
+    $("corte").max = s.imagenes.length; $("corte").value = corte + 1;
+    $("num").textContent = (corte + 1) + " / " + s.imagenes.length;
+    $("info").textContent = s.titulo;
+  }
+  function verSerie(i) {
+    serie = i; corte = Math.floor((CD.series[i].imagenes.length - 1) / 2);
+    [].forEach.call(document.querySelectorAll(".serie"), function (b, k) { b.classList.toggle("sel", k === i); });
+    // precarga de la serie para recorrerla sin saltos
+    CD.series[i].imagenes.forEach(function (a) { var p = new Image(); p.src = "VISOR/" + a; });
+    mostrar();
+  }
+  $("corte").oninput = function () { corte = this.value - 1; mostrar(); };
+  $("ant").onclick = function () { corte--; mostrar(); };
+  $("sig").onclick = function () { corte++; mostrar(); };
+  ["brillo", "contraste", "zoom", "invertir"].forEach(function (id) { $(id).oninput = filtros; $(id).onchange = filtros; });
+  $("reset").onclick = function () { $("brillo").value = 100; $("contraste").value = 100; $("zoom").value = 100; $("invertir").checked = false; dx = dy = 0; filtros(); };
+  $("lienzo").addEventListener("wheel", function (e) { e.preventDefault(); corte += e.deltaY > 0 ? 1 : -1; mostrar(); }, { passive: false });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowDown" || e.key === "ArrowRight") { corte++; mostrar(); e.preventDefault(); }
+    if (e.key === "ArrowUp" || e.key === "ArrowLeft") { corte--; mostrar(); e.preventDefault(); }
+  });
+  var arr = null;
+  $("lienzo").addEventListener("mousedown", function (e) { arr = { x: e.clientX - dx, y: e.clientY - dy }; e.preventDefault(); });
+  window.addEventListener("mousemove", function (e) { if (arr) { dx = e.clientX - arr.x; dy = e.clientY - arr.y; filtros(); } });
+  window.addEventListener("mouseup", function () { arr = null; });
+  if (CD.series.length) verSerie(0); else $("info").textContent = "Este disco no tiene imágenes de referencia.";
+  filtros();
+})();
+</script>
+</body>
+</html>

@@ -496,3 +496,22 @@ table.lista td.celda-acciones { text-align: right; }
 .ficha-examenes h2 { margin: 0 0 10px; font-size: 17px; }
 table.lista tr.fila-marcada td { background: var(--azul-bg, #EAF2FB); }
 .tag-marcado { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: var(--primario, #1F5FA8); color: #fff; vertical-align: 1px; }
+
+/* Grabar CD/DVD (ícono en la lista y ventana) */
+.ico-cd { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; margin-left: 6px;
+  width: 30px; height: 30px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: none;
+  color: var(--suave); cursor: pointer; }
+.ico-cd svg { width: 18px; height: 18px; }
+.ico-cd:hover, .ico-cd:focus-visible { color: var(--primario); background: var(--primario-claro); }
+.dlg-cd { width: min(540px, calc(100vw - 32px)); }
+.cd-medio { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--fondo, #F5F7FA); font-size: 14px; }
+.cd-medio.ok { background: var(--ok-bg); color: var(--ok); }
+.cd-medio.aviso { background: var(--aviso-bg); color: var(--aviso); }
+.cd-ayuda summary { cursor: pointer; font-weight: 600; }
+.cd-ayuda ol { margin: 6px 0 0; padding-left: 18px; }
+.cd-ayuda li { margin-bottom: 4px; }
+a.btn.desactivado { pointer-events: none; opacity: .6; }
+.cd-progreso { display: grid; gap: 4px; }
+.cd-barra { height: 8px; border-radius: 999px; background: var(--borde); overflow: hidden; }
+.cd-barra span { display: block; height: 100%; width: 0; background: var(--primario); transition: width .4s; }
+.cd-progreso p { margin: 0; }

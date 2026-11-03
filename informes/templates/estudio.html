@@ -25,6 +25,7 @@
     <a class="btn" href="{{ visor_stone }}" target="_blank" rel="noopener">Visor Stone ↗</a>
     {% endif %}
     {% if puede('descargar') %}<a class="btn" href="{{ url_for('estudio_zip', estudio_id=est.id) }}">Descargar DICOM</a>{% endif %}
+    {% if puede('grabar_cd') %}<button type="button" class="btn" data-cd="{{ url_for('cd_info', estudio_id=est.id) }}">Grabar CD</button>{% endif %}
   </div>
 </div>
 
@@ -458,6 +459,7 @@
 {% endblock %}
 
 {% block scripts %}
+{% if puede('grabar_cd') %}{% include "_grabar_cd.html" %}{% endif %}
 {% set firmado = inf and inf.estado == 'firmado' %}
 {% set puede_editar = puede('redactar') and not firmado %}
 <script src="{{ url_for('static', filename='visor.js') }}"></script>

@@ -233,6 +233,22 @@ imágenes. Se abre:
 Se entra con el usuario del PACS: cada uno ve solo los exámenes que su perfil permite (un radiólogo, solo los
 asignados; los perfiles restringidos no ven teléfono, correo ni citas de la agenda). Queda en la auditoría.
 
+## Grabar CD / DVD del paciente con visor
+
+En la lista de estudios, al final de cada fila, hay un **ícono de disco** (también el botón «Grabar CD» en la ficha del
+estudio). Lo ven el administrador, los tecnólogos y recepción (permiso «Preparar el CD/DVD del paciente»).
+
+1. La ventana muestra el tamaño y si **cabe en un CD** (700 MB) o **necesita un DVD**.
+2. **Preparar disco**: el servidor arma la imagen del disco (.iso) en segundo plano y se descarga sola. Si está marcado,
+   queda registrada la entrega «CD grabado».
+3. Se graba con lo que trae el computador: **Windows**, clic derecho sobre el .iso → «Grabar imagen de disco»;
+   **Mac**, clic derecho → «Grabar imagen de disco en disco».
+
+El disco lleva las imágenes originales con **DICOMDIR** (se abren en Horos, OsiriX, RadiAnt, Weasis…), el
+**visor ABRIR_VISOR.HTML** (doble clic: se abre en el navegador sin instalar nada, con series, recorrido de cortes,
+brillo, contraste y zoom), el **informe en PDF** si está validado y un LEAME con instrucciones.
+Los discos preparados se borran del servidor a las 6 horas.
+
 ## Borrar un examen
 
 Para exámenes de prueba, enviados al paciente equivocado o duplicados. En la **lista de estudios**, al final de cada

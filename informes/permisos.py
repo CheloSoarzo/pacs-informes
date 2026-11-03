@@ -39,6 +39,7 @@ CATALOGO = [
     ("Entrega", "links", "Generar y desactivar links para pacientes"),
     ("Entrega", "email", "Enviar informes por correo"),
     ("Entrega", "entregas", "Registrar entregas (retiro, CD, placas)"),
+    ("Entrega", "grabar_cd", "Preparar el CD/DVD del paciente con visor (imagen de disco para grabar)"),
     ("Entrega", "entregas_anular", "Anular registros de entrega"),
     ("Administración", "estadisticas", "Ver estadísticas"),
     ("Administración", "usuarios", "Administrar usuarios y perfiles"),
@@ -56,8 +57,8 @@ _RADIOLOGO = ["visor", "descargar", "exportar", "notas", "datos_contacto", "dict
 _TRANSCRIPCION = ["notas", "dictados_escuchar", "transcribir", "ver_borrador", "redactar", "subir_firmado",
                   "corregir_validado"]
 _TECNOLOGO = ["visor", "descargar", "notas", "datos_contacto", "editar_paciente", "pacs_subir", "asignar",
-              "corregir_validado", "borrar_examen"]
-_RECEPCION = ["exportar", "notas", "datos_contacto", "editar_paciente", "links", "email", "entregas"]
+              "corregir_validado", "borrar_examen", "grabar_cd"]
+_RECEPCION = ["exportar", "notas", "datos_contacto", "editar_paciente", "links", "email", "entregas", "grabar_cd"]
 
 PERFILES_INICIALES = [
     # clave, nombre, descripción, permisos, solo_solicitados
@@ -82,7 +83,7 @@ PERFILES_INICIALES = [
 
 # Permisos agregados en versiones posteriores: al actualizar, se suman a los perfiles iniciales que los
 # traen de fábrica (los perfiles creados por el administrador no se tocan).
-PERMISOS_NUEVOS = ["editar_paciente", "subir_firmado", "asignar", "corregir_validado", "borrar_examen"]
+PERMISOS_NUEVOS = ["editar_paciente", "subir_firmado", "asignar", "corregir_validado", "borrar_examen", "grabar_cd"]
 
 # Migración desde la versión con 5 roles fijos
 ROL_A_PERFIL = {"admin": "admin", "radiologo": "radiologos", "tecnologo": "tecnologos",

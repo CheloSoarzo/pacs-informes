@@ -1,0 +1,87 @@
+{# Ventana «Grabar CD/DVD»: tamaño, si cabe en CD o DVD, y prepara/descarga la imagen del disco (cd_paciente.py). #}
+<dialog id="dlg-cd" class="dialogo dlg-cd" aria-labelledby="dlg-cd-titulo" data-csrf="{{ csrf_token() }}">
+  <form method="dialog">
+    <h2 id="dlg-cd-titulo">Grabar CD / DVD del paciente</h2>
+    <div class="borrar-quien"><b id="cd-paciente">…</b><span id="cd-detalle" class="suave peq"></span></div>
+    <p class="cd-medio" id="cd-medio">Calculando tamaño…</p>
+    <p class="peq">El disco lleva las imágenes originales (DICOM con DICOMDIR) para cualquier visor médico, un <b>visor que se abre
+      con doble clic</b> en cualquier computador sin instalar nada (ABRIR_VISOR.HTML)<span id="cd-con-informe"> y el <b>informe en PDF</b></span>.</p>
+    <label class="permiso"><input type="checkbox" id="cd-entrega" checked> Registrar la entrega en CD</label>
+    <div class="cd-progreso" id="cd-progreso" hidden>
+      <div class="cd-barra"><span id="cd-barra"></span></div>
+      <p class="peq" id="cd-paso"></p>
+    </div>
+    <details class="cd-ayuda" id="cd-ayuda">
+      <summary>¿Cómo se graba?</summary>
+      <ol class="peq">
+        <li>Presiona <b>Preparar disco</b>. Se arma en el servidor (en estudios grandes puede tardar unos minutos) y se descarga solo.</li>
+        <li>Pon un CD o DVD en blanco en el grabador.</li>
+        <li><b>Windows:</b> en Descargas, clic derecho sobre el archivo <b>.iso</b> → <b>Grabar imagen de disco</b> → Grabar.<br>
+            <b>Mac:</b> clic derecho sobre el archivo <b>.iso</b> → <b>Grabar imagen de disco en disco</b> (o desde Utilidad de Discos).</li>
+      </ol>
+      <p class="peq suave" id="cd-sin-iso" hidden>Este servidor entrega un .zip: descomprímelo y graba su contenido en el disco
+        (en Windows: selecciona los archivos → clic derecho → Enviar a → Unidad de DVD).</p>
+    </details>
+    <div class="fila fin">
+      <button type="button" class="btn" id="cd-cerrar">Cerrar</button>
+      <button type="button" class="btn prim" id="cd-preparar">Preparar disco</button>
+    </div>
+  </form>
+</dialog>
+<script>
+(function () {
+  const dlg = document.getElementById('dlg-cd'), $ = id => document.getElementById(id);
+  let info = null, sondeo = null, listoUrl = '';
+  const paso = (t, pct) => { $('cd-progreso').hidden = false; $('cd-paso').textContent = t; if (pct != null) $('cd-barra').style.width = pct + '%'; };
+  document.addEventListener('click', async e => {
+    const b = e.target.closest('[data-cd]');
+    if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    clearInterval(sondeo); info = null; listoUrl = '';
+    $('cd-paciente').textContent = '…'; $('cd-detalle').textContent = ''; $('cd-medio').textContent = 'Calculando tamaño…';
+    $('cd-medio').className = 'cd-medio'; $('cd-progreso').hidden = true; $('cd-barra').style.width = '0';
+    $('cd-preparar').disabled = true; $('cd-preparar').textContent = 'Preparar disco'; $('cd-entrega').disabled = false;
+    dlg.showModal();
+    try {
+      const r = await fetch(b.dataset.cd, { headers: { Accept: 'application/json' } });
+      info = await r.json();
+      $('cd-paciente').textContent = info.paciente;
+      $('cd-detalle').textContent = [info.fecha, info.modalidad, info.examen, info.imagenes + ' imágenes'].filter(Boolean).join(' · ');
+      $('cd-medio').textContent = 'Tamaño aproximado: ' + info.mb + ' MB → ' +
+        (info.medio === 'CD' ? 'cabe en un CD.' : 'necesita un ' + info.medio + ' (no cabe en un CD de 700 MB).');
+      $('cd-medio').classList.add(info.medio === 'CD' ? 'ok' : 'aviso');
+      $('cd-con-informe').hidden = !info.informe;
+      $('cd-sin-iso').hidden = info.iso;
+      $('cd-preparar').disabled = false;
+    } catch (err) { $('cd-medio').textContent = 'No se pudo consultar el estudio.'; }
+  });
+  $('cd-preparar').addEventListener('click', async () => {
+    if (listoUrl) { location.href = listoUrl; return; }
+    if (!info) return;
+    $('cd-preparar').disabled = true; $('cd-entrega').disabled = true; $('cd-preparar').textContent = 'Preparando…';
+    paso('Preparando…', 2);
+    try {
+      const r = await fetch(info.preparar, { method: 'POST', headers: { 'X-CSRF': dlg.dataset.csrf, 'Content-Type': 'application/json' },
+                                             body: JSON.stringify({ entrega: $('cd-entrega').checked }) });
+      if (!r.ok) throw new Error('El servidor respondió ' + r.status);
+      const t = await r.json();
+      sondeo = setInterval(async () => {
+        try {
+          const e = await (await fetch(t.estado)).json();
+          if (e.error) { clearInterval(sondeo); paso(e.error, 0); $('cd-preparar').disabled = false; $('cd-preparar').textContent = 'Reintentar'; return; }
+          paso(e.paso, e.avance);
+          if (e.listo) {
+            clearInterval(sondeo);
+            paso('Listo (' + e.mb + ' MB). La descarga empieza sola; luego grábalo como se indica abajo.', 100);
+            $('cd-preparar').textContent = 'Descargar de nuevo'; $('cd-preparar').disabled = false;
+            listoUrl = t.descargar;
+            $('cd-ayuda').open = true;
+            location.href = t.descargar;
+          }
+        } catch (err) { /* se reintenta en el próximo ciclo */ }
+      }, 1500);
+    } catch (err) { paso('No se pudo empezar: ' + err.message, 0); $('cd-preparar').disabled = false; }
+  });
+  $('cd-cerrar').addEventListener('click', () => { clearInterval(sondeo); dlg.close(); });
+})();
+</script>

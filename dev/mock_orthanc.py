@@ -223,6 +223,29 @@ def archive(eid):
     return Response(buf.getvalue(), mimetype="application/zip")
 
 
+@app.get("/studies/<eid>/media")
+def media(eid):
+    """Como Orthanc: ZIP con DICOMDIR e IMAGES/ (aquí archivos de prueba)."""
+    if eid not in ESTUDIOS:
+        abort(404)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("DICOMDIR", b"DICM-prueba")
+        n = 0
+        for sid in ESTUDIOS[eid]["series_ids"]:
+            for _ in SERIES[sid]["instancias"]:
+                z.writestr(f"IMAGES/IM{n}", b"DICM" + bytes(1000)); n += 1
+    return Response(buf.getvalue(), mimetype="application/zip")
+
+
+@app.get("/studies/<eid>/statistics")
+def statistics(eid):
+    if eid not in ESTUDIOS:
+        abort(404)
+    n = sum(len(SERIES[s]["instancias"]) for s in ESTUDIOS[eid]["series_ids"])
+    return jsonify({"CountInstances": n, "DiskSizeMB": n * 0.5, "DiskSize": str(int(n * 0.5 * 1048576))})
+
+
 @app.post("/dev/llega")
 def dev_llega():
     """Solo pruebas: simula que un equipo envió un estudio con este número de acceso."""
