@@ -10,7 +10,8 @@ from flask import abort, flash, jsonify, redirect, render_template, request, sen
 
 from config import Config
 from core import (app, estudio_visible, guardar_meta, informe_por_estudio, link_vigente, login_requerido,
-                  meta_de, pacs, radiologos, registrar, url_link, usuario_actual, usuario_por_id, ve_informe)
+                  meta_de, pacs, radiologos, registrar, solicitante_de, url_link, usuario_actual, usuario_por_id,
+                  ve_informe)
 from correo import configurado as correo_configurado
 from db import ahora, get_db
 from orthanc import OrthancError
@@ -162,7 +163,7 @@ def _crear_o_actualizar(estudio_id, cuerpo, solicitante):
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (estudio_id, est["uid"], est["paciente_nombre"], est["paciente_id"], est["paciente_fnac_raw"],
              est["paciente_sexo"], est["fecha_raw"], est["hora_raw"], est["modalidad"], est["descripcion"],
-             est["accession"], est["institucion"], solicitante if solicitante is not None else est["solicitante"],
+             est["accession"], est["institucion"], solicitante if solicitante is not None else solicitante_de(est),
              cuerpo, u["id"], ahora(), u["id"], ahora()))
     else:
         campos, vals = ["cuerpo=?", "actualizado_por=?", "actualizado=?"], [cuerpo, u["id"], ahora()]
@@ -400,7 +401,7 @@ def vista_previa(estudio_id):
     est = estudio_visible(estudio_id)
     d = dict(est)
     d["cuerpo"] = request.form.get("cuerpo", "")
-    d["solicitante"] = request.form.get("solicitante", est["solicitante"])
+    d["solicitante"] = request.form.get("solicitante", solicitante_de(est))
     pdf = generar_pdf(d, None, centro_info(), None, logo_path())
     return Response(pdf, mimetype="application/pdf",
                     headers={"Content-Disposition": 'inline; filename="borrador.pdf"'})

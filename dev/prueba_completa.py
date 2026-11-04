@@ -44,7 +44,7 @@ def _sin_validar_al_transcribir(adm):
 
 _sin_validar_al_transcribir(adm)
 t = adm.get(B + "/admin/perfiles").text
-chk("Transcripcionistas - Avanzado" in t and "Médicos de Consultas" in t and "Tecnólogos de Ecografías" in t, "10 perfiles iniciales (como pacs4me)")
+chk("Transcripcionistas - Avanzado" in t and "Médicos solicitantes" in t and "Tecnólogos de Ecografías" in t, "10 perfiles iniciales (como pacs4me)")
 perf = dict((n, int(i)) for i, n in re.findall(r'<option value="(\d+)"[^>]*>([^<]+)</option>', adm.get(B + "/admin/usuarios").text))
 def crear(u, nombre, perfil, **kw):
     d = {"csrf": adm.csrf, "usuario": u, "nombre": nombre, "perfil_id": perf[perfil], "clave": "clave-larga-123", "activo": "on"}; d.update(kw)
@@ -53,8 +53,8 @@ for args in [("rad", "Dr. Andrés López", "Radiólogos"), ("rad2", "Dra. Paula 
              ("trans", "Carla Muñoz", "Transcripcionistas"), ("tec", "TM Daniela Fuentes", "Tecnólogos"),
              ("sec", "Ana Secretaría", "Secretarias de Recepción"), ("ent", "Pedro Entrega", "Entrega de Exámenes")]:
     chk("Usuario guardado" in crear(*args), "crear " + args[0])
-chk("solo ve sus exámenes" in crear("der0", "X", "Médicos de Consultas"), "médico de consulta sin nombre rechazado")
-chk("Usuario guardado" in crear("der", "Dra. Carolina Rojas", "Médicos de Consultas", filtro_solicitante="CAROLINA ROJAS"), "crear derivador")
+chk("Usuario guardado" in crear("der0", "Dr. Sin Nombre DICOM", "Médicos solicitantes"), "médico solicitante sin nombre DICOM (ve lo que se le da acceso)")
+chk("Usuario guardado" in crear("der", "Dra. Carolina Rojas", "Médicos solicitantes", filtro_solicitante="CAROLINA ROJAS"), "crear derivador")
 chk("Usuario guardado" in crear("radsur", "Dr. Sur", "Radiólogos", centros="CENTRO SUR"), "crear radiólogo Centro Sur")
 S = {u: sesion(u) for u in ["rad", "rad2", "trans", "tec", "sec", "ent", "der", "radsur"]}
 

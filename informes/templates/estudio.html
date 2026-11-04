@@ -38,7 +38,7 @@
     <div><span>Examen</span>{{ est.descripcion or '—' }}</div>
     <div><span>N° examen</span>{{ est.accession or '—' }}</div>
     <div><span>Centro</span>{{ est.institucion or '—' }}</div>
-    <div><span>Solicitante</span>{{ (inf.solicitante if inf else est.solicitante) or '—' }}</div>
+    <div><span>Solicitante</span>{{ (inf.solicitante if inf else (meta.solicitante_manual or est.solicitante)) or '—' }}</div>
     {% set orden = orden_agenda(est) %}
     {% if orden %}
     <div class="orden-agenda"><span>Orden de agenda · {{ orden.accesion }}</span>
@@ -97,6 +97,56 @@
     </form>
     {% endif %}
   </div>
+  {% set md = medicos_del_estudio(est) %}
+  {% if md.accesos or meta.solicitante_manual or puede('acceso_solicitante') %}
+  <div class="medicos-acceso" id="medicos">
+    <div><span class="etq">Médicos solicitantes</span>
+      {% for a in md.accesos %}
+      <span class="chip-medico" title="Ve este examen con su usuario">{{ a.nombre }}
+        {% if puede('acceso_solicitante') %}
+        <form method="post" action="{{ url_for('acceso_medico', estudio_id=est.id) }}" class="inline">
+          <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="quitar">
+          <input type="hidden" name="usuario_id" value="{{ a.usuario_id }}">
+          <button class="enlace peq" type="submit" title="Quitar el acceso" aria-label="Quitar acceso a {{ a.nombre }}">×</button>
+        </form>{% endif %}
+      </span>
+      {% endfor %}
+      {% if meta.solicitante_manual %}
+      <span class="chip-medico sin-acceso" title="Escrito a mano: no tiene usuario ni acceso">{{ meta.solicitante_manual }} <small>sin acceso</small>
+        {% if puede('acceso_solicitante') %}
+        <form method="post" action="{{ url_for('acceso_medico', estudio_id=est.id) }}" class="inline">
+          <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="quitar_otro">
+          <button class="enlace peq" type="submit" title="Quitar" aria-label="Quitar {{ meta.solicitante_manual }}">×</button>
+        </form>{% endif %}
+      </span>
+      {% endif %}
+      {% if not md.accesos and not meta.solicitante_manual %}<span class="suave peq">Ninguno</span>{% endif %}
+    </div>
+    {% if puede('acceso_solicitante') %}
+    <form method="post" action="{{ url_for('acceso_medico', estudio_id=est.id) }}" class="fila form-medico">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="agregar">
+      <select name="usuario_id" aria-label="Médico solicitante" required>
+        <option value="">— Elegir médico —</option>
+        {% if md.medicos %}<optgroup label="Médicos del centro (ven las imágenes con su usuario)">
+          {% for m in md.medicos %}<option value="{{ m.id }}" {{ 'selected' if md.sugerido == m.id }}>{{ m.nombre }}</option>{% endfor %}
+        </optgroup>{% endif %}
+        <optgroup label="Sin acceso">
+          <option value="otro">✎ Otro médico (escribir el nombre)…</option>
+        </optgroup>
+      </select>
+      <input type="text" name="nombre_otro" maxlength="64" placeholder="Nombre del médico" aria-label="Nombre del otro médico" hidden>
+      <button class="btn" type="submit">Agregar</button>
+    </form>
+    <script>
+      (function () {
+        const f = document.currentScript.previousElementSibling, sel = f.querySelector('select'), txt = f.querySelector('[name=nombre_otro]');
+        const ver = () => { const otro = sel.value === 'otro'; txt.hidden = !otro; txt.required = otro; f.querySelector('[name=accion]').value = otro ? 'otro' : 'agregar'; if (otro) txt.focus(); };
+        sel.addEventListener('change', ver); ver();
+      })();
+    </script>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
 
 <div class="estudio">
@@ -250,7 +300,7 @@
           <p class="peq suave">Clic para insertar donde está el cursor. También puedes escribir <b>.atajo</b> y un espacio, por ejemplo <b>.normal</b></p>
         </div>
         <div class="campo-solicitante"><label for="solicitante">Médico solicitante</label>
-          <input type="text" id="solicitante" value="{{ inf.solicitante if inf else est.solicitante }}"></div>
+          <input type="text" id="solicitante" value="{{ inf.solicitante if inf else (meta.solicitante_manual or est.solicitante) }}"></div>
         <label for="cuerpo">Texto del informe</label>
         <textarea id="cuerpo" spellcheck="true" lang="es" placeholder="Escribe, dicta o inserta una plantilla.">{{ inf.cuerpo if inf else '' }}</textarea>
         <div class="interino" id="interino" aria-live="polite"></div>

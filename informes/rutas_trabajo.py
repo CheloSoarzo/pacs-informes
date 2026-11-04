@@ -1,6 +1,7 @@
 """Sesión, lista de trabajo, acciones masivas, filtros guardados, exportación y cola de dictados."""
 import csv
 import io
+import re
 from datetime import date, datetime, timedelta
 from urllib.parse import urlencode
 
@@ -11,8 +12,8 @@ from config import Config
 from core import (ESTADOS, MODALIDADES, app, csrf_token, dt_estudio, fmt_duracion, ip, login_requerido,
                   pacs, radiologos, registrar, usuario_actual, SQL_USUARIO)
 from db import ahora, ajuste, auditar, get_db
-from orthanc import fecha_dicom
-from permisos import puede, solo_solicitados, ve_estudio
+from orthanc import _normal, fecha_dicom
+from permisos import _accesos, puede, solo_solicitados, ve_estudio
 from servicios import asignar, validar_informe
 
 
@@ -120,9 +121,30 @@ def armar_lista(args):
     solicitante = ""
     if solo_solicitados(u):
         palabras = (u["filtro_solicitante"] or "").replace("^", " ").split()
-        solicitante = max(palabras, key=len) if palabras else "SIN-FILTRO-CONFIGURADO"
-    estudios = [e for e in pacs.buscar_estudios(d, h, f["q"], f["modalidad"], solicitante=solicitante)
-                if ve_estudio(u, e)]
+        solicitante = max(palabras, key=len) if palabras else ""
+        # Médico solicitante: los exámenes a los que se le dio acceso (de cualquier fecha) + los que lo
+        # nombran como solicitante (si tiene su nombre configurado)
+        estudios = [e for e in pacs.buscar_estudios(d, h, f["q"], f["modalidad"], solicitante=solicitante)
+                    if ve_estudio(u, e)] if solicitante else []
+        vistos = {e["id"] for e in estudios}
+        q_txt, q_id = _normal(f["q"]), re.sub(r"[^0-9A-Za-z]", "", f["q"]).upper()
+        for eid in _accesos(u)[:300]:
+            if eid in vistos:
+                continue
+            e = pacs.estudio(eid)
+            if not e or not ve_estudio(u, e):
+                continue
+            if f["modalidad"] and f["modalidad"] not in e["modalidad"].split("/"):
+                continue
+            if f["q"] and not (all(p in _normal(e["paciente_nombre"]) for p in q_txt.split())
+                               or (q_id and q_id in re.sub(r"[^0-9A-Za-z]", "", e["paciente_id"]).upper())
+                               or f["q"].strip() == e["accession"]):
+                continue
+            estudios.append(e)
+            vistos.add(eid)
+    else:
+        estudios = [e for e in pacs.buscar_estudios(d, h, f["q"], f["modalidad"], solicitante=solicitante)
+                    if ve_estudio(u, e)]
 
     ids = [e["id"] for e in estudios]
     informes = {r["estudio_id"]: r for r in _en_lotes(

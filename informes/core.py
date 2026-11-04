@@ -217,7 +217,12 @@ def meta_de(estudio_id):
     fila = get_db().execute("SELECT * FROM estudio_meta WHERE estudio_id=?", (estudio_id,)).fetchone()
     return dict(fila) if fila else {"estudio_id": estudio_id, "radiologo_id": None, "asignado_por": None,
                                     "asignado_en": None, "prioridad": "normal",
-                                    "paciente_email": "", "paciente_telefono": ""}
+                                    "paciente_email": "", "paciente_telefono": "", "solicitante_manual": ""}
+
+
+def solicitante_de(est):
+    """Médico solicitante por defecto del examen: el escrito en la ficha o, si no hay, el del DICOM."""
+    return (meta_de(est["id"]).get("solicitante_manual") or "").strip() or est.get("solicitante", "")
 
 
 def guardar_meta(estudio_id, **campos):

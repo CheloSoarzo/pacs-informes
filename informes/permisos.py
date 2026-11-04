@@ -18,6 +18,7 @@ CATALOGO = [
     ("Estudios", "datos_contacto", "Editar correo y teléfono del paciente"),
     ("Estudios", "editar_paciente", "Corregir datos del paciente y del examen (nombre, RUT, nacimiento, examen…)"),
     ("Estudios", "asignar", "Asignar radiólogo y marcar estudios urgentes"),
+    ("Estudios", "acceso_solicitante", "Dar acceso a un médico solicitante para que vea un examen con su usuario"),
     ("Estudios", "pacs_subir", "Subir estudios y usar el explorador del PACS"),
     ("Estudios", "borrar_examen", "Borrar exámenes completos (imágenes, informe, dictados y notas)"),
     ("Estudios", "pacs_borrar", "Borrar o modificar estudios en el PACS"),
@@ -50,6 +51,9 @@ CATALOGO = [
 TODOS = [c for _, c, _ in CATALOGO]
 DESCRIPCION = {c: d for _, c, d in CATALOGO}
 
+DESC_SOLICITANTES = ("Médicos que solicitan exámenes: ven solo los exámenes a los que se les da acceso "
+                     "(o donde figuran como solicitantes), con su informe validado.")
+
 # Perfiles iniciales (copiados de la organización que usabas en pacs4me)
 _RADIOLOGO = ["visor", "descargar", "exportar", "notas", "datos_contacto", "dictar", "dictados_escuchar",
               "dictados_anular", "ver_borrador", "redactar", "firmar", "firmar_lote", "rectificar", "links",
@@ -57,8 +61,9 @@ _RADIOLOGO = ["visor", "descargar", "exportar", "notas", "datos_contacto", "dict
 _TRANSCRIPCION = ["notas", "dictados_escuchar", "transcribir", "ver_borrador", "redactar", "subir_firmado",
                   "corregir_validado"]
 _TECNOLOGO = ["visor", "descargar", "notas", "datos_contacto", "editar_paciente", "pacs_subir", "asignar",
-              "corregir_validado", "borrar_examen", "grabar_cd"]
-_RECEPCION = ["exportar", "notas", "datos_contacto", "editar_paciente", "links", "email", "entregas", "grabar_cd"]
+              "corregir_validado", "borrar_examen", "grabar_cd", "acceso_solicitante"]
+_RECEPCION = ["exportar", "notas", "datos_contacto", "editar_paciente", "links", "email", "entregas", "grabar_cd",
+              "acceso_solicitante"]
 
 PERFILES_INICIALES = [
     # clave, nombre, descripción, permisos, solo_solicitados
@@ -76,14 +81,13 @@ PERFILES_INICIALES = [
     ("secretarias", "Secretarias de Recepción", "Entregan informes, links y registran retiros.", _RECEPCION, 0),
     ("entrega", "Entrega de Exámenes", "Entrega de exámenes y anulación de registros de entrega.",
      _RECEPCION + ["entregas_anular", "descargar"], 0),
-    ("medicos_consulta", "Médicos de Consultas",
-     "Médicos derivadores: ven solo los exámenes que ellos solicitaron, ya validados.",
+    ("medicos_consulta", "Médicos solicitantes", DESC_SOLICITANTES,
      ["visor", "descargar"], 1),
 ]
 
 # Permisos agregados en versiones posteriores: al actualizar, se suman a los perfiles iniciales que los
 # traen de fábrica (los perfiles creados por el administrador no se tocan).
-PERMISOS_NUEVOS = ["editar_paciente", "subir_firmado", "asignar", "corregir_validado", "borrar_examen", "grabar_cd"]
+PERMISOS_NUEVOS = ["editar_paciente", "subir_firmado", "asignar", "corregir_validado", "borrar_examen", "grabar_cd", "acceso_solicitante"]
 
 # Migración desde la versión con 5 roles fijos
 ROL_A_PERFIL = {"admin": "admin", "radiologo": "radiologos", "tecnologo": "tecnologos",
@@ -137,6 +141,17 @@ def _asignados(u):
     return cache[u["id"]]
 
 
+def _accesos(u):
+    """Exámenes a los que se le dio acceso a este médico solicitante (una consulta por petición)."""
+    from flask import g
+    from db import get_db
+    cache = g.setdefault("accesos", {})
+    if u["id"] not in cache:
+        cache[u["id"]] = [r[0] for r in get_db().execute(
+            "SELECT estudio_id FROM estudio_accesos WHERE usuario_id=? ORDER BY asignado_en DESC", (u["id"],))]
+    return cache[u["id"]]
+
+
 def restringido(u):
     """True si el usuario no puede ver todo el archivo."""
     return solo_solicitados(u) or solo_asignados(u) or bool(centros_de(u))
@@ -154,6 +169,9 @@ def ve_estudio(u, est):
         if not eid or eid not in _asignados(u):
             return False
     if solo_solicitados(u):
+        eid = est.get("id") or est.get("estudio_id")
+        if eid and eid in _accesos(u):
+            return True
         filtro = [p for p in _normal(u["filtro_solicitante"] or "").replace("^", " ").split() if p]
         if not filtro:
             return False

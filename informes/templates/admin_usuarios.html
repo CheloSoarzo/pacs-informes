@@ -20,7 +20,7 @@
       <input type="password" id="u-clave-{{ u.id if u else 'n' }}" name="clave" autocomplete="new-password" minlength="10" {{ '' if u else 'required' }}></div>
     <div><label for="u-centros-{{ u.id if u else 'n' }}">Centros que puede ver (separados por coma; vacío = todos)</label>
       <input type="text" id="u-centros-{{ u.id if u else 'n' }}" name="centros" value="{{ u.centros if u }}" list="centros-conocidos" placeholder="Todos los centros"></div>
-    <div><label for="u-sol-{{ u.id if u else 'n' }}">Médico de consulta: su nombre como aparece en los exámenes</label>
+    <div><label for="u-sol-{{ u.id if u else 'n' }}">Médico solicitante (opcional): su nombre como aparece en los exámenes, para que vea solos los que solicitó</label>
       <input type="text" id="u-sol-{{ u.id if u else 'n' }}" name="filtro_solicitante" value="{{ u.filtro_solicitante if u }}" list="solicitantes-conocidos" placeholder="Ej: CAROLINA ROJAS"></div>
     <div><label for="u-firma-{{ u.id if u else 'n' }}">Imagen de firma (radiólogos; PNG con fondo transparente)</label>
       <input type="file" id="u-firma-{{ u.id if u else 'n' }}" name="firma" accept=".png,.jpg,.jpeg">

@@ -85,12 +85,22 @@ CREATE TABLE IF NOT EXISTS perfiles (
     activo INTEGER NOT NULL DEFAULT 1
 );
 
+-- Médicos solicitantes con acceso a un examen (se les da en la ficha del examen)
+CREATE TABLE IF NOT EXISTS estudio_accesos (
+    estudio_id TEXT NOT NULL,
+    usuario_id INTEGER NOT NULL,
+    asignado_por INTEGER, asignado_en TEXT,
+    PRIMARY KEY (estudio_id, usuario_id)
+);
+CREATE INDEX IF NOT EXISTS ix_accesos_usuario ON estudio_accesos(usuario_id);
+
 -- Datos de trabajo por estudio que no van en el DICOM
 CREATE TABLE IF NOT EXISTS estudio_meta (
     estudio_id TEXT PRIMARY KEY,
     radiologo_id INTEGER, asignado_por INTEGER, asignado_en TEXT,
     prioridad TEXT NOT NULL DEFAULT 'normal',    -- normal | urgente
-    paciente_email TEXT DEFAULT '', paciente_telefono TEXT DEFAULT ''
+    paciente_email TEXT DEFAULT '', paciente_telefono TEXT DEFAULT '',
+    solicitante_manual TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS dictados (
@@ -334,7 +344,7 @@ def _columnas(con, tabla):
 
 def _migrar(con):
     """Actualiza bases de datos creadas por versiones anteriores."""
-    from permisos import PERFILES_INICIALES, PERMISOS_NUEVOS, ROL_A_PERFIL
+    from permisos import DESC_SOLICITANTES, PERFILES_INICIALES, PERMISOS_NUEVOS, ROL_A_PERFIL
     cols = _columnas(con, "usuarios")
     for col in ("centros", "filtro_solicitante"):
         if col not in cols:
@@ -350,6 +360,9 @@ def _migrar(con):
     if "solo_asignados" not in _columnas(con, "perfiles"):
         con.execute("ALTER TABLE perfiles ADD COLUMN solo_asignados INTEGER NOT NULL DEFAULT 0")
     # archivo: informe final subido ya firmado (PDF). Si existe, es el PDF oficial del informe.
+    # solicitante_manual: médico solicitante escrito a mano en el examen (sin usuario ni acceso)
+    if "solicitante_manual" not in _columnas(con, "estudio_meta"):
+        con.execute("ALTER TABLE estudio_meta ADD COLUMN solicitante_manual TEXT DEFAULT ''")
     if "archivo" not in _columnas(con, "informe_versiones"):
         con.execute("ALTER TABLE informe_versiones ADD COLUMN archivo TEXT DEFAULT ''")
 
@@ -377,6 +390,9 @@ def _migrar(con):
         con.execute("INSERT OR IGNORE INTO perfiles (clave, nombre, descripcion, permisos, solo_solicitados) "
                     "VALUES (?,?,?,?,?)", (clave, nombre, desc, ",".join(permisos), solo))
     # Una sola vez: el perfil Radiólogos pasa a ver solo lo asignado (los tecnólogos asignan)
+    # «Médicos de Consultas» pasa a llamarse «Médicos solicitantes» (solo si no le cambiaron el nombre)
+    con.execute("UPDATE perfiles SET nombre='Médicos solicitantes', descripcion=? WHERE clave='medicos_consulta' "
+                "AND nombre='Médicos de Consultas'", (DESC_SOLICITANTES,))
     if not con.execute("SELECT 1 FROM ajustes WHERE clave='solo_asignados_migrado'").fetchone():
         con.execute("UPDATE perfiles SET solo_asignados=1 WHERE clave='radiologos'")
         con.execute("INSERT OR REPLACE INTO ajustes (clave, valor) VALUES ('solo_asignados_migrado', '1')")

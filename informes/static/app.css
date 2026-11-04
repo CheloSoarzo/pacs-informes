@@ -515,3 +515,16 @@ a.btn.desactivado { pointer-events: none; opacity: .6; }
 .cd-barra { height: 8px; border-radius: 999px; background: var(--borde); overflow: hidden; }
 .cd-barra span { display: block; height: 100%; width: 0; background: var(--primario); transition: width .4s; }
 .cd-progreso p { margin: 0; }
+
+/* Médicos solicitantes con acceso al examen */
+.medicos-acceso { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  border-top: 1px solid var(--borde); margin-top: 10px; padding-top: 10px; }
+.medicos-acceso .etq { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--suave); margin-bottom: 4px; }
+.chip-medico { display: inline-flex; align-items: center; gap: 4px; background: var(--primario-claro); color: var(--primario-osc);
+  border-radius: 999px; padding: 3px 4px 3px 10px; font-weight: 600; font-size: 13px; margin: 2px 4px 2px 0; }
+.chip-medico form { margin: 0; }
+.chip-medico button { font-size: 16px; line-height: 1; padding: 0 6px; color: var(--primario-osc); }
+.chip-medico.sin-acceso { background: var(--pend-bg); color: var(--texto); }
+.chip-medico.sin-acceso small { color: var(--suave); font-weight: 400; }
+.chip-medico.sin-acceso button { color: var(--suave); }
+.form-medico input[name=nombre_otro] { width: 220px; }

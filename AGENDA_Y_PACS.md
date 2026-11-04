@@ -233,6 +233,18 @@ imágenes. Se abre:
 Se entra con el usuario del PACS: cada uno ve solo los exámenes que su perfil permite (un radiólogo, solo los
 asignados; los perfiles restringidos no ven teléfono, correo ni citas de la agenda). Queda en la auditoría.
 
+## Médicos solicitantes (ver sus exámenes con su usuario)
+
+1. Crea al médico en **Administración → Usuarios** con el perfil **«Médicos solicitantes»**. El campo «su nombre
+   como aparece en los exámenes» es opcional: si lo llenas, además ve solo los exámenes donde figura como solicitante.
+2. En la ficha del examen, bajo «Radiólogo asignado», está **«Médicos solicitantes»**: eliges al médico del centro en
+   la lista y presionas **Dar acceso**. Si el nombre del solicitante del examen coincide, viene preseleccionado.
+   Lo pueden hacer administrador, tecnólogos y recepción (permiso «Dar acceso a un médico solicitante»).
+3. El médico entra con su usuario y ve en su lista solo esos exámenes (de cualquier fecha), con imágenes en el visor
+   y el informe validado. Se quita el acceso con la × junto a su nombre. Todo queda en la auditoría.
+4. **Otro médico (sin acceso):** en la misma lista, «✎ Otro médico (escribir el nombre)…». Se escribe el nombre y
+   queda como médico solicitante del examen y del informe (si aún no está validado), sin usuario ni acceso.
+
 ## Grabar CD / DVD del paciente con visor
 
 En la lista de estudios, al final de cada fila, hay un **ícono de disco** (también el botón «Grabar CD» en la ficha del

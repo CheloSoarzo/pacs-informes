@@ -31,7 +31,7 @@ from flask import abort, jsonify, render_template, request, send_file
 
 from config import Config
 from core import (app, centro_info, estudio_visible, informe_por_estudio, login_requerido, logo_path, pacs, pdf_de,
-                  registrar, usuario_actual)
+                  registrar, solicitante_de, usuario_actual)
 from servicios import registrar_entrega
 
 CD_MB = 700            # capacidad de un CD
@@ -153,7 +153,7 @@ def cd_preparar(estudio_id):
              "logo": bool(logo), "paciente": est["paciente_nombre"], "rut": est["paciente_id"],
              "fnac": est["paciente_fnac"], "sexo": est["paciente_sexo"], "fecha": est["fecha"], "hora": est["hora"],
              "examen": est["descripcion"], "modalidad": est["modalidad"], "acceso": est["accession"],
-             "solicitante": (inf["solicitante"] if inf else "") or est["solicitante"], "informe": hay_informe,
+             "solicitante": (inf["solicitante"] if inf else "") or solicitante_de(est), "informe": hay_informe,
              "series": series, "grabado": datetime.now().strftime("%d/%m/%Y %H:%M"), "version": _version()}
     with open(os.path.join(carpeta, "ABRIR_VISOR.HTML"), "w", encoding="utf-8") as f:
         f.write(render_template("cd_visor.html"))

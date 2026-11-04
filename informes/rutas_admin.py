@@ -33,10 +33,6 @@ def admin_usuarios():
             return redirect(url_for("admin_usuarios"))
         centros = ",".join(c.strip() for c in f.get("centros", "").split(",") if c.strip())
         filtro = f.get("filtro_solicitante", "").strip()
-        if perfil["solo_solicitados"] and not filtro:
-            flash(f"El perfil «{perfil['nombre']}» solo ve sus exámenes: indica el nombre del médico "
-                  "como aparece en los exámenes.", "error")
-            return redirect(url_for("admin_usuarios"))
         clave = f.get("clave", "")
         if clave and len(clave) < 10:
             flash("La clave debe tener al menos 10 caracteres.", "error")

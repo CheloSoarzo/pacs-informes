@@ -31,9 +31,9 @@ def _radiologos_ven_todo(adm):
 
 _radiologos_ven_todo(adm)
 perf = dict((n, int(i)) for i, n in re.findall(r'<option value="(\d+)"[^>]*>([^<]+)</option>', adm.get(B + "/admin/usuarios").text))
-for u, perfil in (("tec1", "Tecnólogos"), ("rad1", "Radiólogos"), ("der1", "Médicos de Consultas")):
+for u, perfil in (("tec1", "Tecnólogos"), ("rad1", "Radiólogos"), ("der1", "Médicos solicitantes")):
     d = {"csrf": adm.csrf, "usuario": u, "nombre": u.upper(), "perfil_id": perf[perfil], "clave": "clave-larga-123", "activo": "on"}
-    if perfil == "Médicos de Consultas":
+    if perfil == "Médicos solicitantes":
         d["filtro_solicitante"] = "ROJAS"
     adm.post(B + "/admin/usuarios", data=d)
 tec, rad, der = sesion("tec1", "clave-larga-123"), sesion("rad1", "clave-larga-123"), sesion("der1", "clave-larga-123")

@@ -25,6 +25,7 @@ import rutas_admin  # noqa: F401,E402
 import rutas_equipos  # noqa: F401,E402
 import integracion  # noqa: F401,E402  (agenda: órdenes, worklist y portal del paciente)
 import cd_paciente  # noqa: F401,E402  (CD/DVD del paciente con visor)
+import medicos_solicitantes  # noqa: F401,E402  (acceso de médicos solicitantes a sus exámenes)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=os.environ.get("DEBUG") == "1")
