@@ -251,6 +251,25 @@ el acceso. Lo que sigue sirve para dar acceso a mano desde el PACS (por ejemplo,
 4. **Otro médico (sin acceso):** en la misma lista, «✎ Otro médico (escribir el nombre)…». Se escribe el nombre y
    queda como médico solicitante del examen y del informe (si aún no está validado), sin usuario ni acceso.
 
+## Agenda: colores de estado y cargar respaldo
+
+- **Colores:** cada cita se pinta según su estado: Agendado (azul grisáceo), Confirmado (verde), **En espera**
+  (amarillo; antes se llamaba «Llegó»), Atendido (café claro), No asistió (rojo claro, tachado), Cancelado (gris, tachado).
+- **Cargar respaldo** (administrador, junto a «Respaldo»): se elige el archivo .db, se ve cuántas citas, pagos y
+  usuarios tiene la agenda y el respaldo, y escribiendo RESTAURAR se reemplazan **todos** los datos de la agenda.
+  Antes se guarda una copia automática en el servidor (carpeta de datos de la agenda → respaldos/antes-de-restaurar-…db).
+  Todos vuelven a iniciar sesión con los usuarios del respaldo. El PACS recibe las citas restauradas y borra las
+  órdenes que ya no existen. Si una cita del respaldo trae un número de acceso que en esta agenda era de otro
+  paciente, recibe uno nuevo (termina en R1, R2…) para no mezclarse con imágenes de otro paciente.
+
+## Horos / OsiriX
+
+- **Nodo DICOM listo:** en Administración → Equipos, sección «Horos / OsiriX», botón «Descargar nodo DICOM para Horos»
+  (archivo .plist). En Horos: Preferencias → Ubicaciones → Importar… Queda el PACS con recuperación C-GET.
+  Luego registra el AE Title de tu Horos (Preferencias → Escucha) como un equipo más en esa misma pantalla.
+- **Abrir en Horos / OsiriX:** en cada estudio, junto a «Descargar DICOM». Crea un enlace temporal (15 minutos,
+  3 usos) del ZIP del estudio y abre Horos u OsiriX, que lo descarga, importa y muestra. Queda en la auditoría.
+
 ## Grabar CD / DVD del paciente con visor
 
 En la lista de estudios, al final de cada fila, hay un **ícono de disco** (también el botón «Grabar CD» en la ficha del

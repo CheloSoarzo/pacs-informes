@@ -57,6 +57,21 @@
   </div>
 </div>
 
+<div class="panel config-equipo">
+  <h2>Horos / OsiriX</h2>
+  <p class="peq">Para buscar y bajar estudios del PACS desde Horos u OsiriX en un Mac:</p>
+  <ol class="peq pasos-horos">
+    <li>Descarga el archivo con los datos del PACS: <a class="btn peq" href="{{ url_for('horos_plist') }}">Descargar nodo DICOM para Horos</a></li>
+    <li>En Horos: <b>Preferencias → Ubicaciones (Locations) → Importar…</b> y elige el archivo. Queda «PACS {{ centro }}» con recuperación <b>C-GET</b>
+        (funciona aunque el Mac esté detrás de un router).</li>
+    <li>En Horos: <b>Preferencias → Escucha (Listener)</b>, anota el <b>AE Title</b> de tu Horos (mejor uno propio y difícil de adivinar, ej. <span class="mono">HOROS_{{ aet_sugerido }}</span>, máximo 16 caracteres).</li>
+    <li>Regístralo aquí abajo como un equipo más (nombre «Horos», ese AE Title{% if solo_aet %}; la IP es opcional{% else %} y la IP pública de donde está el Mac{% endif %}).</li>
+  </ol>
+  <p class="peq suave">Si Horos no tiene «Importar», crea la ubicación a mano con: dirección <span class="mono">{{ ip_servidor or '(IP del servidor)' }}</span>,
+    puerto <span class="mono">{{ puerto }}</span>, AE Title <span class="mono">{{ pacs_aet }}</span>, recuperación C-GET.
+    En cada estudio también está el botón <b>«Abrir en Horos»</b>, que lo baja directo sin configurar nada.</p>
+</div>
+
 {% if estado_pacs %}<div class="flash error">No se pudo consultar el PACS: {{ estado_pacs }}</div>{% endif %}
 
 <div class="tabla-wrap">

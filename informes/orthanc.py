@@ -216,6 +216,8 @@ class Orthanc:
         r = self._req("PUT", f"/modalities/{nombre}", json={
             "AET": aet, "Host": host, "Port": 104, "Manufacturer": "Generic",
             "AllowEcho": True, "AllowStore": permitir_store, "AllowMove": False,
+            # C-GET: Horos/OsiriX recuperan estudios por su misma conexión (sirve detrás de un router)
+            "AllowGet": True,
             # Consultar la lista de trabajo (worklist) que arma la agenda
             "AllowFind": True, "AllowFindWorklist": True,
             "AllowStorageCommitment": False})

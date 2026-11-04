@@ -529,3 +529,10 @@ a.btn.desactivado { pointer-events: none; opacity: .6; }
 .chip-medico.sin-acceso button { color: var(--suave); }
 .form-medico input[name=nombre_otro] { width: 220px; }
 .chip-medico small { font-weight: 400; opacity: .75; }
+
+/* Abrir en Horos / OsiriX */
+.btn-grupo { display: inline-flex; }
+.btn-grupo .btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.btn-grupo .btn + .btn { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; }
+.pasos-horos { margin: 6px 0 10px; padding-left: 20px; }
+.pasos-horos li { margin-bottom: 6px; }
