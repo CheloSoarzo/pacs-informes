@@ -235,6 +235,12 @@ asignados; los perfiles restringidos no ven teléfono, correo ni citas de la age
 
 ## Médicos solicitantes (ver sus exámenes con su usuario)
 
+**Lo normal es elegirlo en la agenda:** al agendar, «Médico solicitante» es una lista con los médicos del centro
+(los usuarios del PACS con perfil «Médicos solicitantes») y la opción «✎ Otro médico (escribir el nombre)…».
+Cuando llegan las imágenes y el examen se une a la cita, el médico elegido recibe acceso solo (etiqueta «agenda»)
+y queda como médico solicitante del examen y del informe. Si se cambia el médico en la cita, el anterior pierde
+el acceso. Lo que sigue sirve para dar acceso a mano desde el PACS (por ejemplo, a un segundo médico).
+
 1. Crea al médico en **Administración → Usuarios** con el perfil **«Médicos solicitantes»**. El campo «su nombre
    como aparece en los exámenes» es opcional: si lo llenas, además ve solo los exámenes donde figura como solicitante.
 2. En la ficha del examen, bajo «Radiólogo asignado», está **«Médicos solicitantes»**: eliges al médico del centro en

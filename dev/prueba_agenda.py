@@ -109,7 +109,7 @@ adm = requests.Session()
 adm.post(P + "/login", data={"usuario": "admin", "clave": "clave-prueba-123"})
 eid = "est-" + acc.lower()
 t = adm.get(P + f"/estudio/{eid}").text
-chk("Orden de agenda" in t and "Creatinina 0,9" in t and "Dra. Rojas" in t, "el estudio muestra la orden y notas de recepción")
+chk("Orden de agenda" in t and "Creatinina 0,9" in t and "DRA. ROJAS" in t, "el estudio muestra la orden y notas de recepción")
 csrf_adm = re.search(r'name="csrf" value="([^"]+)"', t).group(1)
 
 # --- botón «Ver en el PACS» de la agenda
@@ -200,6 +200,36 @@ chk(esperar(lambda: cita_de(e2["id"]).get("pacs_estado") == "imagenes", 30), "se
 r = adm.post(P + "/estudio/est-doble1/borrar", data={"csrf": cs, "confirmar": "BORRAR", "motivo": "duplicado"})
 chk("Examen borrado" in r.text and "vuelve a quedar sin imágenes" in r.text, "borrar el examen unido a una cita")
 chk(esperar(lambda: not cita_de(e2["id"]).get("pacs_estado"), 30), "la agenda vuelve a mostrar la cita «sin imágenes»")
+
+# --- médico solicitante elegido en la agenda: recibe acceso al examen cuando llegan las imágenes
+t = adm.get(P + "/admin/usuarios").text
+perf = dict((n, int(i)) for i, n in re.findall(r'<option value="(\d+)"[^>]*>([^<]+)</option>', t))
+cs = re.search(r'name="csrf" value="([^"]+)"', t).group(1)
+adm.post(P + "/admin/usuarios", data={"csrf": cs, "usuario": "drmed", "nombre": "Dra. Paula Méndez",
+                                      "perfil_id": perf["Médicos solicitantes"], "clave": "clave-larga-123", "activo": "on"})
+time.sleep(61)  # la agenda guarda la lista de médicos 1 minuto
+meds = ag.get(A + "/api/medicos").json()
+chk(any(m["nombre"] == "Dra. Paula Méndez" for m in meds), "la agenda trae la lista de médicos del centro desde el PACS")
+mid = next(m["id"] for m in meds if m["nombre"] == "Dra. Paula Méndez")
+cm = ag.post(A + "/api/citas", json={"fecha": hoy, "hora": "16:00", "equipo": "tc", "paciente": "Medico Prueba", "rut": "17.777.777-7",
+                                     "prevision": "Particular", "medico": "Dra. Paula Méndez", "medico_id": mid,
+                                     "examenes": [{"nombre": "TC de cerebro", "valor": 1000}]}).json()
+chk(cm["medico_id"] == mid and cm["medico"] == "DRA. PAULA MÉNDEZ", "la cita guarda el médico elegido de la lista")
+time.sleep(1.5)
+requests.post("http://localhost:8042/dev/llega", json={"AccessionNumber": cm["accesion"], "PatientID": "17777777-7",
+                                                       "PatientName": "PRUEBA^MEDICO", "Modality": "CT"})
+eidm = "est-" + cm["accesion"].lower()
+chk(esperar(lambda: cita_de(cm["id"]).get("pacs_estado") == "imagenes", 30), "llegan las imágenes y se une a la cita")
+med = requests.Session(); med.post(P + "/login", data={"usuario": "drmed", "clave": "clave-larga-123"})
+chk(med.get(P + f"/estudio/{eidm}").status_code == 200, "el médico de la cita ve el examen con su usuario, sin asignar nada")
+t = adm.get(P + f"/estudio/{eidm}").text
+chk("<span>Solicitante</span>DRA. PAULA MÉNDEZ" in t and "agenda</small>" in t, "queda como solicitante y con acceso «agenda»")
+# se cambia por un médico escrito a mano: pierde el acceso
+ag.put(A + f"/api/citas/{cm['id']}", json={**{k: cm[k] for k in ("fecha", "hora", "equipo", "paciente", "rut", "prevision")},
+                                           "medico": "Dr. Externo Soto", "medico_id": 0, "estado": "atendido",
+                                           "examenes": [{"nombre": "TC de cerebro", "valor": 1000}]})
+chk(esperar(lambda: med.get(P + f"/estudio/{eidm}").status_code == 403, 20), "al cambiar el médico en la agenda, el anterior pierde el acceso")
+chk("<span>Solicitante</span>DR. EXTERNO SOTO" in adm.get(P + f"/estudio/{eidm}").text, "y el nuevo médico escrito queda como solicitante")
 
 # --- bloqueo por intentos
 s4 = requests.Session()

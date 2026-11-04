@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS estudio_accesos (
     estudio_id TEXT NOT NULL,
     usuario_id INTEGER NOT NULL,
     asignado_por INTEGER, asignado_en TEXT,
+    origen TEXT DEFAULT '',                      -- 'agenda' si vino del médico de la cita
     PRIMARY KEY (estudio_id, usuario_id)
 );
 CREATE INDEX IF NOT EXISTS ix_accesos_usuario ON estudio_accesos(usuario_id);
@@ -360,6 +361,8 @@ def _migrar(con):
     if "solo_asignados" not in _columnas(con, "perfiles"):
         con.execute("ALTER TABLE perfiles ADD COLUMN solo_asignados INTEGER NOT NULL DEFAULT 0")
     # archivo: informe final subido ya firmado (PDF). Si existe, es el PDF oficial del informe.
+    if "origen" not in _columnas(con, "estudio_accesos"):
+        con.execute("ALTER TABLE estudio_accesos ADD COLUMN origen TEXT DEFAULT ''")
     # solicitante_manual: médico solicitante escrito a mano en el examen (sin usuario ni acceso)
     if "solicitante_manual" not in _columnas(con, "estudio_meta"):
         con.execute("ALTER TABLE estudio_meta ADD COLUMN solicitante_manual TEXT DEFAULT ''")

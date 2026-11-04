@@ -74,8 +74,12 @@ def preparar_db():
     con = sqlite3.connect(path, timeout=30)
     con.executescript(SCHEMA)
     # borrado_en: el estudio unido se borró del PACS; la agenda vuelve a «sin imágenes» hasta que llegue otro
-    if "borrado_en" not in {r[1] for r in con.execute("PRAGMA table_info(ordenes)")}:
+    cols = {r[1] for r in con.execute("PRAGMA table_info(ordenes)")}
+    if "borrado_en" not in cols:
         con.execute("ALTER TABLE ordenes ADD COLUMN borrado_en TEXT DEFAULT ''")
+    # medico_id: médico solicitante elegido en la agenda (usuario del PACS con acceso); 0 = escrito a mano
+    if "medico_id" not in cols:
+        con.execute("ALTER TABLE ordenes ADD COLUMN medico_id INTEGER DEFAULT 0")
     # Exámenes siempre en MAYÚSCULAS (así se ven en los equipos); corrige órdenes antiguas
     for acc, ex, exs in con.execute("SELECT accesion, examen, examenes FROM ordenes").fetchall():
         try:
@@ -127,6 +131,22 @@ def _token_ok():
     return bool(TOKEN) and secrets.compare_digest(enviado, TOKEN)
 
 
+def _entero(v):
+    try:
+        return max(0, int(v or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+@app.route("/api/integracion/medicos")
+def medicos_para_agenda():
+    """Médicos del centro (perfil «Médicos solicitantes») para la lista de la cita en la agenda."""
+    if not _token_ok():
+        abort(404)
+    from medicos_solicitantes import medicos_solicitantes
+    return jsonify(medicos=[{"id": m["id"], "nombre": m["nombre"]} for m in medicos_solicitantes()])
+
+
 def _txt(v, n):
     return str(v if v is not None else "").strip()[:n]
 
@@ -151,7 +171,8 @@ def recibir_ordenes():
             "equipo": _txt(o.get("equipo"), 5), "modalidad": MODALIDAD.get(_txt(o.get("equipo"), 5), ""),
             "paciente": _txt(o.get("paciente"), 120), "rut": _txt(o.get("rut"), 20), "rut_norm": rut_n,
             "fecha_nac": _txt(o.get("fecha_nac"), 10), "email": _txt(o.get("email"), 120),
-            "telefono": _txt(o.get("telefono"), 30), "medico": _txt(o.get("medico"), 120),
+            "telefono": _txt(o.get("telefono"), 30), "medico": _txt(o.get("medico"), 120).upper(),
+            "medico_id": _entero(o.get("medico_id")),
             "prevision": _txt(o.get("prevision"), 40), "examen": _txt(o.get("examen"), 600).upper(),
             "examenes": json.dumps([{"codigo": _txt(e.get("codigo"), 20), "nombre": _txt(e.get("nombre"), 160).upper()}
                                     for e in examenes[:10] if isinstance(e, dict)], ensure_ascii=False),
@@ -161,19 +182,22 @@ def recibir_ordenes():
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", fila["fecha"]):
             continue
         db.execute("""INSERT INTO ordenes (accesion, cita_id, fecha, hora, duracion, equipo, modalidad, paciente, rut, rut_norm,
-                fecha_nac, email, telefono, medico, prevision, examen, examenes, notas, estado_agenda, pagado, eliminada,
-                recibido, actualizado)
+                fecha_nac, email, telefono, medico, medico_id, prevision, examen, examenes, notas, estado_agenda, pagado,
+                eliminada, recibido, actualizado)
             VALUES (:accesion,:cita_id,:fecha,:hora,:duracion,:equipo,:modalidad,:paciente,:rut,:rut_norm,:fecha_nac,:email,
-                :telefono,:medico,:prevision,:examen,:examenes,:notas,:estado_agenda,:pagado,:eliminada,:ts,:ts)
+                :telefono,:medico,:medico_id,:prevision,:examen,:examenes,:notas,:estado_agenda,:pagado,:eliminada,:ts,:ts)
             ON CONFLICT(accesion) DO UPDATE SET cita_id=:cita_id, fecha=:fecha, hora=:hora, duracion=:duracion, equipo=:equipo,
                 modalidad=:modalidad, paciente=:paciente, rut=:rut, rut_norm=:rut_norm, fecha_nac=:fecha_nac, email=:email,
-                telefono=:telefono, medico=:medico, prevision=:prevision, examen=:examen, examenes=:examenes, notas=:notas,
+                telefono=:telefono, medico=:medico, medico_id=:medico_id, prevision=:prevision, examen=:examen, examenes=:examenes, notas=:notas,
                 estado_agenda=:estado_agenda, pagado=:pagado, eliminada=:eliminada, actualizado=:ts""", fila)
         clave = _txt(o.get("clave_hash"), 300)
         if rut_n and clave.startswith("scrypt$"):
             db.execute("""INSERT INTO portal_pacientes (rut_norm, clave_hash, actualizado) VALUES (?,?,?)
                 ON CONFLICT(rut_norm) DO UPDATE SET clave_hash=excluded.clave_hash, actualizado=excluded.actualizado""",
                        (rut_n, clave, ahora()))
+        unida = db.execute("SELECT * FROM ordenes WHERE accesion=?", (acc,)).fetchone()
+        if unida and unida["estudio_id"]:
+            aplicar_medico(db, unida)   # cambió el médico en una cita que ya tiene imágenes
         n += 1
     db.commit()
     _worklist_seguro()
@@ -206,8 +230,31 @@ def estados_para_agenda():
 FAMILIA = {"tc": {"CT"}, "rx": {"CR", "DX", "DR", "RF", "OT"}, "eco": {"US"}}
 
 
+def aplicar_medico(db, o):
+    """El médico solicitante de la cita pasa al examen: queda como solicitante (sale en el informe) y, si es un
+    médico del centro (usuario del PACS), recibe acceso para ver el examen con su usuario."""
+    eid = o["estudio_id"]
+    if not eid:
+        return
+    nombre = (o["medico"] or "").strip().upper()
+    mid = o["medico_id"] if "medico_id" in o.keys() else 0
+    db.execute("INSERT OR IGNORE INTO estudio_meta (estudio_id) VALUES (?)", (eid,))
+    if nombre:
+        db.execute("UPDATE estudio_meta SET solicitante_manual=? WHERE estudio_id=?", (nombre, eid))
+        # el informe en curso (no validado) toma el médico de la cita si no se escribió otro a mano
+        db.execute("UPDATE informes SET solicitante=? WHERE estudio_id=? AND estado!='firmado' AND "
+                   "COALESCE(solicitante,'') IN ('', ?)", (nombre, eid, nombre))
+    # accesos que vienen de la agenda: se reemplazan por el médico actual de la cita
+    db.execute("DELETE FROM estudio_accesos WHERE estudio_id=? AND origen='agenda' AND usuario_id!=?", (eid, mid or 0))
+    if mid and db.execute("SELECT 1 FROM usuarios u JOIN perfiles p ON p.id=u.perfil_id "
+                          "WHERE u.id=? AND u.activo=1 AND p.solo_solicitados=1", (mid,)).fetchone():
+        db.execute("INSERT OR IGNORE INTO estudio_accesos (estudio_id, usuario_id, asignado_por, asignado_en, origen) "
+                   "VALUES (?,?,NULL,?,'agenda')", (eid, mid, ahora()))
+
+
 def _unir(db, o, estudio_id, como):
     db.execute("UPDATE ordenes SET estudio_id=? WHERE accesion=?", (estudio_id, o["accesion"]))
+    aplicar_medico(db, db.execute("SELECT * FROM ordenes WHERE accesion=?", (o["accesion"],)).fetchone())
     # Correo y teléfono del paciente para enviarle el informe
     db.execute("INSERT OR IGNORE INTO estudio_meta (estudio_id) VALUES (?)", (estudio_id,))
     db.execute("""UPDATE estudio_meta SET paciente_email=CASE WHEN COALESCE(paciente_email,'')='' THEN ? ELSE paciente_email END,

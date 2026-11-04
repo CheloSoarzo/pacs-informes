@@ -528,3 +528,4 @@ a.btn.desactivado { pointer-events: none; opacity: .6; }
 .chip-medico.sin-acceso small { color: var(--suave); font-weight: 400; }
 .chip-medico.sin-acceso button { color: var(--suave); }
 .form-medico input[name=nombre_otro] { width: 220px; }
+.chip-medico small { font-weight: 400; opacity: .75; }

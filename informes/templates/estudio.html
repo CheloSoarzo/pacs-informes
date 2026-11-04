@@ -102,7 +102,7 @@
   <div class="medicos-acceso" id="medicos">
     <div><span class="etq">Médicos solicitantes</span>
       {% for a in md.accesos %}
-      <span class="chip-medico" title="Ve este examen con su usuario">{{ a.nombre }}
+      <span class="chip-medico" title="Ve este examen con su usuario{{ ' (elegido en la agenda)' if a.origen == 'agenda' }}">{{ a.nombre }}{% if a.origen == 'agenda' %} <small>agenda</small>{% endif %}
         {% if puede('acceso_solicitante') %}
         <form method="post" action="{{ url_for('acceso_medico', estudio_id=est.id) }}" class="inline">
           <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="quitar">
