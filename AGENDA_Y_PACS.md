@@ -253,6 +253,14 @@ el acceso. Lo que sigue sirve para dar acceso a mano desde el PACS (por ejemplo,
 
 ## Agenda: colores de estado y cargar respaldo
 
+- **Usuarios por agenda:** en Usuarios, cada usuario (no administrador) tiene casillas TC / RX / ECO con las agendas
+  que ve; sin ninguna marcada ve todas. No ve, ni puede agendar, en las demás.
+- **Solo lectura:** no ve Caja, Aranceles, valores, copagos ni medios de pago (solo que la cita está pagada).
+- **Comentario en la agenda:** las notas de la cita se ven junto al nombre del paciente (💬).
+- **Horas cada 15 minutos:** la duración por defecto es 15 minutos en los tres equipos.
+- **Dos medios de pago:** al cobrar, «+ Pagar con dos medios de pago»: segundo medio y su monto; el resto va al
+  primero. La caja reparte el monto entre ambos medios (y el efectivo esperado cuenta solo la parte en efectivo).
+
 - **Colores:** cada cita se pinta según su estado: Agendado (azul grisáceo), Confirmado (verde), **En espera**
   (amarillo; antes se llamaba «Llegó»), Atendido (café claro), No asistió (rojo claro, tachado), Cancelado (gris, tachado).
 - **Cargar respaldo** (administrador, junto a «Respaldo»): se elige el archivo .db, se ve cuántas citas, pagos y
