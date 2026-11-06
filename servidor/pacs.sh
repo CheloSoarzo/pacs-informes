@@ -20,6 +20,9 @@
 #   pacs cuota <nombre> <GB>   espacio contratado de un PACS (se muestra en el panel; 0 = sin límite)
 #   pacs estado                actualiza los números del panel (lo hace cron cada 5 min)
 #   pacs dicom-modo <nombre> aetitle|ip   cómo acepta equipos: solo por AE Title (cualquier IP) o por AE Title + IP
+#   pacs dictado-ia activar [small|medium]   transcripción automática de los dictados con IA (Whisper),
+#                              en este mismo servidor y para todos sus PACS (el audio no sale del servidor)
+#   pacs dictado-ia desactivar | estado
 #   pacs base                  (interno) crea la red compartida y la entrada web HTTPS
 set -euo pipefail
 
@@ -46,6 +49,12 @@ dc() {  # docker compose de un PACS (con su agenda, si tiene)
     docker compose -p "pacs-$n" -f "$COMPOSE_INST" --env-file "$INST/$n/.env" "$@"
 }
 proxy() { INSTANCIAS_DIR="$INST" docker compose -p pacs-proxy -f "$COMPOSE_PROXY" "$@"; }
+# Transcripción automática de dictados (un solo contenedor para todos los PACS)
+COMPOSE_TRANSC="$CODIGO/docker-compose.transcriptor.yml"
+transc() { touch "$INST/servidor.env"; INSTANCIAS_DIR="$INST" docker compose -p pacs-transcriptor -f "$COMPOSE_TRANSC" --env-file "$INST/servidor.env" "$@"; }
+dictado_ia_activo() { [ "$(leer "$INST/servidor.env" DICTADO_IA)" = "true" ]; }
+whisper_url() { dictado_ia_activo && echo "http://transcriptor:8000" || true; }
+whisper_modelo() { local m; m="$(leer "$INST/servidor.env" WHISPER_MODELO)"; echo "${m:-whisper-1}"; }
 
 ip_publica() {
   leer "$INST/servidor.env" IP_PUBLICA || true
@@ -282,8 +291,8 @@ CENTRO_EMAIL=
 LINK_DIAS_VIGENCIA=60
 LINK_REQUIERE_CLAVE=true
 
-WHISPER_URL=
-WHISPER_MODEL=whisper-1
+WHISPER_URL=$(whisper_url)
+WHISPER_MODEL=$(whisper_modelo)
 WHISPER_API_KEY=
 
 SMTP_HOST=
@@ -475,6 +484,49 @@ cmd_dicom_modo() {
   fi
 }
 
+cmd_dictado_ia() {
+  local accion="${1:-estado}" modelo="${2:-small}" n url=""
+  case "$accion" in
+    activar)
+      case "$modelo" in small|medium|large-v3) ;; *) error "modelo no válido: usa small (recomendado) o medium";; esac
+      local ram; ram="$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)"
+      if [ "$modelo" != small ] && [ "$ram" -lt 7000 ]; then
+        echo "Aviso: el modelo $modelo necesita ~3 GB de RAM y este servidor tiene ${ram} MB en total."
+        echo "        Con varios PACS funcionando puede quedar justo. Si notas lentitud: pacs dictado-ia activar small"
+      fi
+      mkdir -p "$INST/transcriptor/modelos"
+      touch "$INST/servidor.env"
+      poner "$INST/servidor.env" DICTADO_IA true
+      poner "$INST/servidor.env" WHISPER_MODELO "$modelo"
+      echo "Preparando el transcriptor (la primera vez tarda unos minutos)..."
+      transc up -d --build --force-recreate
+      url="http://transcriptor:8000";;
+    desactivar)
+      poner "$INST/servidor.env" DICTADO_IA false
+      transc down || true;;
+    estado)
+      if ! dictado_ia_activo; then echo "Transcripción automática: desactivada (actívala con: pacs dictado-ia activar)"; return; fi
+      echo "Transcripción automática: activada · modelo $(whisper_modelo)"
+      transc exec -T transcriptor python -c "import urllib.request;print(urllib.request.urlopen('http://localhost:8000/salud',timeout=5).read().decode())" \
+        || echo "El transcriptor no responde. Revisa: docker logs pacs-transcriptor-transcriptor-1"
+      echo "Últimos registros:"; transc logs --tail 8 transcriptor 2>/dev/null | sed 's/^/  /'
+      return;;
+    *) error "uso: pacs dictado-ia activar [small|medium] | desactivar | estado";;
+  esac
+  for n in $(instancias); do
+    poner "$INST/$n/.env" WHISPER_URL "$url"
+    poner "$INST/$n/.env" WHISPER_MODEL "$(whisper_modelo)"
+    [ "$(leer "$INST/$n/.env" ACTIVO)" = "false" ] && continue
+    dc "$n" up -d informes
+  done
+  if [ "$accion" = activar ]; then
+    echo "Listo. Los dictados nuevos se transcriben solos con el modelo $modelo."
+    echo "La primera vez se descarga el modelo (~500 MB small, ~1,5 GB medium). Revisa cuándo está listo con: pacs dictado-ia estado"
+  else
+    echo "Transcripción automática desactivada. Los dictados siguen funcionando como siempre."
+  fi
+}
+
 cmd_iniciar() { existe "${1:-}"; poner "$INST/$1/.env" ACTIVO true; dc "$1" up -d; recargar_caddy; echo "PACS $1 iniciado"; }
 cmd_detener() { existe "${1:-}"; poner "$INST/$1/.env" ACTIVO false; dc "$1" stop; recargar_caddy; echo "PACS $1 detenido (sus datos se conservan)"; }
 cmd_logs() { existe "${1:-}"; dc "$1" logs --tail 200 -f informes; }
@@ -492,6 +544,8 @@ cmd_post_actualizar() {
   local con_agenda=""
   for n in $(instancias); do [ -n "$(leer "$INST/$n/.env" AGENDA_DOMINIO)" ] && con_agenda="$n"; done
   if [ -n "$con_agenda" ]; then traer_agenda || echo "Aviso: no se pudo actualizar la agenda"; dc "$con_agenda" build agenda || true; fi
+  # Transcripción automática de dictados: se reconstruye si está activada
+  if dictado_ia_activo; then transc up -d --build || echo "Aviso: no se pudo actualizar el transcriptor"; fi
   for n in $(instancias); do
     # PACS creados antes de existir esta opción: son los propios
     grep -qE "^ADMINISTRA_SERVIDOR=" "$INST/$n/.env" || poner "$INST/$n/.env" ADMINISTRA_SERVIDOR true
@@ -610,5 +664,6 @@ case "$c" in
   cuota) cmd_cuota "$@";;
   estado) cmd_estado;;
   dicom-modo) cmd_dicom_modo "$@";;
-  *) sed -n '2,22p' "$0"; exit 1;;
+  dictado-ia) cmd_dictado_ia "$@";;
+  *) sed -n '2,25p' "$0"; exit 1;;
 esac

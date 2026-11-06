@@ -212,7 +212,8 @@ Hay dos formas, y se pueden usar juntas:
 
 - **Dictado de audio para transcripción** (como en pacs4me): se graba en el navegador y queda guardado en el estudio. Funciona en Chrome, Edge, Firefox y Safari.
 - **Voz a texto** (F2): el texto aparece mientras hablas. Por defecto usa el reconocimiento de Chrome/Edge (el audio lo procesa Google/Microsoft). Comandos: "punto", "coma", "dos puntos", "punto aparte", "nueva línea".
-- **Servidor Whisper propio (opcional, recomendado)**: si configuras `WHISPER_URL`, la voz a texto se procesa en tu servidor y además cada dictado de audio trae un **borrador automático** que la transcripcionista solo corrige (botón «Usar texto automático»).
+- **Transcripción automática con IA (recomendado)**: en el servidor, `pacs dictado-ia activar` levanta un transcriptor Whisper propio (carpeta `transcriptor/`), compartido por todos los PACS y sin puertos abiertos: el audio no sale del servidor. Cada dictado nuevo se transcribe solo («Transcribiendo con IA…») y la transcripcionista encuentra el botón **«Usar texto de la IA»** para corregirlo escuchando el audio. Si falla, se reintenta hasta 3 veces y queda el botón «Reintentar»; si el servidor se reinicia, los pendientes se retoman solos. Con esto, la voz a texto (F2) también pasa a procesarse en tu servidor. Modelos: `small` (por defecto, liviano) o `medium` (más preciso, necesita más RAM). Revisa el estado con `pacs dictado-ia estado` y apágalo con `pacs dictado-ia desactivar`.
+  También sirve cualquier servidor compatible con la API de OpenAI configurando `WHISPER_URL` a mano.
 
 
 ## Respaldos (importante)

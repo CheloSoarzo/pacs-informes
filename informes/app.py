@@ -13,6 +13,7 @@ Módulos:
   rutas_pacs.py     control de acceso al visor/PACS, dictado con Whisper
   rutas_admin.py    usuarios, perfiles, plantillas, frases, ajustes, auditoría
   rutas_equipos.py  equipos autorizados a enviar por internet (lista blanca DICOM)
+  transcripcion_auto.py  cola de transcripción automática de dictados (Whisper)
 """
 import os
 
@@ -27,6 +28,9 @@ import integracion  # noqa: F401,E402  (agenda: órdenes, worklist y portal del 
 import cd_paciente  # noqa: F401,E402  (CD/DVD del paciente con visor)
 import medicos_solicitantes  # noqa: F401,E402  (acceso de médicos solicitantes a sus exámenes)
 import horos  # noqa: F401,E402  (nodos DICOM y «Abrir en Horos / OsiriX»)
+import transcripcion_auto  # noqa: E402  (borrador automático de los dictados con Whisper)
+
+transcripcion_auto.iniciar()  # retoma los dictados que quedaron por transcribir
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=os.environ.get("DEBUG") == "1")

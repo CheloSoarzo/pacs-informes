@@ -14,7 +14,7 @@
         <span class="tiempo-audio mono">0:00 / 0:00</span>
         <input type="range" min="0" max="1000" value="0" aria-label="Posición del audio">
         <select aria-label="Velocidad"><option value="0.75">0,75×</option><option value="1" selected>1×</option><option value="1.25">1,25×</option><option value="1.5">1,5×</option><option value="2">2×</option></select>
-        ${el.dataset.auto ? '<button type="button" class="btn peq" data-a="auto">Usar texto automático</button>' : ''}`;
+        ${el.dataset.auto ? '<span class="auto-ia"></span>' : ''}`;
       this.a = new Audio();
       this.a.preload = 'metadata';
       this.a.src = el.dataset.src;
@@ -40,8 +40,9 @@
       el.addEventListener('click', e => {
         activo = this;
         const b = e.target.closest('[data-a]'); if (!b) return;
-        ({ atras: () => this.mover(-3), adelante: () => this.mover(3), play: () => this.alternar(), auto: () => this.auto() })[b.dataset.a]();
+        ({ atras: () => this.mover(-3), adelante: () => this.mover(3), play: () => this.alternar(), auto: () => this.auto(), reintentar: () => this.reintentar() })[b.dataset.a]();
       });
+      if (el.dataset.auto) this.pintarAuto(el.dataset.autoEstado);
       if (!activo || el.closest('.dictado-item.activo')) activo = activo && activo.el.closest('.dictado-item.activo') ? activo : this;
     }
     pintar() {
@@ -51,10 +52,38 @@
     }
     alternar() { this.a.paused ? this.a.play() : this.a.pause(); }
     mover(s) { this.a.currentTime = Math.max(0, Math.min((this.dur || 1e9), this.a.currentTime + s)); }
+    // Borrador automático (IA): estado en vivo y botón para pasarlo al informe
+    pintarAuto(estado) {
+      const c = this.el.querySelector('.auto-ia'); if (!c) return;
+      clearTimeout(this.tAuto);
+      if (estado === 'listo') {
+        c.innerHTML = '<button type="button" class="btn peq prim" data-a="auto" title="Inserta en el informe el texto que transcribió la IA, para corregirlo escuchando el audio">Usar texto de la IA</button>';
+      } else if (estado === 'pendiente' || estado === 'procesando') {
+        c.innerHTML = '<span class="badge dictado" role="status">Transcribiendo con IA…</span>';
+        this.tAuto = setTimeout(() => this.revisarAuto(), 8000);
+      } else if (estado === 'error') {
+        c.innerHTML = '<span class="peq peligro">La IA no pudo transcribir este audio.</span> <button type="button" class="enlace peq" data-a="reintentar">Reintentar</button>';
+      } else c.innerHTML = '';
+    }
+    async revisarAuto() {
+      try {
+        const r = await fetch(this.el.dataset.auto, { credentials: 'same-origin' });
+        if (r.ok) { const j = await r.json(); this.pintarAuto(j.estado); return; }
+      } catch (e) { /* sin conexión: se vuelve a intentar */ }
+      this.tAuto = setTimeout(() => this.revisarAuto(), 15000);
+    }
     async auto() {
       const r = await fetch(this.el.dataset.auto, { credentials: 'same-origin' });
       const j = await r.json();
       if (j.texto) document.dispatchEvent(new CustomEvent('insertar-texto', { detail: j.texto }));
+      else this.pintarAuto(j.estado);
+    }
+    async reintentar() {
+      const csrf = (document.querySelector('input[name=csrf]') || {}).value || '';
+      const r = await fetch(this.el.dataset.reintentar, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF': csrf } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { alert(j.error || 'No se pudo reintentar.'); return; }
+      this.pintarAuto('pendiente');
     }
   }
 

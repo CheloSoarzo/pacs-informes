@@ -23,7 +23,7 @@
       <td class="ocultar-movil peq">{% for m in (d.modalidad or '').split('/') if m %}<span class="mod">{{ m }}</span> {% endfor %}{{ d.descripcion }}</td>
       <td class="ocultar-movil peq suave">{{ d.institucion }}</td>
       <td class="peq">{{ d.dictado_por }}</td>
-      <td class="peq mono">{{ d.duracion|mmss }}</td>
+      <td class="peq mono">{{ d.duracion|mmss }}{% if d.auto_estado == 'listo' %} <span class="badge firmado" title="La IA ya transcribió este audio: la transcripcionista solo corrige">Texto IA</span>{% elif d.auto_estado in ('pendiente','procesando') %} <span class="badge dictado" title="La IA está transcribiendo este audio">IA…</span>{% endif %}</td>
       <td class="peq">{% if ver == 'pendientes' %}{{ d.espera }}{% else %}
         <span class="badge {{ 'dictado' if d.estado in ('pendiente','tomado') else ('firmado' if d.estado_informe == 'firmado' else 'por_validar') }}">
           {{ {'pendiente':'Por transcribir','tomado':'En transcripción','transcrito':('Validado' if d.estado_informe == 'firmado' else 'Por validar')}[d.estado] }}</span>{% endif %}</td>

@@ -114,7 +114,9 @@ CREATE TABLE IF NOT EXISTS dictados (
     estado TEXT NOT NULL DEFAULT 'pendiente',    -- pendiente | tomado | transcrito | anulado
     transcriptor_id INTEGER, tomado_en TEXT, transcrito_en TEXT,
     texto_auto TEXT DEFAULT '',                  -- borrador automático (Whisper), si está configurado
-    nota TEXT DEFAULT ''
+    nota TEXT DEFAULT '',
+    auto_estado TEXT NOT NULL DEFAULT '',        -- '' | pendiente | procesando | listo | error (ver transcripcion_auto.py)
+    auto_en TEXT DEFAULT '', auto_intentos INTEGER NOT NULL DEFAULT 0, auto_error TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS frases (
@@ -368,6 +370,14 @@ def _migrar(con):
         con.execute("ALTER TABLE estudio_meta ADD COLUMN solicitante_manual TEXT DEFAULT ''")
     if "archivo" not in _columnas(con, "informe_versiones"):
         con.execute("ALTER TABLE informe_versiones ADD COLUMN archivo TEXT DEFAULT ''")
+    # Transcripción automática de dictados (cola con reintentos)
+    cols = _columnas(con, "dictados")
+    for col, tipo in (("auto_estado", "TEXT NOT NULL DEFAULT ''"), ("auto_en", "TEXT DEFAULT ''"),
+                      ("auto_intentos", "INTEGER NOT NULL DEFAULT 0"), ("auto_error", "TEXT DEFAULT ''")):
+        if col not in cols:
+            con.execute(f"ALTER TABLE dictados ADD COLUMN {col} {tipo}")
+    if "auto_estado" not in cols:  # dictados que ya tenían borrador de la versión anterior
+        con.execute("UPDATE dictados SET auto_estado='listo' WHERE texto_auto != ''")
 
     # Permisos nuevos de esta versión → a los perfiles de fábrica que ya existían (una sola vez por permiso)
     hay_perfiles = con.execute("SELECT COUNT(*) FROM perfiles").fetchone()[0] > 0

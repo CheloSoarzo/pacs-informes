@@ -244,7 +244,9 @@
             {% if d.nota %}<div class="peq">Nota: {{ d.nota }}</div>{% endif %}
             {% if puede('dictados_escuchar') or d.creado_por == usuario.id %}
               <div class="reproductor" data-src="{{ url_for('audio_dictado', did=d.id) }}"
-                   data-auto="{{ url_for('texto_auto', did=d.id) if d.texto_auto and puede_editar else '' }}"></div>
+                   data-auto="{{ url_for('texto_auto', did=d.id) if d.auto_estado and puede_editar else '' }}"
+                   data-auto-estado="{{ d.auto_estado or '' }}"
+                   data-reintentar="{{ url_for('reintentar_texto_auto', did=d.id) }}"></div>
             {% endif %}
             {% if d.estado == 'pendiente' and (puede('dictados_anular') or d.creado_por == usuario.id) %}
             <form method="post" action="{{ url_for('anular_dictado', did=d.id) }}" class="inline" data-confirmar="¿Anular este dictado?">

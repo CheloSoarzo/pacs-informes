@@ -1,11 +1,8 @@
 """Pantalla de estudio: informe, flujo dictado → transcripción → validación, asignación, notas y entregas."""
 import mimetypes
 import os
-import sqlite3
-import threading
 from datetime import datetime
 
-import requests
 from flask import abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 
 from config import Config
@@ -17,6 +14,7 @@ from db import ahora, get_db
 from orthanc import OrthancError
 from pdf import generar_pdf
 from permisos import puede, ve_estudio
+import transcripcion_auto
 from servicios import asignar, enviar_correo_informe, medico_dictante, registrar_entrega, validar_informe
 
 EXT_AUDIO = {"audio/webm": ".webm", "audio/ogg": ".ogg", "audio/mp4": ".m4a", "audio/mpeg": ".mp3",
@@ -448,25 +446,6 @@ def contacto(estudio_id):
 
 
 # ------------------------------------------------------------------ dictados de audio
-def _transcribir_auto(dictado_id, ruta, mime, db_path):
-    """Borrador automático con Whisper (en segundo plano). Si falla, el dictado sigue igual."""
-    try:
-        headers = {"Authorization": f"Bearer {Config.WHISPER_API_KEY}"} if Config.WHISPER_API_KEY else {}
-        with open(ruta, "rb") as fh:
-            r = requests.post(f"{Config.WHISPER_URL}/v1/audio/transcriptions", headers=headers,
-                              files={"file": (os.path.basename(ruta), fh, mime)},
-                              data={"model": Config.WHISPER_MODEL, "language": "es",
-                                    "prompt": "Informe radiológico. Hallazgos. Impresión."}, timeout=600)
-        r.raise_for_status()
-        texto = r.json().get("text", "").strip()
-        con = sqlite3.connect(db_path, timeout=30)
-        con.execute("UPDATE dictados SET texto_auto=? WHERE id=?", (texto, dictado_id))
-        con.commit()
-        con.close()
-    except Exception:  # noqa: BLE001 - el borrador automático es opcional
-        pass
-
-
 @app.route("/estudio/<estudio_id>/dictados", methods=["POST"])
 @login_requerido("dictar")
 def subir_dictado(estudio_id):
@@ -497,15 +476,16 @@ def subir_dictado(estudio_id):
     nombre = f"{did}{EXT_AUDIO.get(mime, '.webm')}"
     ruta = os.path.join(Config.DATA_DIR, "dictados", nombre)
     audio.save(ruta)
-    db.execute("UPDATE dictados SET archivo=? WHERE id=?", (nombre, did))
+    # Con servidor Whisper, el dictado entra a la cola de transcripción automática
+    db.execute("UPDATE dictados SET archivo=?, auto_estado=? WHERE id=?",
+               (nombre, "pendiente" if Config.WHISPER_URL else "", did))
     # Si nadie está asignado, el estudio queda asignado a quien dictó
     if not meta_de(estudio_id).get("radiologo_id") and puede(u, "firmar"):
         asignar(estudio_id, u["id"])
     db.commit()
     registrar("dictado", f"{estudio_id} dictado {did} ({duracion:.0f}s)")
     if Config.WHISPER_URL:
-        threading.Thread(target=_transcribir_auto, daemon=True,
-                         args=(did, ruta, mime, os.path.join(Config.DATA_DIR, "informes.db"))).start()
+        transcripcion_auto.avisar()
     return jsonify(ok=True, id=did)
 
 
@@ -536,7 +516,22 @@ def audio_dictado(did):
 @login_requerido("dictados_escuchar")
 def texto_auto(did):
     d = _dictado_visible(did)
-    return jsonify(texto=d["texto_auto"] or "")
+    return jsonify(texto=d["texto_auto"] or "", estado=d["auto_estado"] or "")
+
+
+@app.route("/dictados/<int:did>/texto-auto/reintentar", methods=["POST"])
+@login_requerido("dictados_escuchar")
+def reintentar_texto_auto(did):
+    d = _dictado_visible(did)
+    if not Config.WHISPER_URL:
+        return jsonify(error="La transcripción automática no está activada en este servidor."), 400
+    if d["auto_estado"] in ("error", "", "listo") and d["estado"] != "anulado":
+        db = get_db()
+        db.execute("UPDATE dictados SET auto_estado='pendiente', auto_intentos=0, auto_error='' WHERE id=?", (did,))
+        db.commit()
+        registrar("transcripcion_auto_reintentar", str(did))
+        transcripcion_auto.avisar()
+    return jsonify(ok=True, estado="pendiente")
 
 
 @app.route("/dictados/<int:did>/tomar", methods=["POST"])

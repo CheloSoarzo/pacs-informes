@@ -1,0 +1,26 @@
+# Transcripción automática de dictados (Whisper), compartida por todos los PACS del servidor.
+# No se usa directamente: la maneja `pacs dictado-ia activar|desactivar|estado`.
+# No publica ningún puerto: las apps de informes lo usan por la red interna en http://transcriptor:8000
+services:
+  transcriptor:
+    build: ./transcriptor
+    image: pacs-transcriptor:latest
+    restart: unless-stopped
+    environment:
+      WHISPER_MODELO: ${WHISPER_MODELO:-small}
+      WHISPER_HILOS: ${WHISPER_HILOS:-2}
+      WHISPER_BEAM: ${WHISPER_BEAM:-5}
+      MODELOS_DIR: /modelos
+    volumes:
+      - ${INSTANCIAS_DIR:-/opt/pacs-instancias}/transcriptor/modelos:/modelos
+    # Límites para que el PACS siga respondiendo mientras transcribe
+    cpus: ${WHISPER_CPUS:-1.5}
+    mem_limit: ${WHISPER_RAM:-2500m}
+    networks:
+      proxy:
+        aliases: ["transcriptor"]
+
+networks:
+  proxy:
+    name: pacs-proxy
+    external: true
