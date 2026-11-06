@@ -13,9 +13,11 @@ Variables: WHISPER_MODELO (small | medium | large-v3, por defecto small), WHISPE
 """
 import json
 import os
+import subprocess
 import tempfile
 import threading
 import time
+import traceback
 from email.parser import BytesParser
 from email.policy import HTTP
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -52,16 +54,31 @@ def cargar():
     _listo.set()
 
 
+def leer_audio(ruta):
+    """Convierte cualquier audio (webm, ogg, m4a, mp3, wav) a 16 kHz mono con ffmpeg.
+
+    No se usa el lector interno de faster-whisper (PyAV): sus versiones nuevas cambian de API
+    y dejan de leer los audios. ffmpeg es estable y lee también los webm sin duración del navegador.
+    """
+    import numpy as np
+    r = subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-i", ruta,
+                        "-f", "s16le", "-ac", "1", "-ar", "16000", "-"], capture_output=True, timeout=600)
+    if r.returncode != 0 or not r.stdout:
+        raise RuntimeError("no se pudo leer el audio: " + (r.stderr.decode("utf-8", "replace").strip()[-300:] or "archivo vacío"))
+    return np.frombuffer(r.stdout, np.int16).astype(np.float32) / 32768.0
+
+
 def transcribir(ruta, idioma="es", prompt=""):
     _listo.wait()
     if _modelo is None:
         raise RuntimeError(f"El modelo no está disponible: {_error_carga}")
+    audio = leer_audio(ruta)
     with _turno:
         t = time.time()
-        segs, info = _modelo.transcribe(ruta, language=idioma or "es", beam_size=BEAM, vad_filter=True,
+        segs, info = _modelo.transcribe(audio, language=idioma or "es", beam_size=BEAM, vad_filter=True,
                                         initial_prompt=(prompt or PROMPT_BASE)[:800])
         texto = " ".join(s.text.strip() for s in segs).strip()
-        return {"text": texto, "duration": round(info.duration, 1), "segundos": round(time.time() - t, 1)}
+        return {"text": texto, "duration": round(len(audio) / 16000, 1), "segundos": round(time.time() - t, 1)}
 
 
 def leer_multipart(tipo, cuerpo):
@@ -115,6 +132,7 @@ class Manejador(BaseHTTPRequestHandler):
             try:
                 r = transcribir(tmp.name, campos.get("language", "es"), campos.get("prompt", ""))
             except Exception as e:  # noqa: BLE001
+                print("Error al transcribir:\n" + traceback.format_exc(), flush=True)
                 return self._json(500, {"error": f"No se pudo transcribir: {e}"})
         print(f"Transcrito: {r['duration']:.0f} s de audio en {r['segundos']:.0f} s", flush=True)
         self._json(200, r)

@@ -51,7 +51,13 @@ dc() {  # docker compose de un PACS (con su agenda, si tiene)
 proxy() { INSTANCIAS_DIR="$INST" docker compose -p pacs-proxy -f "$COMPOSE_PROXY" "$@"; }
 # Transcripción automática de dictados (un solo contenedor para todos los PACS)
 COMPOSE_TRANSC="$CODIGO/docker-compose.transcriptor.yml"
-transc() { touch "$INST/servidor.env"; INSTANCIAS_DIR="$INST" docker compose -p pacs-transcriptor -f "$COMPOSE_TRANSC" --env-file "$INST/servidor.env" "$@"; }
+transc() {
+  touch "$INST/servidor.env"
+  local v; for v in WHISPER_MODELO WHISPER_HILOS WHISPER_BEAM WHISPER_CPUS WHISPER_RAM; do
+    local x; x="$(leer "$INST/servidor.env" "$v")"; [ -n "$x" ] && export "$v=$x"
+  done
+  INSTANCIAS_DIR="$INST" docker compose -p pacs-transcriptor -f "$COMPOSE_TRANSC" "$@"
+}
 dictado_ia_activo() { [ "$(leer "$INST/servidor.env" DICTADO_IA)" = "true" ]; }
 whisper_url() { dictado_ia_activo && echo "http://transcriptor:8000" || true; }
 whisper_modelo() { local m; m="$(leer "$INST/servidor.env" WHISPER_MODELO)"; echo "${m:-whisper-1}"; }

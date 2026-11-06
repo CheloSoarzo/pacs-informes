@@ -59,7 +59,12 @@ def transcribir_archivo(ruta, mime):
         r = requests.post(f"{Config.WHISPER_URL}/v1/audio/transcriptions", headers=headers,
                           files={"file": (os.path.basename(ruta), fh, mime or "audio/webm")},
                           data={"model": Config.WHISPER_MODEL, "language": "es", "prompt": PROMPT}, timeout=1800)
-    r.raise_for_status()
+    if not r.ok:
+        try:
+            detalle = r.json().get("error") or r.text
+        except ValueError:
+            detalle = r.text
+        raise RuntimeError(f"Transcriptor respondió {r.status_code}: {detalle[:250]}")
     return (r.json().get("text") or "").strip()
 
 
