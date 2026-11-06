@@ -17,6 +17,35 @@ MODS_DISP = ["CT", "CR", "DX", "US", "MR", "MG"]
 
 
 # ------------------------------------------------------------------ usuarios
+@app.route("/admin/usuarios/<int:uid>/eliminar", methods=["POST"])
+@login_requerido("usuarios")
+def eliminar_usuario(uid):
+    """Elimina un usuario: ya no entra ni aparece en las listas, y su nombre de usuario queda libre.
+
+    No se borra de la base: los informes que firmó, sus dictados y el registro de auditoría
+    siguen mostrando su nombre (los informes médicos se deben conservar con su autor).
+    """
+    db = get_db()
+    u = db.execute("SELECT u.*, p.clave AS perfil_clave FROM usuarios u LEFT JOIN perfiles p ON p.id=u.perfil_id "
+                   "WHERE u.id=? AND u.eliminado=0", (uid,)).fetchone()
+    if not u:
+        flash("Ese usuario ya no existe.", "error")
+    elif uid == usuario_actual()["id"]:
+        flash("No puedes eliminar tu propio usuario.", "error")
+    elif u["perfil_clave"] == "admin" and u["activo"] and db.execute(
+            "SELECT COUNT(*) FROM usuarios u JOIN perfiles p ON p.id=u.perfil_id "
+            "WHERE p.clave='admin' AND u.activo=1 AND u.eliminado=0").fetchone()[0] <= 1:
+        flash("No puedes eliminar al único administrador.", "error")
+    else:
+        db.execute("UPDATE usuarios SET eliminado=1, activo=0, usuario=? WHERE id=?",
+                   (f"{u['usuario']}~eliminado{uid}", uid))
+        db.execute("DELETE FROM filtros WHERE usuario_id=?", (uid,))  # sus filtros guardados ya no sirven
+        db.commit()
+        registrar("eliminar_usuario", f"{uid} {u['usuario']}")
+        flash(f"Usuario «{u['nombre']}» eliminado. Sus informes y su historial se conservan.", "ok")
+    return redirect(url_for("admin_usuarios"))
+
+
 @app.route("/admin/usuarios", methods=["GET", "POST"])
 @login_requerido("usuarios")
 def admin_usuarios():
@@ -75,7 +104,8 @@ def admin_usuarios():
         return redirect(url_for("admin_usuarios"))
 
     usuarios = db.execute("SELECT u.*, p.nombre AS perfil_nombre FROM usuarios u "
-                          "LEFT JOIN perfiles p ON p.id=u.perfil_id ORDER BY u.activo DESC, u.nombre").fetchall()
+                          "LEFT JOIN perfiles p ON p.id=u.perfil_id WHERE u.eliminado=0 "
+                          "ORDER BY u.activo DESC, u.nombre").fetchall()
     hace = (date.today() - timedelta(days=90)).strftime("%Y%m%d")
     try:
         estudios = pacs.buscar_estudios(hace, "", limite=2000)

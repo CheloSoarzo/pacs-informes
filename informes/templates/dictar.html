@@ -6,7 +6,7 @@
 {% elif inf %}{% set estado = 'borrador' %}
 {% else %}{% set estado = 'pendiente' %}{% endif %}
 <!doctype html>
-<html lang="es">
+<html lang="es"{% if usuario and usuario.paleta %} data-paleta="{{ usuario.paleta }}"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">

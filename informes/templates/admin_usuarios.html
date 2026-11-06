@@ -42,6 +42,14 @@
   <details class="edit">
     <summary>{{ u.nombre }} <span class="suave peq">· {{ u.usuario }} · {{ u.perfil_nombre or 'sin perfil' }}{% if u.centros %} · {{ u.centros }}{% endif %}{% if not u.activo %} · inactivo{% endif %}</span></summary>
     {{ form_usuario(u) }}
+    {% if u.id != usuario.id %}
+    <form method="post" action="{{ url_for('eliminar_usuario', uid=u.id) }}" class="mt"
+          onsubmit="return confirm('¿Eliminar a {{ u.nombre|e }}? Ya no podrá entrar. Sus informes firmados y su historial se conservan.')">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <button class="btn peligro" type="submit">Eliminar usuario</button>
+      <span class="suave peq">Si solo quieres bloquearlo por un tiempo, desmarca «Activo».</span>
+    </form>
+    {% endif %}
   </details>
 {% endfor %}
 <details class="edit" open>

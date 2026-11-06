@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS usuarios (
     centros TEXT DEFAULT '',                     -- centros permitidos, separados por coma (vacío = todos)
     filtro_solicitante TEXT DEFAULT '',          -- derivador: su nombre como aparece en el DICOM
     activo INTEGER NOT NULL DEFAULT 1,
-    creado TEXT NOT NULL
+    creado TEXT NOT NULL,
+    paleta TEXT NOT NULL DEFAULT '',             -- colores que eligió el usuario ('' = azul)
+    eliminado INTEGER NOT NULL DEFAULT 0          -- eliminado: no entra ni aparece, pero su nombre queda en el historial
 );
 
 CREATE TABLE IF NOT EXISTS plantillas (
@@ -370,6 +372,12 @@ def _migrar(con):
         con.execute("ALTER TABLE estudio_meta ADD COLUMN solicitante_manual TEXT DEFAULT ''")
     if "archivo" not in _columnas(con, "informe_versiones"):
         con.execute("ALTER TABLE informe_versiones ADD COLUMN archivo TEXT DEFAULT ''")
+    # Paleta de colores por usuario y eliminación de usuarios
+    cols_u = _columnas(con, "usuarios")
+    if "paleta" not in cols_u:
+        con.execute("ALTER TABLE usuarios ADD COLUMN paleta TEXT NOT NULL DEFAULT ''")
+    if "eliminado" not in cols_u:
+        con.execute("ALTER TABLE usuarios ADD COLUMN eliminado INTEGER NOT NULL DEFAULT 0")
     # Transcripción automática de dictados (cola con reintentos)
     cols = _columnas(con, "dictados")
     for col, tipo in (("auto_estado", "TEXT NOT NULL DEFAULT ''"), ("auto_en", "TEXT DEFAULT ''"),

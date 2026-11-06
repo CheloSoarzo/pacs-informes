@@ -56,10 +56,27 @@ def logout():
     return redirect(url_for("login"))
 
 
+# Paletas de colores que puede elegir cada usuario (los colores están en static/app.css)
+PALETAS = {"azul": "Azul clínico", "rosa": "Rosa", "verde": "Verde agua", "violeta": "Lavanda", "cobre": "Cobre"}
+MUESTRAS = {"azul": ("#13283F", "#1F5FA8", "#E7F0FA"), "rosa": ("#4A1230", "#C2185B", "#FCE4EE"),
+            "verde": ("#0D3B36", "#0F766E", "#DDF2EE"), "violeta": ("#2B1F52", "#6D4BC4", "#ECE6FB"),
+            "cobre": ("#1B1512", "#A65A23", "#F5E6D9")}
+
+
 @app.route("/cuenta", methods=["GET", "POST"])
 @login_requerido()
 def cuenta():
     u = usuario_actual()
+    if request.method == "POST" and "paleta" in request.form:
+        paleta = request.form.get("paleta", "")
+        if paleta not in PALETAS:
+            flash("Esa paleta no existe.", "error")
+        else:
+            db = get_db()
+            db.execute("UPDATE usuarios SET paleta=? WHERE id=?", ("" if paleta == "azul" else paleta, u["id"]))
+            db.commit()
+            flash(f"Colores cambiados a «{PALETAS[paleta]}».", "ok")
+        return redirect(url_for("cuenta"))
     if request.method == "POST":
         actual, nueva = request.form.get("actual", ""), request.form.get("nueva", "")
         if not check_password_hash(u["clave_hash"], actual):
@@ -73,7 +90,7 @@ def cuenta():
             registrar("cambio_clave")
             flash("Clave actualizada.", "ok")
             return redirect(url_for("cuenta"))
-    return render_template("cuenta.html")
+    return render_template("cuenta.html", paletas=PALETAS, muestras=MUESTRAS)
 
 
 # ------------------------------------------------------------------ armado de la lista

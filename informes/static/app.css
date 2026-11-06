@@ -3,6 +3,7 @@
   --primario: #1F5FA8; --primario-osc: #174A84; --primario-claro: #E7F0FA;
   --ok: #1E7F4F; --ok-bg: #E4F4EB; --aviso: #A86400; --aviso-bg: #FCF1DE;
   --error: #B42318; --error-bg: #FDECEA; --pend: #6B7280; --pend-bg: #EEF0F3;
+  --barra: #13283F; --barra-texto: #C9D6E5;
   --visor: #0E1116; --radio: 8px; --sombra: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
 }
 * { box-sizing: border-box; }
@@ -18,12 +19,12 @@ h2 { font-size: 16px; margin: 0 0 10px; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
 /* Barra superior */
-.barra { background: #13283F; color: #fff; display: flex; align-items: center; gap: 18px; padding: 0 20px; height: 54px; }
+.barra { background: var(--barra); color: #fff; display: flex; align-items: center; gap: 18px; padding: 0 20px; height: 54px; }
 .barra .marca { font-weight: 700; letter-spacing: .2px; color: #fff; }
 .barra nav { display: flex; gap: 4px; flex: 1; }
-.barra nav a { color: #C9D6E5; padding: 6px 10px; border-radius: 6px; font-size: 14px; }
+.barra nav a { color: var(--barra-texto); padding: 6px 10px; border-radius: 6px; font-size: 14px; }
 .barra nav a:hover, .barra nav a.activo { background: rgba(255,255,255,.1); color: #fff; text-decoration: none; }
-.barra .quien { font-size: 13px; color: #C9D6E5; display: flex; gap: 10px; align-items: center; }
+.barra .quien { font-size: 13px; color: var(--barra-texto); display: flex; gap: 10px; align-items: center; }
 .barra .quien button { background: none; border: 1px solid rgba(255,255,255,.3); color: #fff; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
 
 .contenido { max-width: 1400px; margin: 0 auto; padding: 20px; }
@@ -138,6 +139,18 @@ details.edit summary { cursor: pointer; font-weight: 600; }
 
 /* ===================== v3: flujo de transcripción, asignación, entregas ===================== */
 :root { --urgente: #B42318; --urgente-bg: #FEF0EE; --morado: #6941C6; --morado-bg: #F2EEFC; --azul-bg: #E8F1FB; }
+/* Paletas de colores: cada usuario elige la suya en «Mi cuenta» (azul = la de siempre) */
+:root[data-paleta="rosa"] { --bg: #FAF4F7; --borde: #EBD8E1; --primario: #C2185B; --primario-osc: #9A1248; --primario-claro: #FCE4EE; --azul-bg: #FDEEF4; --barra: #4A1230; --barra-texto: #F5CFE0; }
+:root[data-paleta="verde"] { --bg: #F2F7F6; --borde: #D3E3DF; --primario: #0F766E; --primario-osc: #0B5C55; --primario-claro: #DDF2EE; --azul-bg: #E7F5F2; --barra: #0D3B36; --barra-texto: #BFE2DB; }
+:root[data-paleta="violeta"] { --bg: #F6F4FB; --borde: #DFD9EF; --primario: #6D4BC4; --primario-osc: #5536A3; --primario-claro: #ECE6FB; --azul-bg: #F1EDFC; --barra: #2B1F52; --barra-texto: #D6CCF5; }
+:root[data-paleta="cobre"] { --bg: #F7F4F1; --borde: #E5DBD2; --primario: #A65A23; --primario-osc: #84461A; --primario-claro: #F5E6D9; --azul-bg: #F8EEE5; --barra: #1B1512; --barra-texto: #E3C3A5; }
+.paletas { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin: 8px 0 12px; }
+.paleta { position: relative; display: grid; gap: 6px; border: 2px solid var(--borde); border-radius: var(--radio); padding: 10px; cursor: pointer; background: var(--panel); font-weight: 600; font-size: 14px; color: var(--texto); margin: 0; }
+.paleta input { position: absolute; opacity: 0; pointer-events: none; }
+.paleta:has(input:checked) { border-color: var(--texto); box-shadow: 0 0 0 2px var(--primario-claro); }
+.paleta:has(input:focus-visible) { outline: 2px solid var(--primario); outline-offset: 2px; }
+.paleta .muestra { display: flex; height: 26px; border-radius: 6px; overflow: hidden; }
+.paleta .muestra span { flex: 1; }
 .contador { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--error); color: #fff; font-size: 12px; font-weight: 700; text-align: center; line-height: 20px; }
 h2 .contador { background: var(--pend-bg); color: var(--pend); }
 .nowrap { white-space: nowrap; }
@@ -161,7 +174,7 @@ h2 .contador { background: var(--pend-bg); color: var(--pend); }
 .barra .quien form { margin: 0; }
 .barra nav { align-items: center; }
 details.menu { position: relative; }
-details.menu > summary { list-style: none; cursor: pointer; color: #C9D6E5; padding: 6px 10px; border-radius: 6px; font-size: 14px; }
+details.menu > summary { list-style: none; cursor: pointer; color: var(--barra-texto); padding: 6px 10px; border-radius: 6px; font-size: 14px; }
 details.menu > summary::-webkit-details-marker { display: none; }
 details.menu > summary::after { content: " ▾"; font-size: 11px; }
 details.menu[open] > summary, details.menu.activo > summary, details.menu > summary:hover { background: rgba(255,255,255,.1); color: #fff; }
