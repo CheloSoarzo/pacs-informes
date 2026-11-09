@@ -325,8 +325,9 @@ def borrar_examen(estudio_id):
         db.execute("DELETE FROM informes WHERE id=?", (inf["id"],))
     for tabla in ("dictados", "notas", "entregas", "estudio_meta"):
         db.execute(f"DELETE FROM {tabla} WHERE estudio_id=?", (estudio_id,))
-    cita = db.execute("SELECT accesion FROM ordenes WHERE estudio_id=?", (estudio_id,)).fetchone()
-    db.execute("UPDATE ordenes SET estudio_id='', borrado_en=? WHERE estudio_id=?", (ahora(), estudio_id))
+    from integracion import estudios_de_orden, separar_estudio
+    acc_cita = separar_estudio(db, estudio_id)
+    quedan = bool(acc_cita and estudios_de_orden(db, acc_cita))   # la cita tiene otros estudios (varios exámenes)
     db.commit()
     for carpeta, nombre in archivos:
         try:
@@ -338,9 +339,10 @@ def borrar_examen(estudio_id):
                f"{est['descripcion']} · acceso {est['accession'] or '-'}")
     estado_inf = ("sin informe" if not inf else
                   f"informe VALIDADO v{inf['version']} por {firmante or '?'}" if validado else f"informe {inf['estado']}")
-    registrar("borrar_examen", f"{resumen} · {estado_inf}{' · cita ' + cita[0] if cita else ''} · motivo: {motivo[:300]}")
+    registrar("borrar_examen", f"{resumen} · {estado_inf}{' · cita ' + acc_cita if acc_cita else ''} · motivo: {motivo[:300]}")
     flash(f"Examen borrado: {est['paciente_nombre']} · {est['fecha']} · {est['modalidad']} {est['descripcion']}."
-          + (" La cita de la agenda vuelve a quedar sin imágenes." if cita else ""), "ok")
+          + ((" Su cita de la agenda conserva los demás estudios." if quedan else
+             " La cita de la agenda vuelve a quedar sin imágenes.") if acc_cita else ""), "ok")
     return redirect(lista_url)
 
 

@@ -250,8 +250,9 @@ def statistics(eid):
 def dev_llega():
     """Solo pruebas: simula que un equipo envió un estudio con este número de acceso."""
     b = request.get_json()
-    eid = "est-" + b["AccessionNumber"].lower()
-    ESTUDIOS[eid] = dict(StudyInstanceUID=b.get("uid", "1.2.826.0.9." + str(len(ESTUDIOS))), StudyDate=hoy.strftime("%Y%m%d"),
+    eid = b.get("id") or "est-" + b["AccessionNumber"].lower()   # id: varios estudios con el mismo número de acceso
+    ESTUDIOS[eid] = dict(StudyInstanceUID=b.get("uid", "1.2.826.0.9." + str(len(ESTUDIOS))),
+                         StudyDate=b.get("StudyDate") or hoy.strftime("%Y%m%d"),
                          StudyTime="101500", StudyDescription=b.get("StudyDescription", "TC TORAX"),
                          AccessionNumber=b["AccessionNumber"], InstitutionName="CENTRO NORTE", ReferringPhysicianName="",
                          paciente=dict(PatientName=b.get("PatientName", "PACIENTE^PRUEBA"), PatientID=b.get("PatientID", ""),

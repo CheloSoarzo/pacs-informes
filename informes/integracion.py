@@ -59,6 +59,16 @@ CREATE INDEX IF NOT EXISTS ix_ordenes_rut ON ordenes(rut_norm);
 CREATE INDEX IF NOT EXISTS ix_ordenes_fecha ON ordenes(fecha);
 CREATE INDEX IF NOT EXISTS ix_ordenes_estudio ON ordenes(estudio_id);
 
+-- Estudios unidos a cada orden. Una cita con varios exámenes (ej. RX de columna, pelvis y rodilla) puede
+-- llegar como varios estudios: todos quedan unidos a la misma cita. ordenes.estudio_id guarda el primero.
+CREATE TABLE IF NOT EXISTS orden_estudios (
+    estudio_id TEXT PRIMARY KEY,
+    accesion TEXT NOT NULL,
+    como TEXT DEFAULT '',
+    unido_en TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_orden_estudios_acc ON orden_estudios(accesion);
+
 -- Clave del paciente para el portal (la crea la agenda al pagar; aquí solo llega el hash)
 CREATE TABLE IF NOT EXISTS portal_pacientes (
     rut_norm TEXT PRIMARY KEY,
@@ -80,6 +90,9 @@ def preparar_db():
     # medico_id: médico solicitante elegido en la agenda (usuario del PACS con acceso); 0 = escrito a mano
     if "medico_id" not in cols:
         con.execute("ALTER TABLE ordenes ADD COLUMN medico_id INTEGER DEFAULT 0")
+    # Uniones anteriores (una orden = un estudio) pasan a la tabla de estudios por orden
+    con.execute("""INSERT OR IGNORE INTO orden_estudios (estudio_id, accesion, como, unido_en)
+        SELECT estudio_id, accesion, 'anterior', actualizado FROM ordenes WHERE estudio_id != ''""")
     # Exámenes siempre en MAYÚSCULAS (así se ven en los equipos); corrige órdenes antiguas
     for acc, ex, exs in con.execute("SELECT accesion, examen, examenes FROM ordenes").fetchall():
         try:
@@ -230,12 +243,37 @@ def estados_para_agenda():
 FAMILIA = {"tc": {"CT"}, "rx": {"CR", "DX", "DR", "RF", "OT"}, "eco": {"US"}}
 
 
+def estudios_de_orden(db, accesion):
+    """Todos los estudios unidos a una orden (el primero que llegó va primero)."""
+    return [r[0] for r in db.execute("SELECT estudio_id FROM orden_estudios WHERE accesion=? ORDER BY unido_en, rowid",
+                                     (accesion,))]
+
+
+def orden_unida(db, estudio_id):
+    """Orden de la agenda a la que está unido un estudio (o None)."""
+    return db.execute("""SELECT o.* FROM orden_estudios x JOIN ordenes o ON o.accesion=x.accesion
+        WHERE x.estudio_id=? AND o.eliminada=0""", (estudio_id,)).fetchone()
+
+
+def _usados(db):
+    return {r[0] for r in db.execute("SELECT estudio_id FROM orden_estudios")}
+
+
+def _n_examenes(o):
+    try:
+        return max(1, len(json.loads(o["examenes"] or "[]")))
+    except ValueError:
+        return 1
+
+
 def aplicar_medico(db, o):
-    """El médico solicitante de la cita pasa al examen: queda como solicitante (sale en el informe) y, si es un
-    médico del centro (usuario del PACS), recibe acceso para ver el examen con su usuario."""
-    eid = o["estudio_id"]
-    if not eid:
-        return
+    """El médico solicitante de la cita pasa a todos sus estudios: queda como solicitante (sale en el informe) y,
+    si es un médico del centro (usuario del PACS), recibe acceso para ver cada estudio con su usuario."""
+    for eid in estudios_de_orden(db, o["accesion"]):
+        _aplicar_medico_estudio(db, o, eid)
+
+
+def _aplicar_medico_estudio(db, o, eid):
     nombre = (o["medico"] or "").strip().upper()
     mid = o["medico_id"] if "medico_id" in o.keys() else 0
     db.execute("INSERT OR IGNORE INTO estudio_meta (estudio_id) VALUES (?)", (eid,))
@@ -253,8 +291,11 @@ def aplicar_medico(db, o):
 
 
 def _unir(db, o, estudio_id, como):
-    db.execute("UPDATE ordenes SET estudio_id=? WHERE accesion=?", (estudio_id, o["accesion"]))
-    aplicar_medico(db, db.execute("SELECT * FROM ordenes WHERE accesion=?", (o["accesion"],)).fetchone())
+    db.execute("INSERT OR IGNORE INTO orden_estudios (estudio_id, accesion, como, unido_en) VALUES (?,?,?,?)",
+               (estudio_id, o["accesion"], como, ahora()))
+    # el primer estudio queda como principal de la cita (estado en la agenda, botón «Ver en el PACS»)
+    db.execute("UPDATE ordenes SET estudio_id=? WHERE accesion=? AND estudio_id=''", (estudio_id, o["accesion"]))
+    _aplicar_medico_estudio(db, db.execute("SELECT * FROM ordenes WHERE accesion=?", (o["accesion"],)).fetchone(), estudio_id)
     # Correo y teléfono del paciente para enviarle el informe
     db.execute("INSERT OR IGNORE INTO estudio_meta (estudio_id) VALUES (?)", (estudio_id,))
     db.execute("""UPDATE estudio_meta SET paciente_email=CASE WHEN COALESCE(paciente_email,'')='' THEN ? ELSE paciente_email END,
@@ -262,6 +303,21 @@ def _unir(db, o, estudio_id, como):
                (o["email"], o["telefono"], estudio_id))
     db.execute("INSERT INTO auditoria (ts, usuario, accion, detalle, ip) VALUES (?,?,?,?,?)",
                (ahora(), "sistema" if como != "manual" else "", "unir_orden", f"{o['accesion']} → {estudio_id} ({como})", ""))
+
+
+def separar_estudio(db, estudio_id):
+    """Quita un estudio de su cita (lo separó un usuario o se borró del PACS). Devuelve la accesión o ''."""
+    x = db.execute("SELECT accesion FROM orden_estudios WHERE estudio_id=?", (estudio_id,)).fetchone()
+    acc = x["accesion"] if x else ""
+    db.execute("DELETE FROM orden_estudios WHERE estudio_id=?", (estudio_id,))
+    db.execute("DELETE FROM estudio_accesos WHERE estudio_id=? AND origen='agenda'", (estudio_id,))
+    for o in db.execute("SELECT accesion FROM ordenes WHERE estudio_id=?", (estudio_id,)).fetchall():
+        acc = acc or o["accesion"]
+        resto = estudios_de_orden(db, o["accesion"])
+        # si quedan otros estudios, el siguiente pasa a principal; si no, la agenda vuelve a «sin imágenes»
+        db.execute("UPDATE ordenes SET estudio_id=?, borrado_en=? WHERE accesion=?",
+                   (resto[0] if resto else "", "" if resto else ahora(), o["accesion"]))
+    return acc
 
 
 def _estudios_del_dia(fecha, rut_norm):
@@ -281,38 +337,55 @@ def _estudios_del_dia(fecha, rut_norm):
     return out
 
 
+_repaso_hecho = False
+
+
 def unir_estudios():
     """Une las órdenes recientes con su estudio en Orthanc.
 
     1) Por número de acceso (cuando el equipo usó el worklist o el tecnólogo lo escribió).
     2) Sin worklist: por RUT + fecha + tipo de equipo, solo si hay una única coincidencia posible.
        Si el paciente tiene dos exámenes del mismo tipo ese día, no se adivina: se une a mano en el estudio."""
+    global _repaso_hecho
     db = get_db()
-    hace = (date.today() - timedelta(days=7)).isoformat()
-    pendientes = db.execute("""SELECT * FROM ordenes WHERE estudio_id='' AND eliminada=0 AND fecha>=? AND fecha<=?
-        AND estado_agenda NOT IN ('cancelado','ausente')""", (hace, date.today().isoformat())).fetchall()
-    usados = {r[0] for r in db.execute("SELECT estudio_id FROM ordenes WHERE estudio_id!='' AND eliminada=0")}
+    hoy = date.today()
+    # La primera vez (al actualizar) se repasa el último mes: así se suman solos los estudios que antes
+    # quedaron separados de su cita. Después basta la última semana.
+    dias = 7 if _repaso_hecho else 30
+    _repaso_hecho = True
+    hace = (hoy - timedelta(days=dias)).isoformat()
+    # Las citas ya unidas se revisan solo hasta ayer: los demás exámenes de la misma cita llegan el mismo día
+    reciente = (hoy - timedelta(days=1 if dias == 7 else dias)).isoformat()
+    revisar = db.execute("""SELECT * FROM ordenes WHERE eliminada=0 AND fecha>=? AND fecha<=?
+        AND estado_agenda NOT IN ('cancelado','ausente') AND (estudio_id='' OR fecha>=?)""",
+                         (hace, hoy.isoformat(), reciente)).fetchall()
+    usados = _usados(db)
     try:
-        for o in pendientes[:200]:
-            res = pacs.post_json("/tools/find", {"Level": "Study", "Query": {"AccessionNumber": o["accesion"]}, "Limit": 2}) or []
-            estudio_id = (res[0] if isinstance(res[0], str) else res[0].get("ID", "")) if res else ""
-            if estudio_id and estudio_id not in usados:
-                _unir(db, o, estudio_id, "número de acceso")
-                usados.add(estudio_id)
-        # Sin worklist: RUT + fecha + equipo
-        restantes = db.execute("""SELECT * FROM ordenes WHERE estudio_id='' AND eliminada=0 AND fecha>=? AND fecha<=?
-            AND estado_agenda NOT IN ('cancelado','ausente') AND rut_norm!=''""", (hace, date.today().isoformat())).fetchall()
+        # 1) Por número de acceso: todos los estudios con ese número quedan unidos a la cita
+        for o in revisar[:400]:
+            res = pacs.post_json("/tools/find", {"Level": "Study", "Query": {"AccessionNumber": o["accesion"]}, "Limit": 12}) or []
+            for r in res:
+                estudio_id = r if isinstance(r, str) else r.get("ID", "")
+                if estudio_id and estudio_id not in usados:
+                    _unir(db, o, estudio_id, "número de acceso")
+                    usados.add(estudio_id)
+        # 2) Sin worklist: RUT + fecha + equipo. Si el paciente tiene una sola cita de ese equipo ese día,
+        #    todos sus estudios de ese tipo y fecha son de esa cita (ej. RX de columna, pelvis y rodilla).
         grupos = {}
-        for o in restantes:
+        for o in db.execute("""SELECT * FROM ordenes WHERE eliminada=0 AND fecha>=? AND fecha<=?
+                AND estado_agenda NOT IN ('cancelado','ausente') AND rut_norm!=''""", (hace, hoy.isoformat())).fetchall():
             grupos.setdefault((o["rut_norm"], o["fecha"], o["equipo"]), []).append(o)
         for (rut, fecha, equipo), ordenes in grupos.items():
             if len(ordenes) != 1:
-                continue        # dos exámenes iguales el mismo día: se une a mano
+                continue        # dos citas del mismo equipo el mismo día: no se adivina, se une a mano
+            o = ordenes[0]
+            if o["estudio_id"] and fecha < reciente:
+                continue
             fam = FAMILIA.get(equipo, set())
-            cand = [e for e in _estudios_del_dia(fecha, rut) if e["id"] not in usados and (e["mods"] & fam or not e["mods"])]
-            if len(cand) == 1:
-                _unir(db, ordenes[0], cand[0]["id"], "RUT y fecha")
-                usados.add(cand[0]["id"])
+            for e in _estudios_del_dia(fecha, rut):
+                if e["id"] not in usados and (e["mods"] & fam or not e["mods"]):
+                    _unir(db, o, e["id"], "RUT y fecha")
+                    usados.add(e["id"])
     except Exception as e:  # noqa: BLE001  (si el PACS no responde, se reintenta en la próxima consulta)
         app.logger.warning("No se pudieron unir estudios con la agenda: %s", e)
     db.commit()
@@ -323,24 +396,27 @@ def estado_de(o):
     if not o["estudio_id"]:
         return o, "", {}
     db = get_db()
-    inf = db.execute("SELECT id, estado, firmado_en FROM informes WHERE estudio_id=?", (o["estudio_id"],)).fetchone()
-    if not inf or inf["estado"] != "firmado":
+    eids = estudios_de_orden(db, o["accesion"]) or [o["estudio_id"]]
+    # Con varios estudios, la cita queda «informada» cuando todos tienen su informe validado
+    infs = [db.execute("SELECT id, estado, firmado_en FROM informes WHERE estudio_id=?", (e,)).fetchone() for e in eids]
+    if any(not i or i["estado"] != "firmado" for i in infs):
         return o, "imagenes", {}
+    marcas = ",".join("?" * len(eids))
     entregado = o["visto_portal"] or db.execute(
-        "SELECT creado FROM entregas WHERE estudio_id=? AND anulado=0 ORDER BY id LIMIT 1", (o["estudio_id"],)).fetchone()
+        f"SELECT creado FROM entregas WHERE estudio_id IN ({marcas}) AND anulado=0 ORDER BY id LIMIT 1", eids).fetchone()
     if not entregado:
-        acc = db.execute("SELECT ultimo_acceso FROM links WHERE informe_id=? AND accesos>0 ORDER BY id LIMIT 1",
-                         (inf["id"],)).fetchone()
+        acc = db.execute(f"SELECT ultimo_acceso FROM links WHERE informe_id IN ({','.join('?' * len(infs))}) AND accesos>0 "
+                         "ORDER BY id LIMIT 1", [i["id"] for i in infs]).fetchone()
         entregado = acc["ultimo_acceso"] if acc else ""
-    return o, ("entregado" if entregado else "informado"), {"firmado_en": inf["firmado_en"] or ""}
+    return o, ("entregado" if entregado else "informado"), {"firmado_en": max(i["firmado_en"] or "" for i in infs)}
 
 
 def orden_de_estudio(estudio_id, accession=""):
     """Orden de la agenda que corresponde a un estudio (para mostrarla en la pantalla del estudio)."""
     db = get_db()
-    o = db.execute("SELECT * FROM ordenes WHERE estudio_id=? AND eliminada=0", (estudio_id,)).fetchone()
+    o = orden_unida(db, estudio_id)
     if not o and accession:
-        o = db.execute("SELECT * FROM ordenes WHERE accesion=? AND eliminada=0 AND estudio_id=''", (accession,)).fetchone()
+        o = db.execute("SELECT * FROM ordenes WHERE accesion=? AND eliminada=0", (accession,)).fetchone()
         if o:
             _unir(db, o, estudio_id, "número de acceso")
             db.commit()
@@ -355,10 +431,16 @@ def candidatas(est):
         return []
     d = date(int(f[:4]), int(f[4:6]), int(f[6:8]))
     rut = norm_rut(est.get("paciente_id"))
-    filas = get_db().execute("""SELECT * FROM ordenes WHERE estudio_id='' AND eliminada=0 AND fecha BETWEEN ? AND ?
-        AND estado_agenda NOT IN ('cancelado') ORDER BY (rut_norm=?) DESC, ABS(julianday(fecha)-julianday(?)), hora LIMIT 15""",
-                             ((d - timedelta(days=3)).isoformat(), (d + timedelta(days=3)).isoformat(), rut, d.isoformat())).fetchall()
-    return [dict(o, mismo_rut=(o["rut_norm"] == rut and bool(rut))) for o in filas]
+    db = get_db()
+    # Citas sin imágenes, y también las ya unidas del mismo paciente (una cita con varios exámenes puede tener
+    # varios estudios: este se suma a la misma cita)
+    filas = db.execute("""SELECT * FROM ordenes WHERE eliminada=0 AND fecha BETWEEN ? AND ?
+        AND estado_agenda NOT IN ('cancelado') AND (estudio_id='' OR (rut_norm=? AND rut_norm!='') OR fecha=?)
+        ORDER BY (rut_norm=?) DESC, ABS(julianday(fecha)-julianday(?)), hora LIMIT 15""",
+                       ((d - timedelta(days=3)).isoformat(), (d + timedelta(days=3)).isoformat(), rut, d.isoformat(), rut,
+                        d.isoformat())).fetchall()
+    return [dict(o, mismo_rut=(o["rut_norm"] == rut and bool(rut)), n_estudios=len(estudios_de_orden(db, o["accesion"])))
+            for o in filas]
 
 
 @app.route("/agenda/<accesion>")
@@ -395,7 +477,7 @@ def ficha_paciente(rut):
     db = get_db()
     ordenes = db.execute("SELECT * FROM ordenes WHERE rut_norm=? AND eliminada=0 ORDER BY fecha DESC, hora DESC",
                          (rn,)).fetchall()
-    por_estudio = {o["estudio_id"]: o for o in ordenes if o["estudio_id"]}
+    por_estudio = {eid: o for o in ordenes for eid in estudios_de_orden(db, o["accesion"])}
     for e in estudios:
         o = por_estudio.get(e["id"])
         e["accesion_agenda"] = o["accesion"] if o else ""
@@ -428,8 +510,7 @@ def unir_orden(estudio_id):
     estudio_visible(estudio_id)
     db = get_db()
     if request.form.get("accion") == "quitar":
-        # borrado_en: la agenda vuelve a mostrar la cita «sin imágenes»
-        db.execute("UPDATE ordenes SET estudio_id='', borrado_en=? WHERE estudio_id=?", (ahora(), estudio_id))
+        separar_estudio(db, estudio_id)
         db.commit()
         registrar("separar_orden", estudio_id)
         flash("El estudio quedó separado de la cita de la agenda.", "ok")
@@ -438,15 +519,16 @@ def unir_orden(estudio_id):
         o = db.execute("SELECT * FROM ordenes WHERE accesion=? AND eliminada=0", (acc,)).fetchone()
         if not o:
             abort(404)
-        if o["estudio_id"]:
-            flash("Esa cita ya está unida a otro estudio.", "error")
-        elif db.execute("SELECT 1 FROM ordenes WHERE estudio_id=? AND eliminada=0", (estudio_id,)).fetchone():
+        if orden_unida(db, estudio_id):
             flash("Este estudio ya está unido a una cita.", "error")
         else:
+            otros = len(estudios_de_orden(db, acc))
             _unir(db, o, estudio_id, "manual")
             db.commit()
             registrar("unir_orden", f"{acc} → {estudio_id}")
-            flash(f"Estudio unido a la cita {acc} de la agenda.", "ok")
+            flash(f"Estudio unido a la cita {acc} de la agenda" +
+                  (f" (la cita ya tenía {otros} estudio{'s' if otros > 1 else ''}: ahora el médico solicitante ve todos)."
+                   if otros else "."), "ok")
     return redirect(url_for("estudio", estudio_id=estudio_id))
 
 
@@ -486,8 +568,13 @@ def escribir_worklist():
     hoy = date.today()
     hasta = (hoy + timedelta(days=MWL_DIAS)).isoformat()
     filtro = "" if MWL_INCLUIR == "todos" else "AND (pagado=1 OR estado_agenda IN ('llego','atendido'))"
-    filas = get_db().execute(f"""SELECT * FROM ordenes WHERE eliminada=0 AND estudio_id='' AND fecha>=? AND fecha<=?
-        AND estado_agenda NOT IN ('cancelado','ausente') {filtro} ORDER BY fecha, hora""", (hoy.isoformat(), hasta)).fetchall()
+    db = get_db()
+    # Una cita con varios exámenes sigue en el equipo (el mismo día) hasta que lleguen tantos estudios como exámenes:
+    # así el tecnólogo elige al paciente del worklist para cada uno (columna, pelvis, rodilla...)
+    filas = [o for o in db.execute(f"""SELECT * FROM ordenes WHERE eliminada=0 AND fecha>=? AND fecha<=?
+        AND (estudio_id='' OR fecha=?) AND estado_agenda NOT IN ('cancelado','ausente') {filtro} ORDER BY fecha, hora""",
+                                   (hoy.isoformat(), hasta, hoy.isoformat())).fetchall()
+             if not o["estudio_id"] or len(estudios_de_orden(db, o["accesion"])) < _n_examenes(o)]
     with open(os.path.join(WORKLIST_DIR, ".lock"), "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         deseados = set()
@@ -586,21 +673,27 @@ def _examenes_de(rut):
     out, vistos = [], set()
     for o in db.execute("""SELECT * FROM ordenes WHERE rut_norm=? AND eliminada=0 AND estado_agenda NOT IN ('cancelado','ausente')
             ORDER BY fecha DESC, hora DESC LIMIT 60""", (rut,)).fetchall():
-        inf = db.execute("SELECT id, estado, firmado_en FROM informes WHERE estudio_id=?", (o["estudio_id"],)).fetchone() \
-            if o["estudio_id"] else None
-        if inf and inf["estado"] == "firmado":
-            estado, txt = "listo", "Informe disponible"
-        elif o["estudio_id"] or o["pagado"] or o["estado_agenda"] in ("llego", "atendido"):
+        eids = estudios_de_orden(db, o["accesion"]) if o["estudio_id"] else []
+        # Cita con varios estudios: un informe por estudio (ej. columna, pelvis y rodilla)
+        for eid in eids:
+            vistos.add(eid)
+            inf = db.execute("SELECT id, estado, firmado_en, descripcion FROM informes WHERE estudio_id=?", (eid,)).fetchone()
+            listo = bool(inf and inf["estado"] == "firmado")
+            out.append({"fecha": o["fecha"], "hora": o["hora"],
+                        "examen": ((inf["descripcion"] if inf and len(eids) > 1 else "") or o["examen"] or "Examen"),
+                        "estado": "listo" if listo else "proceso",
+                        "estado_txt": "Informe disponible" if listo else "Examen realizado · informe en proceso",
+                        "informe_id": inf["id"] if listo else None, "firmado_en": inf["firmado_en"] if inf else ""})
+        if eids:
+            continue
+        if o["pagado"] or o["estado_agenda"] in ("llego", "atendido"):
             estado, txt = "proceso", "Examen realizado · informe en proceso"
         elif o["fecha"] >= hoy:
             estado, txt = "agendado", "Agendado"
         else:
             continue
-        if o["estudio_id"]:
-            vistos.add(o["estudio_id"])
         out.append({"fecha": o["fecha"], "hora": o["hora"], "examen": o["examen"] or "Examen", "estado": estado,
-                    "estado_txt": txt, "informe_id": inf["id"] if inf and estado == "listo" else None,
-                    "firmado_en": inf["firmado_en"] if inf else ""})
+                    "estado_txt": txt, "informe_id": None, "firmado_en": ""})
     # Informes validados del mismo RUT que no vinieron de la agenda (ej: exámenes anteriores)
     for inf in db.execute("""SELECT id, estudio_id, fecha_estudio, descripcion, firmado_en FROM informes WHERE estado='firmado'
             AND UPPER(REPLACE(REPLACE(REPLACE(paciente_id,'.',''),'-',''),' ',''))=? ORDER BY fecha_estudio DESC LIMIT 60""",
@@ -639,7 +732,7 @@ def portal_ver(inf_id):
         link = link_vigente(inf_id)
     session[f"lk_{link['id']}"] = True     # ya se identificó con RUT y clave: no se le pide la clave del link
     inf = db.execute("SELECT estudio_id FROM informes WHERE id=?", (inf_id,)).fetchone()
-    o = db.execute("SELECT accesion, visto_portal FROM ordenes WHERE estudio_id=? AND eliminada=0", (inf["estudio_id"],)).fetchone()
+    o = orden_unida(db, inf["estudio_id"])
     primera = not (o and o["visto_portal"])
     if o and not o["visto_portal"]:
         db.execute("UPDATE ordenes SET visto_portal=? WHERE accesion=?", (ahora(), o["accesion"]))

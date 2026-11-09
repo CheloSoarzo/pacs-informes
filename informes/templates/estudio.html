@@ -65,7 +65,7 @@
         {% for c in cands %}
         <label class="cand"><input type="radio" name="accesion" value="{{ c.accesion }}" required {{ 'checked' if loop.first and c.mismo_rut and (cands|selectattr('mismo_rut')|list|length) == 1 }}>
           <span><b>{{ c.paciente }}</b> · {{ c.rut }} · {{ c.examen or c.equipo|upper }}
-          <span class="suave peq">{{ c.fecha }} {{ c.hora }} · {{ c.accesion }}{% if c.mismo_rut %} · mismo RUT{% endif %}</span></span></label>
+          <span class="suave peq">{{ c.fecha }} {{ c.hora }} · {{ c.accesion }}{% if c.mismo_rut %} · mismo RUT{% endif %}{% if c.n_estudios %} · ya tiene {{ c.n_estudios }} estudio{{ 's' if c.n_estudios > 1 }}: este se suma a la misma cita{% endif %}</span></span></label>
         {% endfor %}
         <button class="btn" type="submit" style="margin-top:6px">Unir con la cita elegida</button>
       </form>
