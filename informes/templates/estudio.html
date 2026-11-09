@@ -535,7 +535,8 @@
 <script src="{{ url_for('static', filename='visor.js') }}"></script>
 <script src="{{ url_for('static', filename='audio.js') }}"></script>
 <script>
-  iniciarVisores({{ url_for('series_json', estudio_id=est.id)|tojson }});
+  iniciarVisores({{ url_for('series_json', estudio_id=est.id)|tojson }}{% if puede('borrar_examen') %},
+    { url: {{ url_for('borrar_imagenes', estudio_id=est.id)|tojson }}, csrf: {{ csrf_token()|tojson }}, validado: {{ (inf is not none and inf.estado == 'firmado')|tojson }} }{% endif %});
   window.EDITOR = {
     csrf: {{ csrf_token()|tojson }},
     editable: {{ puede_editar|tojson }},

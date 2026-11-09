@@ -2,10 +2,11 @@
    Uso: new VisorSimple(elemento, urlSeries, prefijoImg)
    - urlSeries devuelve {series:[{id, modalidad, descripcion, instancias:[ids]}]}
    - prefijoImg + idInstancia = URL de la imagen
-   Rueda del mouse, flechas o arrastrar arriba/abajo para recorrer cortes. */
+   Rueda del mouse, flechas o arrastrar arriba/abajo para recorrer cortes.
+   borrar (opcional): {url, csrf, validado} para borrar la imagen o la serie que se está viendo. */
 class VisorSimple {
-  constructor(el, urlSeries, prefijoImg) {
-    this.el = el; this.prefijo = prefijoImg; this.cache = new Map();
+  constructor(el, urlSeries, prefijoImg, borrar) {
+    this.el = el; this.prefijo = prefijoImg; this.cache = new Map(); this.borrar = borrar || null;
     el.innerHTML = '<div class="vacio">Cargando imágenes…</div>';
     fetch(urlSeries, { credentials: 'same-origin' })
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
@@ -19,21 +20,23 @@ class VisorSimple {
     this.el.innerHTML = `
       <div class="series"></div>
       <div class="lienzo" tabindex="0"><img alt="Imagen del estudio"><div class="info"></div></div>
-      <div class="controles"><span class="pos"></span><input type="range" min="0" value="0"></div>`;
+      <div class="controles"><span class="pos"></span><input type="range" min="0" value="0">
+        ${this.borrar ? '<button type="button" class="btn-borrar" data-b="imagen">Borrar imagen</button><button type="button" class="btn-borrar" data-b="serie">Borrar serie</button>' : ''}</div>
+      ${this.borrar ? `<form class="borrar-img" hidden>
+        <p class="que"></p>
+        <label>Motivo <input name="motivo" required maxlength="300" placeholder="Ej. imagen repetida, de otro paciente…" autocomplete="off"></label>
+        ${this.borrar.validado ? '<label class="chk"><input type="checkbox" name="validado_ok"> El informe ya está validado: igual quiero borrar</label>' : ''}
+        <div class="acc"><button type="submit" class="btn peligro">Borrar</button><button type="button" class="btn" data-b="cancelar">Cancelar</button>
+        <span class="msg" role="status"></span></div></form>` : ''}`;
     this.$series = this.el.querySelector('.series');
+    if (this.borrar) this.prepararBorrar();
     this.$img = this.el.querySelector('.lienzo img');
     this.$info = this.el.querySelector('.info');
     this.$pos = this.el.querySelector('.pos');
     this.$rango = this.el.querySelector('input[type=range]');
     const lienzo = this.el.querySelector('.lienzo');
 
-    series.forEach((s, i) => {
-      const b = document.createElement('button');
-      const medio = s.instancias[Math.floor(s.instancias.length / 2)];
-      b.innerHTML = `<img loading="lazy" src="${this.prefijo}${medio}" alt="">${s.modalidad} · ${s.instancias.length}<br>${(s.descripcion || '').slice(0, 22)}`;
-      b.onclick = () => this.serie(i);
-      this.$series.appendChild(b);
-    });
+    this.pintarSeries();
 
     this.$rango.oninput = () => this.ir(+this.$rango.value);
     lienzo.addEventListener('wheel', e => { e.preventDefault(); this.ir(this.i + (e.deltaY > 0 ? 1 : -1)); }, { passive: false });
@@ -50,6 +53,54 @@ class VisorSimple {
     });
     lienzo.addEventListener('pointerup', () => { y0 = null; });
     this.serie(0);
+  }
+
+  pintarSeries() {
+    this.$series.innerHTML = '';
+    this.series.forEach((s, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const medio = s.instancias[Math.floor(s.instancias.length / 2)];
+      b.innerHTML = `<img loading="lazy" src="${this.prefijo}${medio}" alt="">${s.modalidad} · ${s.instancias.length}<br>${(s.descripcion || '').slice(0, 22)}`;
+      b.onclick = () => this.serie(i);
+      this.$series.appendChild(b);
+    });
+  }
+
+  // Borrar la imagen o la serie que se está viendo (con motivo; queda en la auditoría)
+  prepararBorrar() {
+    const f = this.el.querySelector('.borrar-img'), msg = f.querySelector('.msg');
+    this.el.querySelectorAll('.controles [data-b]').forEach(b => b.addEventListener('click', () => {
+      this.tipoBorrar = b.dataset.b;
+      const s = this.series[this.s];
+      f.querySelector('.que').textContent = this.tipoBorrar === 'imagen'
+        ? `Borrar la imagen ${this.i + 1} de ${s.instancias.length} de la serie «${s.modalidad} ${s.descripcion || ''}». No se puede deshacer.`
+        : `Borrar la serie completa «${s.modalidad} ${s.descripcion || ''}» (${s.instancias.length} imágenes). No se puede deshacer.`;
+      msg.textContent = ''; f.hidden = false; f.motivo.focus();
+    }));
+    f.querySelector('[data-b=cancelar]').addEventListener('click', () => { f.hidden = true; });
+    f.addEventListener('submit', async e => {
+      e.preventDefault();
+      const s = this.series[this.s], tipo = this.tipoBorrar;
+      const id = tipo === 'imagen' ? s.instancias[this.i] : s.id;
+      const btn = f.querySelector('button[type=submit]'); btn.disabled = true; msg.textContent = 'Borrando…';
+      try {
+        const r = await fetch(this.borrar.url, { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF': this.borrar.csrf },
+          body: JSON.stringify({ tipo, id, motivo: f.motivo.value, validado_ok: !!(f.validado_ok && f.validado_ok.checked) }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { msg.textContent = d.error || 'No se pudo borrar.'; return; }
+        if (tipo === 'imagen') s.instancias.splice(this.i, 1);
+        if (tipo === 'serie' || !s.instancias.length) this.series.splice(this.s, 1);
+        f.hidden = true; f.motivo.value = '';
+        this.pintarSeries();
+        const n = Math.min(this.s, this.series.length - 1);
+        if (tipo === 'imagen' && this.series[n] === s) { this.serie(n); this.ir(Math.min(this.i, s.instancias.length - 1)); }
+        else this.serie(n);
+        this.$pos.textContent += ` · ${tipo === 'imagen' ? 'imagen borrada' : 'serie borrada'}`;
+      } catch (err) { msg.textContent = 'Sin conexión: no se borró.'; }
+      finally { btn.disabled = false; }
+    });
   }
 
   serie(n) {
@@ -78,7 +129,7 @@ class VisorSimple {
 
 /* Pestañas del visor en la pantalla del informe: visor diagnóstico (OHIF), Stone o vista rápida.
    Los visores completos se cargan solo al elegirlos y la elección se recuerda en este navegador. */
-function iniciarVisores(urlSeries) {
+function iniciarVisores(urlSeries, borrar) {
   const caja = document.getElementById('visor-caja');
   if (!caja) return;
   const estudio = caja.closest('.estudio');
@@ -102,7 +153,7 @@ function iniciarVisores(urlSeries) {
       const src = iframe.dataset[modo];
       if (iframe.dataset.actual !== modo) { iframe.src = src; iframe.dataset.actual = modo; }
     } else if (!simple) {
-      simple = new VisorSimple(rapida, urlSeries, '/img/');
+      simple = new VisorSimple(rapida, urlSeries, '/img/', borrar);
     }
     guardar('visor_modo', modo);
   }

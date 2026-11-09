@@ -104,6 +104,15 @@ table.lista tr:hover td { background: #F8FAFC; }
 .visor .info { position: absolute; left: 10px; top: 8px; font-size: 12px; text-shadow: 0 1px 2px #000; }
 .visor .controles { display: flex; gap: 10px; align-items: center; padding: 8px 12px; background: #161B22; font-size: 13px; }
 .visor .controles input[type=range] { flex: 1; }
+.visor .btn-borrar { background: transparent; color: #FF9A8F; border: 1px solid #5A2A2A; border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
+.visor .btn-borrar:hover { background: #3A1A1A; }
+.visor .borrar-img { display: grid; gap: 8px; padding: 10px 12px; background: #2A1416; color: #F1D4D1; font-size: 13px; border-top: 1px solid #5A2A2A; }
+.visor .borrar-img .que { margin: 0; font-weight: 600; }
+.visor .borrar-img label { display: grid; gap: 4px; }
+.visor .borrar-img label.chk { display: flex; gap: 6px; align-items: center; }
+.visor .borrar-img input[name=motivo] { padding: 6px 8px; border-radius: 6px; border: 1px solid #5A2A2A; background: #fff; color: #111; }
+.visor .borrar-img .acc { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.visor .borrar-img .msg { color: #FFB4AB; }
 .visor .vacio { padding: 40px; text-align: center; color: #8B949E; }
 
 /* Página pública */

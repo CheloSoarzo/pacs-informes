@@ -187,6 +187,36 @@ def instance_study(iid):
     return jsonify({"ID": INSTANCIAS[iid]["estudio"]})
 
 
+@app.get("/series/<sid>/study")
+def series_study(sid):
+    if sid not in SERIES:
+        abort(404)
+    return jsonify({"ID": SERIES[sid]["estudio"]})
+
+
+@app.delete("/instances/<iid>")
+def borrar_instancia(iid):
+    i = INSTANCIAS.pop(iid, None)
+    if not i:
+        abort(404)
+    s = SERIES[i["serie"]]
+    s["instancias"].remove(iid)
+    if not s["instancias"]:          # como Orthanc: la serie vacía desaparece
+        SERIES.pop(i["serie"]); ESTUDIOS[i["estudio"]]["series_ids"].remove(i["serie"])
+    return jsonify({})
+
+
+@app.delete("/series/<sid>")
+def borrar_serie(sid):
+    s = SERIES.pop(sid, None)
+    if not s:
+        abort(404)
+    for iid in s["instancias"]:
+        INSTANCIAS.pop(iid, None)
+    ESTUDIOS[s["estudio"]]["series_ids"].remove(sid)
+    return jsonify({})
+
+
 @app.get("/instances/<iid>/preview")
 def preview(iid):
     if iid not in INSTANCIAS:

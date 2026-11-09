@@ -224,6 +224,19 @@ class Orthanc:
         if r is None:
             raise OrthancError("El PACS no aceptó el equipo (¿DicomModalitiesInDatabase activado?)")
 
+    def estudio_de(self, nivel, objeto_id):
+        """ID del estudio al que pertenece una imagen (nivel 'instances') o una serie (nivel 'series')."""
+        e = self.get_json(f"/{nivel}/{objeto_id}/study")
+        return (e or {}).get("ID", "")
+
+    def borrar_instancia(self, instancia_id):
+        """Borra una imagen del PACS. No se puede deshacer."""
+        self._req("DELETE", f"/instances/{instancia_id}", timeout=120)
+
+    def borrar_serie(self, serie_id):
+        """Borra una serie completa del PACS. No se puede deshacer."""
+        self._req("DELETE", f"/series/{serie_id}", timeout=300)
+
     def borrar_modalidad(self, nombre):
         self._req("DELETE", f"/modalities/{nombre}")
 
