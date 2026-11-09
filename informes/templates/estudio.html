@@ -24,6 +24,7 @@
     <a class="btn prim" href="{{ visor_ohif }}" target="_blank" rel="noopener">Abrir en visor OHIF ↗</a>
     <a class="btn" href="{{ visor_stone }}" target="_blank" rel="noopener">Visor Stone ↗</a>
     {% endif %}
+    <a class="btn" href="#visor-caja" data-vista-rapida title="Ver las imágenes en la vista rápida{{ ' (ahí se pueden borrar imágenes)' if puede('borrar_examen') }}">Vista rápida</a>
     {% if puede('descargar') %}<a class="btn" href="{{ url_for('estudio_zip', estudio_id=est.id) }}">Descargar DICOM</a>
     <span class="btn-grupo" title="Descarga el estudio directo en Horos u OsiriX (Mac)">
       <button type="button" class="btn" data-horos="horos">Abrir en Horos</button><button type="button" class="btn" data-horos="osirix">OsiriX</button>

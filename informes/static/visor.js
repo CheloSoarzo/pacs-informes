@@ -141,7 +141,7 @@ function iniciarVisores(urlSeries, borrar) {
   const leer = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
   const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 
-  function mostrar(modo) {
+  function mostrar(modo, recordar = true) {
     if (!tabs.some(t => t.dataset.modo === modo)) modo = 'rapida';
     tabs.forEach(t => t.setAttribute('aria-selected', String(t.dataset.modo === modo)));
     caja.querySelectorAll('.visor-ayuda').forEach(p => { p.hidden = p.dataset.modo !== modo; });
@@ -155,12 +155,19 @@ function iniciarVisores(urlSeries, borrar) {
     } else if (!simple) {
       simple = new VisorSimple(rapida, urlSeries, '/img/', borrar);
     }
-    guardar('visor_modo', modo);
+    if (recordar) guardar('visor_modo', modo);
   }
 
   tabs.forEach(t => t.addEventListener('click', () => mostrar(t.dataset.modo)));
   const angosta = window.matchMedia('(max-width: 900px)').matches;   // en el celular, la vista rápida
-  mostrar(angosta ? 'rapida' : leer('visor_modo', caja.dataset.defecto));
+  // Botón «Vista rápida» de la lista (?visor=rapida): abre directo en la vista rápida, sin cambiar el visor
+  // que el usuario tiene elegido para los demás exámenes
+  const pedida = new URLSearchParams(location.search).get('visor') === 'rapida';
+  if (pedida) mostrar('rapida', false);
+  else mostrar(angosta ? 'rapida' : leer('visor_modo', caja.dataset.defecto));
+  document.querySelectorAll('[data-vista-rapida]').forEach(b => b.addEventListener('click', e => {
+    e.preventDefault(); mostrar('rapida'); caja.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
 
   const ampliar = document.getElementById('visor-ampliar');
   if (ampliar && estudio) {

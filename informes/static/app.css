@@ -512,6 +512,7 @@ details.zona-peligro .btn.peligro { justify-self: start; margin-top: 8px; border
 .btn.peligro-lleno { background: var(--error); border-color: var(--error); color: #fff; }
 .btn.peligro-lleno:disabled { opacity: .45; cursor: not-allowed; }
 table.lista td.celda-acciones { text-align: right; }
+table.lista .btn-vista { margin-left: 6px; }
 
 /* Ficha del paciente (todos sus exámenes) */
 .ficha-examenes { margin-top: 16px; }
