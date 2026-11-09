@@ -683,7 +683,8 @@ def _examenes_de(rut):
                         "examen": ((inf["descripcion"] if inf and len(eids) > 1 else "") or o["examen"] or "Examen"),
                         "estado": "listo" if listo else "proceso",
                         "estado_txt": "Informe disponible" if listo else "Examen realizado · informe en proceso",
-                        "informe_id": inf["id"] if listo else None, "firmado_en": inf["firmado_en"] if inf else ""})
+                        "informe_id": inf["id"] if listo else None, "firmado_en": inf["firmado_en"] if inf else "",
+                        "estudio_id": eid})
         if eids:
             continue
         if o["pagado"] or o["estado_agenda"] in ("llego", "atendido"):
@@ -693,7 +694,7 @@ def _examenes_de(rut):
         else:
             continue
         out.append({"fecha": o["fecha"], "hora": o["hora"], "examen": o["examen"] or "Examen", "estado": estado,
-                    "estado_txt": txt, "informe_id": None, "firmado_en": ""})
+                    "estado_txt": txt, "informe_id": None, "firmado_en": "", "estudio_id": ""})
     # Informes validados del mismo RUT que no vinieron de la agenda (ej: exámenes anteriores)
     for inf in db.execute("""SELECT id, estudio_id, fecha_estudio, descripcion, firmado_en FROM informes WHERE estado='firmado'
             AND UPPER(REPLACE(REPLACE(REPLACE(paciente_id,'.',''),'-',''),' ',''))=? ORDER BY fecha_estudio DESC LIMIT 60""",
@@ -703,7 +704,7 @@ def _examenes_de(rut):
         f = inf["fecha_estudio"] or ""
         out.append({"fecha": f"{f[:4]}-{f[4:6]}-{f[6:8]}" if len(f) == 8 else f, "hora": "",
                     "examen": inf["descripcion"] or "Examen", "estado": "listo", "estado_txt": "Informe disponible",
-                    "informe_id": inf["id"], "firmado_en": inf["firmado_en"] or ""})
+                    "informe_id": inf["id"], "firmado_en": inf["firmado_en"] or "", "estudio_id": inf["estudio_id"]})
     out.sort(key=lambda e: (e["fecha"], e["hora"]), reverse=True)
     return out
 
@@ -743,6 +744,50 @@ def portal_ver(inf_id):
     db.commit()
     auditar(rut, "portal_ver_informe", f"informe {inf_id}", request.remote_addr or "")
     return redirect(url_for("publico", token=link["token"]))
+
+
+# Imágenes del paciente aunque el informe aún no esté listo (apenas el estudio llega al PACS)
+def _estudio_del_paciente(estudio_id):
+    rut = _rut_paciente()
+    if not rut:
+        return None, None
+    e = next((x for x in _examenes_de(rut) if x["estudio_id"] == estudio_id), None)
+    return (rut, e) if e else (rut, None)
+
+
+@app.route("/paciente/imagenes/<estudio_id>")
+def portal_imagenes(estudio_id):
+    rut, e = _estudio_del_paciente(estudio_id)
+    if not rut:
+        return redirect(url_for("portal_ingreso"))
+    if not e:
+        abort(404)
+    auditar(rut, "portal_ver_imagenes", f"estudio {estudio_id}", request.remote_addr or "")
+    return render_template("paciente_imagenes.html", c=centro_info(), e=e, estudio_id=estudio_id)
+
+
+@app.route("/paciente/imagenes/<estudio_id>/series")
+def portal_series(estudio_id):
+    rut, e = _estudio_del_paciente(estudio_id)
+    if not e:
+        abort(404)
+    series = pacs.series(estudio_id)
+    for s in series:
+        s["instancias"] = pacs.instancias_ordenadas(s["id"])
+    return jsonify(series=[s for s in series if s["instancias"] and s["modalidad"] not in ("SR", "PR", "KO")])
+
+
+@app.route("/paciente/imagenes/<estudio_id>/img/<instancia_id>")
+def portal_img(estudio_id, instancia_id):
+    rut, e = _estudio_del_paciente(estudio_id)
+    if not e or not pacs.instancia_pertenece(instancia_id, estudio_id):
+        abort(404)
+    r = pacs.preview(instancia_id)
+    if r is None:
+        abort(404)
+    from flask import Response
+    return Response(r.content, mimetype=r.headers.get("Content-Type", "image/png"),
+                    headers={"Cache-Control": "private, max-age=3600"})
 
 
 @app.after_request

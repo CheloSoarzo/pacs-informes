@@ -69,6 +69,7 @@
     {% if e.informe_id %}
     <div class="acc"><a class="btn prim" href="{{ url_for('portal_ver', inf_id=e.informe_id) }}">Ver informe e imágenes</a></div>
     {% elif e.estado == 'proceso' %}
+    {% if e.estudio_id %}<div class="acc"><a class="btn prim" href="{{ url_for('portal_imagenes', estudio_id=e.estudio_id) }}">Ver imágenes</a></div>{% endif %}
     <p class="ayuda" style="margin-top:8px">Cuando el médico radiólogo firme el informe, aparecerá aquí para verlo y descargarlo.</p>
     {% endif %}
   </div>
