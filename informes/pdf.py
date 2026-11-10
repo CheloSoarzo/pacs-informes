@@ -2,6 +2,8 @@
 import io
 import os
 import re
+
+import formato
 from xml.sax.saxutils import escape
 
 from reportlab.graphics.barcode import qr
@@ -38,21 +40,27 @@ RE_SECCION = re.compile(r"^[A-ZÁÉÍÓÚÑÜ0-9 /().,-]{3,60}:$")
 
 
 def _cuerpo(texto):
-    flow = []
-    for bloque in re.split(r"\n\s*\n", (texto or "").strip()):
-        lineas = [l.rstrip() for l in bloque.split("\n")]
-        buf = []
-        for l in lineas:
-            if RE_SECCION.match(l.strip()):
-                if buf:
-                    flow.append(Paragraph("<br/>".join(buf), ESTILOS["texto"]))
-                    buf = []
-                flow.append(Paragraph(escape(l.strip()), ESTILOS["seccion"]))
-            else:
-                buf.append(escape(l))
+    """Párrafos del informe. Respeta negrita/cursiva/subrayado (<b>, <i>, <u>) y los subtítulos tipo «HALLAZGOS:»."""
+    flow, buf = [], []
+
+    def cerrar():
         if buf:
             flow.append(Paragraph("<br/>".join(buf), ESTILOS["texto"]))
-        flow.append(Spacer(1, 4))
+            buf.clear()
+
+    for plano, marcado in formato.lineas_pdf((texto or "").strip()):
+        if not plano.strip():                    # línea en blanco: separa párrafos
+            if buf:
+                cerrar()
+                flow.append(Spacer(1, 4))
+            continue
+        if RE_SECCION.match(plano.strip()):
+            cerrar()
+            flow.append(Paragraph(marcado.strip(), ESTILOS["seccion"]))
+        else:
+            buf.append(marcado.rstrip())
+    cerrar()
+    flow.append(Spacer(1, 4))
     return flow
 
 

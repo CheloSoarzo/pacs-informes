@@ -349,7 +349,7 @@
         <p class="peq">📄 Informe firmado subido como archivo: es el PDF oficial que recibe el paciente.</p>
         <iframe class="pdf-informe" src="{{ url_for('informe_pdf', inf_id=inf.id) }}" title="Informe firmado"></iframe>
         {% else %}
-        <div class="texto-informe">{{ inf.cuerpo }}</div>
+        <div class="texto-informe">{{ inf.cuerpo|informe_html }}</div>
         {% endif %}
       {% elif not dictados %}
         <h2>Informe</h2>
@@ -362,7 +362,7 @@
           <form method="post" action="{{ url_for('corregir_validado', estudio_id=est.id) }}">
             <input type="hidden" name="csrf" value="{{ csrf_token() }}">
             <label for="corr-cuerpo">Texto corregido</label>
-            <textarea id="corr-cuerpo" name="cuerpo" rows="12" required spellcheck="true" lang="es">{{ inf.cuerpo }}</textarea>
+            <textarea id="corr-cuerpo" name="cuerpo" rows="12" spellcheck="true" lang="es" data-editor-rico>{{ inf.cuerpo }}</textarea>
             <label for="corr-motivo">¿Qué se corrigió?</label>
             <input type="text" id="corr-motivo" name="motivo" required maxlength="300" placeholder="Ej: lateralidad, nombre del examen, error de tipeo">
             <p class="peq suave">El informe vuelve a quedar validado por <b>{{ firmante.nombre if firmante }}</b> como nueva versión.
@@ -405,7 +405,7 @@
           {% for v in versiones %}
             <div class="version">
               <div class="peq suave">Versión {{ v.version }} · validada por {{ v.firmante }} el {{ v.firmado_en|fh }} · reabierta {{ v.reabierto_en|fh }}: {{ v.motivo }}</div>
-              <div class="texto-informe peq">{{ v.cuerpo }}</div>
+              <div class="texto-informe peq">{{ v.cuerpo|informe_html }}</div>
             </div>
           {% endfor %}
         </details>
@@ -559,6 +559,7 @@
   {% for p in (plantillas if puede_editar else []) %}window.EDITOR.plantillas[{{ p.id|tojson }}] = {{ p.cuerpo|tojson }};
   {% endfor %}
 </script>
+<script src="{{ url_for('static', filename='editor_rico.js') }}"></script>
 <script src="{{ url_for('static', filename='editor.js') }}"></script>
 <script>
   (function () {

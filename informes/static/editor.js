@@ -48,10 +48,23 @@
   });
   actualizarWhatsapp();
 
-  const txt = $('#cuerpo');
-  if (!txt || !cfg.editable) return;
+  const area = $('#cuerpo');
+  if (!area || !cfg.editable) return;
+  // Área de texto con negrita/cursiva/subrayado (editor_rico.js); si no cargó, el textarea de siempre
+  const ed = window.EditorRico ? window.EditorRico.desdeTextarea(area) : {
+    div: area, valor: () => area.value, plano: () => area.value, focus: () => area.focus(),
+    enfocado: () => document.activeElement === area,
+    poner(v) { area.value = v; }, sel: () => ({ ini: area.selectionStart, fin: area.selectionEnd }),
+    seleccionar(a, b) { area.setSelectionRange(a, b === undefined ? a : b); },
+    insertar(t) { area.setRangeText(t, area.selectionStart, area.selectionEnd, 'end'); },
+  };
+  const txt = ed.div;
   const solicitante = $('#solicitante'), estado = $('#estado-guardado'), interino = $('#interino');
-  const datos = () => ({ cuerpo: txt.value, solicitante: solicitante ? solicitante.value : null });
+  const datos = () => ({ cuerpo: ed.valor(), solicitante: solicitante ? solicitante.value : null });
+  function seleccionarHueco(desde, hasta) {     // selecciona el primer campo a completar (___)
+    const p = ed.plano(), h = p.indexOf('___', desde);
+    if (h >= 0 && (hasta === undefined || h < hasta)) ed.seleccionar(h, h + p.slice(h).match(/^_+/)[0].length);
+  }
 
   // ---------- guardado automático ----------
   let cambios = false, temporizador = null, guardando = false;
@@ -71,17 +84,15 @@
   // ---------- insertar texto en el cursor ----------
   function insertar(t, comoParrafo) {
     if (!t) return;
-    const ini = txt.selectionStart, fin = txt.selectionEnd, antes = txt.value.slice(0, ini);
+    if (!ed.enfocado()) ed.focus();
+    const { ini } = ed.sel(), antes = ed.plano().slice(0, ini);
     const inicioFrase = !antes.trim() || /[.!?:]\s*$/.test(antes) || /\n\s*$/.test(antes);
     if (inicioFrase) t = t.replace(/^\s*([a-záéíóúñü])/, (m, c) => m.replace(c, c.toUpperCase()));
     let pre = '';
     if (comoParrafo && antes && !/\n$/.test(antes)) pre = '\n';
     else if (antes && !/[\s(]$/.test(antes) && !/^[\s.,;:)\n]/.test(t)) pre = ' ';
-    txt.setRangeText(pre + t, ini, fin, 'end');
-    txt.focus();
-    // Selecciona el primer campo a completar (___) del texto insertado
-    const hueco = txt.value.indexOf('___', ini);
-    if (hueco >= 0 && hueco < ini + pre.length + t.length) txt.setSelectionRange(hueco, hueco + (txt.value.slice(hueco).match(/^_+/)[0].length));
+    ed.insertar(pre + t);
+    seleccionarHueco(ini, ini + pre.length + t.length);   // el primer ___ del texto insertado
     marcar();
   }
   document.addEventListener('insertar-texto', e => insertar(e.detail, true));
@@ -92,9 +103,8 @@
     const p = cfg.plantillas[sel.value];
     sel.value = '';
     if (!p) return;
-    if (txt.value.trim() && !confirm('¿Reemplazar el texto actual por la plantilla?')) return;
-    txt.value = p; marcar(); txt.focus();
-    const i = txt.value.indexOf('___'); if (i >= 0) txt.setSelectionRange(i, i + txt.value.slice(i).match(/^_+/)[0].length);
+    if (ed.plano().trim() && !confirm('¿Reemplazar el texto actual por la plantilla?')) return;
+    ed.poner(p); marcar(); ed.focus(); ed.seleccionar(0); seleccionarHueco(0);
   });
 
   // ---------- subir un informe escrito en Word / LibreOffice / PDF ----------
@@ -103,7 +113,7 @@
     const f = archivo.files[0];
     archivo.value = '';
     if (!f) return;
-    if (txt.value.trim() && !confirm('¿Reemplazar el texto actual por el del archivo «' + f.name + '»?')) return;
+    if (ed.plano().trim() && !confirm('¿Reemplazar el texto actual por el del archivo «' + f.name + '»?')) return;
     const fd = new FormData(); fd.append('archivo', f);
     estado.textContent = 'Leyendo ' + f.name + '…';
     try {
@@ -111,7 +121,7 @@
                                                  headers: { 'X-CSRF': cfg.csrf } });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || 'No se pudo leer el archivo');
-      txt.value = j.texto; marcar(); txt.focus(); txt.setSelectionRange(0, 0); txt.scrollTop = 0;
+      ed.poner(j.texto); marcar(); ed.focus(); ed.seleccionar(0); txt.scrollTop = 0;
       estado.textContent = 'Cargado desde ' + f.name + ': revísalo antes de enviarlo';
     } catch (e) { estado.textContent = '⚠ ' + e.message; alert(e.message); }
   });
@@ -131,7 +141,7 @@
   }
   if (panel) {
     let cursor = 0;
-    txt.addEventListener('blur', () => { cursor = txt.selectionStart; });
+    txt.addEventListener('blur', () => { cursor = ed.sel().ini; });
     bf.addEventListener('click', () => {
       panel.hidden = !panel.hidden; bf.setAttribute('aria-expanded', String(!panel.hidden));
       if (!panel.hidden) { pintarFrases(); buscar.focus(); }
@@ -141,7 +151,7 @@
     lista.addEventListener('click', e => {
       const b = e.target.closest('.frase'); if (!b) return;
       const f = frases.find(x => String(x.id) === b.dataset.id);
-      if (document.activeElement !== txt) { txt.focus(); txt.setSelectionRange(cursor, cursor); }
+      if (!ed.enfocado()) { ed.focus(); ed.seleccionar(cursor); }
       insertar(f.texto, false);
     });
   }
@@ -150,11 +160,11 @@
   frases.forEach(f => { if (f.atajo && !porAtajo[f.atajo]) porAtajo[f.atajo] = f; });
   txt.addEventListener('keydown', e => {
     if (![' ', 'Tab', 'Enter'].includes(e.key)) return;
-    const pos = txt.selectionStart;
-    const m = txt.value.slice(0, pos).match(/(?:^|\s)\.([a-z0-9ñ_]+)$/i);
+    const pos = ed.sel().ini;
+    const m = ed.plano().slice(0, pos).match(/(?:^|\s)\.([a-z0-9ñ_]+)$/i);
     if (!m || !porAtajo[m[1].toLowerCase()]) return;
     e.preventDefault();
-    txt.setSelectionRange(pos - m[1].length - 1, pos);
+    ed.seleccionar(pos - m[1].length - 1, pos);
     insertar(porAtajo[m[1].toLowerCase()].texto, false);
   });
 
@@ -216,7 +226,7 @@
       if (cfg.whisper) await iniciarServidor();
       else if (SR) iniciarNavegador();
       else { alert('Este navegador no permite voz a texto. Usa Google Chrome o Microsoft Edge.'); return; }
-      activo = true; boton.classList.add('grabando'); boton.textContent = '■ Detener voz (F2)'; txt.focus();
+      activo = true; boton.classList.add('grabando'); boton.textContent = '■ Detener voz (F2)'; ed.focus();
     } catch (e) { alert('No se pudo acceder al micrófono: ' + e.message); }
   }
   function detener() {
@@ -236,7 +246,7 @@
   const prev = $('#btn-previa');
   prev && prev.addEventListener('click', () => {
     const f = $('#form-previa');
-    f.querySelector('[name=cuerpo]').value = txt.value;
+    f.querySelector('[name=cuerpo]').value = ed.valor();
     f.querySelector('[name=solicitante]').value = solicitante ? solicitante.value : '';
     f.submit();
   });
@@ -245,7 +255,7 @@
   const caja = $('#confirmar');
   function confirmar(mensaje, etiqueta, clase, accion) {
     if (activo) detener();
-    if (txt.value.trim().length < 10) { caja.hidden = false; caja.className = 'confirmar error'; caja.textContent = 'El informe está vacío.'; return; }
+    if (ed.plano().trim().length < 10) { caja.hidden = false; caja.className = 'confirmar error'; caja.textContent = 'El informe está vacío.'; return; }
     caja.hidden = false; caja.className = 'confirmar';
     caja.innerHTML = `<p>${mensaje}</p><div class="fila"><button type="button" class="btn ${clase}" id="c-si">${etiqueta}</button>
       <button type="button" class="btn" id="c-no">Cancelar</button></div>`;

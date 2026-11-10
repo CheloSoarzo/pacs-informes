@@ -84,7 +84,21 @@ table.lista tr:hover td { background: #F8FAFC; }
 
 .editor-barra { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
 .editor-barra select { width: auto; min-width: 220px; }
-#cuerpo { min-height: 460px; font: 15px/1.6 system-ui, sans-serif; resize: vertical; }
+#cuerpo, .editor-rico.principal { min-height: 460px; font: 15px/1.6 system-ui, sans-serif; resize: vertical; }
+/* Editor del informe con negrita / cursiva / subrayado (editor_rico.js) */
+.barra-formato { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; padding: 4px; border: 1px solid var(--borde);
+  border-bottom: 0; border-radius: 6px 6px 0 0; background: #F8FAFC; }
+.btn-formato { font: inherit; font-size: 15px; min-width: 34px; height: 32px; padding: 0 10px; border: 1px solid transparent;
+  border-radius: 5px; background: transparent; color: var(--texto); cursor: pointer; }
+.btn-formato:hover { background: #EEF2F6; }
+.btn-formato.activo { background: var(--primario-claro); border-color: var(--primario); color: var(--primario-osc); }
+.btn-formato:focus-visible { outline: 2px solid var(--primario); outline-offset: 1px; }
+.btn-formato.f-quitar { font-size: 13px; color: var(--suave); margin-left: 6px; }
+.editor-rico { min-height: 12em; font: 15px/1.6 system-ui, sans-serif; white-space: pre-wrap; overflow-wrap: anywhere;
+  padding: 10px 12px; border: 1px solid var(--borde); border-radius: 0 0 6px 6px; background: #fff; color: var(--texto);
+  overflow: auto; resize: vertical; }
+.editor-rico:focus { outline: 2px solid var(--primario-claro); border-color: var(--primario); }
+.editor-rico.vacio::before { content: attr(data-placeholder); color: var(--suave); pointer-events: none; }
 #cuerpo[readonly] { background: #FAFBFC; }
 .interino { min-height: 22px; font-size: 13px; color: var(--primario); font-style: italic; margin: 6px 0; }
 .estado-guardado { font-size: 12px; color: var(--suave); margin-left: auto; }

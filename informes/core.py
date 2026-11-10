@@ -9,6 +9,7 @@ import requests
 from flask import Flask, abort, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+import formato
 from config import Config
 from db import ahora, ajuste, auditar, get_db, init_db
 from orthanc import Orthanc, OrthancError, edad, fecha_dicom
@@ -185,6 +186,7 @@ def iniciales(nombre):
 
 
 app.jinja_env.filters["iniciales"] = iniciales
+app.jinja_env.filters["informe_html"] = formato.a_html       # texto del informe con negrita/cursiva/subrayado
 
 
 def dt_estudio(fecha_raw, hora_raw):

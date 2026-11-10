@@ -43,7 +43,7 @@
     <p><a class="btn prim" href="{{ url_for('publico_pdf', token=token) }}" target="_blank" rel="noopener">Abrir informe (PDF)</a></p>
     <iframe class="pdf-informe" src="{{ url_for('publico_pdf', token=token) }}" title="Informe"></iframe>
     {% else %}
-    <div class="texto-informe">{{ inf.cuerpo }}</div>
+    <div class="texto-informe">{{ inf.cuerpo|informe_html }}</div>
     {% endif %}
     {% if firmante and not inf.archivo %}
     <div class="firma-pub">
