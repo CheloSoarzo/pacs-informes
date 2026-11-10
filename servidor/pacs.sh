@@ -566,11 +566,11 @@ cmd_post_actualizar() {
     nohup setsid bash -c "sleep 60; bash '$CODIGO/servidor/pacs.sh' comprimir --descomprimir-fuji" \
       >> /var/log/pacs-comprimir.log 2>&1 < /dev/null &
   fi
-  # Una sola vez (v1.1.27): arregla las imágenes del CR Fujifilm que el visor diagnóstico no puede abrir
+  # Una sola vez (v1.1.28): arregla las imágenes del CR Fujifilm que el visor diagnóstico no puede abrir
   # y su caché (error «The series metadata json does not contain an array» al abrir el estudio)
-  if [ ! -f "$INST/.visor-reparado-2" ]; then
-    touch "$INST/.visor-reparado-2"
-    nohup setsid bash -c "for i in \$(seq 40); do sleep 30; docker exec pacs-$(instancias | head -1)-informes-1 grep -q CAMPOS_MALOS comprimir.py 2>/dev/null && break; done; bash '$CODIGO/servidor/pacs.sh' comprimir --reparar-visor" \
+  if [ ! -f "$INST/.visor-reparado-3" ]; then
+    touch "$INST/.visor-reparado-3"
+    nohup setsid bash -c "for i in \$(seq 40); do sleep 30; docker exec pacs-$(instancias | head -1)-informes-1 grep -q dicomweb_ok comprimir.py 2>/dev/null && break; done; bash '$CODIGO/servidor/pacs.sh' comprimir --reparar-visor" \
       >> /var/log/pacs-comprimir.log 2>&1 < /dev/null &
   fi
   # Actualización automática desde GitHub: viene activada (se apaga con: pacs auto-actualizar no)

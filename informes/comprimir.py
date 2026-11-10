@@ -17,6 +17,7 @@ Uso (dentro del contenedor de la app de informes; en el servidor: `pacs comprimi
     python comprimir.py --desde-horas 2 solo estudios sin cambios hace al menos 2 horas (lo usa la tarea nocturna)
 """
 import argparse
+import fcntl
 import hashlib
 import os
 import sys
@@ -101,21 +102,23 @@ CAMPOS_MALOS = ["0018,1412"]
 ARCHIVO_CAMBIOS = os.path.join(os.environ.get("DATA_DIR", "/data"), "reparar-visor.seq")
 
 
-def arreglar_instancia(iid):
-    """Quita de la imagen los campos que rompen el visor diagnóstico. Los pixeles y los UID no cambian.
-    Devuelve True si la arregló."""
-    tags = _get(f"/instances/{iid}/tags", params={"short": ""}, timeout=60).json()
-    quitar = [t for t in CAMPOS_MALOS if t in tags]
-    if not quitar:
-        return False
-    sintaxis = S.get(URL + f"/instances/{iid}/metadata/TransferSyntax", timeout=60).text.strip()
-    original = _get(f"/instances/{iid}/file", timeout=600).content
-    antes = huella_pixeles(iid)
+IMPLICITA = "1.2.840.10008.1.2"
+
+
+def dicomweb_ok(iid):
+    """True si el visor diagnóstico (DICOMweb) puede leer la imagen."""
+    t = _get(f"/instances/{iid}/tags", params={"short": ""}, timeout=60).json()
+    r = S.get(URL + f"/dicom-web/studies/{t.get('0020,000d')}/series/{t.get('0020,000e')}"
+                    f"/instances/{t.get('0008,0018')}/metadata", timeout=120)
+    return r.status_code == 200
+
+
+def _probar(iid, original, antes, cambios):
+    """Aplica los cambios a la imagen original y la guarda encima. True si el visor ya la puede leer."""
     r = S.post(URL + f"/instances/{iid}/modify", timeout=600,
-               json={"Remove": quitar, "Force": True, "Transcode": sintaxis,
-                     "Keep": ["StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID"]})
+               json={**cambios, "Force": True, "Keep": ["StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID"]})
     if r.status_code != 200 or not r.content:
-        raise Omitir(f"Orthanc no pudo arreglarla ({r.status_code})")
+        return False
     res = subir(r.content)
     if res.get("ID") != iid:
         subir(original)
@@ -125,7 +128,33 @@ def arreglar_instancia(iid):
     if huella_pixeles(iid) != antes:
         subir(original)
         raise Omitir("los pixeles no coincidían: se dejó la original")
-    return True
+    return dicomweb_ok(iid)
+
+
+def arreglar_instancia(iid):
+    """Si el visor diagnóstico no puede leer la imagen, prueba arreglos de menos a más (siempre con los mismos
+    pixeles y UID) hasta que pueda. Devuelve el arreglo usado, o "" si no hacía falta."""
+    if dicomweb_ok(iid):
+        return ""
+    tags = _get(f"/instances/{iid}/tags", params={"short": ""}, timeout=60).json()
+    sintaxis = S.get(URL + f"/instances/{iid}/metadata/TransferSyntax", timeout=60).text.strip()
+    if sintaxis not in SIN_COMPRIMIR:
+        sintaxis = SIN_COMPRIMIR_DESTINO
+    quitar = [t for t in CAMPOS_MALOS if t in tags]
+    original = _get(f"/instances/{iid}/file", timeout=600).content
+    antes = huella_pixeles(iid)
+    intentos = [
+        ("formato implícito", {"Transcode": IMPLICITA, "Remove": quitar}),
+        ("sin campos privados", {"Transcode": sintaxis, "Remove": quitar, "RemovePrivateTags": True}),
+        ("sin campos privados, formato implícito", {"Transcode": IMPLICITA, "Remove": quitar, "RemovePrivateTags": True}),
+    ]
+    if quitar:
+        intentos.insert(0, ("sin " + ", ".join(quitar), {"Transcode": sintaxis, "Remove": quitar}))
+    for nombre, cambios in intentos:
+        if _probar(iid, original, antes, cambios):
+            return nombre
+    subir(original)
+    raise Omitir("el visor diagnóstico sigue sin poder leerla (se dejó como estaba)")
 
 
 def arreglar_serie(serie_id):
@@ -136,16 +165,32 @@ def arreglar_serie(serie_id):
     n = 0
     for iid in serie.get("Instances", []):
         try:
-            n += arreglar_instancia(iid)
+            como = arreglar_instancia(iid)
+            if como:
+                n += 1
+                print(f"  imagen {iid}: arreglada ({como})")
         except Omitir as x:
             print(f"  aviso {iid}: {x}")
-    if n:
-        limpiar_cache_visor(serie_id)
+    limpiar_cache_visor(serie_id)       # siempre: el caché pudo armarse antes de arreglarla
     return n
+
+
+def _candado_reparar(esperar):
+    """Una sola reparación a la vez por PACS (la de cada minuto y la completa no se pisan)."""
+    fh = open(os.path.join(os.environ.get("DATA_DIR", "/data"), "reparar-visor.lock"), "w")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX if esperar else fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return None
+    return fh
 
 
 def reparar_nuevos():
     """Para la revisión de cada minuto: arregla las series que terminaron de llegar desde la última vez."""
+    candado = _candado_reparar(esperar=False)
+    if not candado:
+        return                             # hay otra reparación en curso: lo toma la próxima vez
     try:
         with open(ARCHIVO_CAMBIOS) as fh:
             desde = int(fh.read().strip() or 0)
@@ -174,6 +219,7 @@ def reparar_nuevos():
 
 def reparar_visor():
     """Revisa todas las series: arregla las imágenes con campos malos y borra los cachés del visor dañados."""
+    candado = _candado_reparar(esperar=True)  # noqa: F841 - se suelta al terminar
     n = 0
     for se in _get("/series", params={"expand": "true"}, timeout=300).json():
         if excluido(se.get("MainDicomTags", {}).get("Manufacturer")):
