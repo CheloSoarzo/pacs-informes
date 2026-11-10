@@ -141,6 +141,7 @@ def dictar(estudio_id):
     base = Config.PACS_PUBLIC_URL
     return render_template(
         "dictar.html", est=est, inf=inf, meta=meta, dictados=dictados, notas=notas, radiologo=radiologo,
+        solicitante=solicitante_de(est),
         radiologos=radiologos(), historial=_historial(u, est),
         visor_ohif=f"{base}/ohif/viewer?StudyInstanceUIDs={est['uid']}",
         visor_stone=f"{base}/stone-webviewer/index.html?study={est['uid']}", base_pacs=base)
@@ -723,6 +724,13 @@ def _datos_editables(est):
     }
 
 
+def _datos_editables_vista(est):
+    """Lo que se muestra en «Corregir datos»: el médico solicitante de la agenda si lo hay (el DICOM puede venir vacío)."""
+    d = _datos_editables(est)
+    d["solicitante"] = (solicitante_de(est) or "").replace("^", " ").strip().upper() or d["solicitante"]
+    return d
+
+
 def _limpio(v, largo=64):
     # Sin caracteres de control ni separadores DICOM ("\\" separa valores; "^" lo ponemos nosotros)
     v = "".join(c for c in (v or "") if c.isprintable() and c not in "\\^=").strip()
@@ -736,7 +744,8 @@ def datos_paciente(estudio_id):
     actual = _datos_editables(est)
     inf = informe_por_estudio(estudio_id)
     if request.method == "GET":
-        return jsonify(datos=actual, informe_validado=bool(inf and inf["estado"] == "firmado"))
+        return jsonify(datos=_datos_editables_vista(est), informe_validado=bool(inf and inf["estado"] == "firmado"))
+    sol_antes = _datos_editables_vista(est)["solicitante"]
 
     f = request.form
     nuevo = {
@@ -780,8 +789,20 @@ def datos_paciente(estudio_id):
         tags["PatientSex"] = nuevo["sexo"]
     if nuevo["descripcion"] != actual["descripcion"].upper():
         tags["StudyDescription"] = nuevo["descripcion"]
-    if nuevo["solicitante"] != actual["solicitante"].upper():
+    # El médico solicitante se compara con el que se mostró (el de la agenda si lo había)
+    cambio_sol = nuevo["solicitante"] != sol_antes.upper()
+    if cambio_sol and nuevo["solicitante"] != actual["solicitante"].upper():
         tags["ReferringPhysicianName"] = nuevo["solicitante"]
+    if cambio_sol:
+        # el nombre corregido reemplaza al de la agenda (si no, la ficha seguiría mostrando el anterior)
+        guardar_meta(estudio_id, solicitante_manual=nuevo["solicitante"])
+        db0 = get_db()
+        db0.execute("UPDATE informes SET solicitante=? WHERE estudio_id=?", (nuevo["solicitante"], estudio_id))
+        db0.commit()
+        if not tags:
+            registrar("editar_paciente", f"{estudio_id} | Médico solicitante: {sol_antes or '(vacío)'} → {nuevo['solicitante']}")
+            flash("Médico solicitante corregido.", "ok")
+            return _volver(estudio_id)
     if nuevo["accession"] != actual["accession"]:
         tags["AccessionNumber"] = nuevo["accession"]
     if not tags:

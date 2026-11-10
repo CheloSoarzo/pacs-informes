@@ -152,6 +152,28 @@ def _accesos(u):
     return cache[u["id"]]
 
 
+def _solicitante_agenda(estudio_id):
+    """Médico solicitante puesto en la agenda (o escrito a mano en el examen), si lo hay."""
+    from flask import g
+    from db import get_db
+    cache = g.setdefault("sol_manual", {})
+    if estudio_id not in cache:
+        r = get_db().execute("SELECT solicitante_manual FROM estudio_meta WHERE estudio_id=?", (estudio_id,)).fetchone()
+        cache[estudio_id] = (r[0] or "") if r else ""
+    return cache[estudio_id]
+
+
+def estudios_por_nombre_solicitante(u):
+    """Exámenes cuyo solicitante (de la agenda o escrito a mano) coincide con el nombre configurado del médico."""
+    from db import get_db
+    filtro = [p for p in _normal(u["filtro_solicitante"] or "").replace("^", " ").split() if p]
+    if not filtro:
+        return []
+    filas = get_db().execute("SELECT estudio_id, solicitante_manual FROM estudio_meta "
+                             "WHERE COALESCE(solicitante_manual,'')!='' ORDER BY rowid DESC").fetchall()
+    return [eid for eid, nombre in filas if all(p in _normal(nombre) for p in filtro)]
+
+
 def restringido(u):
     """True si el usuario no puede ver todo el archivo."""
     return solo_solicitados(u) or solo_asignados(u) or bool(centros_de(u))
@@ -175,6 +197,7 @@ def ve_estudio(u, est):
         filtro = [p for p in _normal(u["filtro_solicitante"] or "").replace("^", " ").split() if p]
         if not filtro:
             return False
-        solicitante = _normal(est.get("solicitante", ""))
+        # el nombre puede venir en el DICOM (worklist) o de la agenda (médico de la cita)
+        solicitante = _normal(est.get("solicitante", "") + " " + _solicitante_agenda(eid or ""))
         return all(p in solicitante for p in filtro)
     return True
