@@ -26,6 +26,7 @@
 #   pacs comprimir [nombre]    comprime SIN PÉRDIDA (JPEG-LS, verificado pixel a pixel) las imágenes guardadas
 #                              (todos los PACS si no se indica uno). Lo nuevo ya llega comprimido; cron repasa cada noche
 #   pacs comprimir <nombre> --probar   solo el primer estudio pendiente, para ver cuánto ahorra
+#   pacs comprimir --descomprimir-fuji devuelve a sin comprimir las imágenes de CR Fujifilm (no se comprimen)
 #   pacs auto-actualizar si|no|estado   el servidor revisa GitHub cada 5 minutos y, si hay una versión nueva
 #                              del PACS o de la agenda, se actualiza solo (viene activado)
 #   pacs base                  (interno) crea la red compartida y la entrada web HTTPS
@@ -557,6 +558,13 @@ cmd_post_actualizar() {
   if [ -n "$con_agenda" ]; then traer_agenda || echo "Aviso: no se pudo actualizar la agenda"; dc "$con_agenda" build agenda || true; fi
   # Transcripción automática de dictados: se reconstruye si está activada
   if dictado_ia_activo; then transc up -d --build || echo "Aviso: no se pudo actualizar el transcriptor"; fi
+  # Una sola vez (v1.1.25): las imágenes de CR Fujifilm que se comprimieron vuelven a sin comprimir
+  # (el visor diagnóstico no las lee bien comprimidas). Corre en segundo plano y queda en el registro.
+  if [ ! -f "$INST/.fuji-descomprimido" ]; then
+    touch "$INST/.fuji-descomprimido"
+    nohup setsid bash -c "sleep 60; bash '$CODIGO/servidor/pacs.sh' comprimir --descomprimir-fuji" \
+      >> /var/log/pacs-comprimir.log 2>&1 < /dev/null &
+  fi
   # Actualización automática desde GitHub: viene activada (se apaga con: pacs auto-actualizar no)
   touch "$INST/servidor.env"
   grep -qE "^AUTO_ACTUALIZAR=" "$INST/servidor.env" || poner "$INST/servidor.env" AUTO_ACTUALIZAR true
@@ -671,6 +679,7 @@ cmd_comprimir() {
     case "$a" in
       --probar) extra="--estudios 1";;
       --noche) extra="--desde-horas 2";;    # tarea nocturna: solo exámenes que ya terminaron de llegar
+      --descomprimir-fuji) extra="--descomprimir-excluidos";;   # devuelve a sin comprimir los CR Fujifilm
       todos) ;;
       *) objetivo="$a";;
     esac

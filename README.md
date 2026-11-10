@@ -292,8 +292,10 @@ ecografías en JPEG) no se tocan.
 
 - `pacs comprimir insi --probar` comprime solo el primer estudio pendiente, para ver cuánto ahorra.
 - `pacs comprimir` comprime todo lo pendiente de todos los PACS (se puede repetir: lo ya comprimido se salta).
-- Las imágenes nuevas ya se guardan comprimidas al llegar (`IngestTranscoding` de Orthanc en
-  `docker-compose.instancia.yml`), así los visores cargan más rápido desde el primer momento.
+- No se comprime al llegar (`IngestTranscoding` de Orthanc no verifica y con CR Fujifilm alteraba la imagen):
+  la compresión se hace solo con verificación, cada noche.
+- Los equipos de `COMPRESION_EXCLUIR` (por defecto `FUJI`) no se comprimen. `pacs comprimir --descomprimir-fuji`
+  devuelve a sin comprimir (verificado) las imágenes de esos equipos.
 - Cada noche (01:15) cron repasa con verificación lo que haya quedado sin comprimir. Registro en
   `/var/log/pacs-comprimir.log`.
 

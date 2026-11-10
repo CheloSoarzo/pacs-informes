@@ -39,10 +39,9 @@ services:
       ORTHANC__DICOM_MODALITIES_IN_DATABASE: "true"
       ORTHANC__DICOM_ASSOCIATION_CLOSE_DELAY: "5"
       ORTHANC__OVERWRITE_INSTANCES: "true"
-      # Cada imagen que llega se guarda comprimida SIN PÉRDIDA (JPEG-LS): pixeles idénticos, 2 a 7 veces menos
-      # espacio y visores más rápidos. Las que ya vienen comprimidas (ej. ecografía en JPEG) se guardan tal cual.
-      ORTHANC__INGEST_TRANSCODING: "${COMPRESION_SINTAXIS:-1.2.840.10008.1.2.4.80}"
-      ORTHANC__INGEST_TRANSCODING_OF_COMPRESSED: "false"
+      # Sin compresión al llegar: Orthanc no verifica esa compresión y con algunos equipos (CR Fujifilm, que declaran
+      # menos bits de los que usan) alteraba la imagen. La compresión la hace `pacs comprimir` cada noche,
+      # verificada pixel a pixel (ver informes/comprimir.py).
       ORTHANC__STABLE_AGE: "60"
       ORTHANC__AUTHENTICATION_ENABLED: "false"
       ORTHANC__POSTGRESQL__HOST: postgres

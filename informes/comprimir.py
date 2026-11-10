@@ -27,6 +27,11 @@ import requests
 
 DESTINO = os.environ.get("COMPRESION_SINTAXIS", "1.2.840.10008.1.2.4.80")   # JPEG-LS sin pérdida
 SIN_COMPRIMIR = {"1.2.840.10008.1.2", "1.2.840.10008.1.2.1", "1.2.840.10008.1.2.2", "1.2.840.10008.1.2.1.99"}
+SIN_PERDIDA = {"1.2.840.10008.1.2.4.80", "1.2.840.10008.1.2.4.70", "1.2.840.10008.1.2.4.57", "1.2.840.10008.1.2.4.90"}
+SIN_COMPRIMIR_DESTINO = "1.2.840.10008.1.2.1"      # Explicit VR Little Endian (sin comprimir)
+# Equipos que NO se comprimen (fabricante, separados por coma). Los CR Fujifilm declaran menos bits de los que
+# usan: el visor diagnóstico no los lee bien comprimidos.
+EXCLUIR = [x.strip().upper() for x in os.environ.get("COMPRESION_EXCLUIR", "FUJI").split(",") if x.strip()]
 MAX_BYTES = 400 * 1024 * 1024        # imágenes más grandes se dejan como están (memoria del servidor)
 AHORRO_MINIMO = 0.05                 # si comprimida no ahorra al menos 5 %, no vale la pena
 
@@ -64,25 +69,34 @@ def subir(datos):
     return r.json()
 
 
-def comprimir_instancia(iid):
-    """Devuelve (bytes antes, bytes después) o lanza Omitir si no corresponde."""
+def excluido(fabricante):
+    f = (fabricante or "").upper()
+    return any(x in f for x in EXCLUIR)
+
+
+def comprimir_instancia(iid, destino=DESTINO, descomprimir=False):
+    """Devuelve (bytes antes, bytes después) o lanza Omitir si no corresponde.
+    descomprimir=True: devuelve a sin comprimir una imagen comprimida sin pérdida (también verificada)."""
     sintaxis = S.get(URL + f"/instances/{iid}/metadata/TransferSyntax", timeout=60).text.strip()
-    if sintaxis not in SIN_COMPRIMIR:
+    if descomprimir:
+        if sintaxis not in SIN_PERDIDA:
+            raise Omitir("ya comprimida")      # sin comprimir, o con pérdida (no se toca)
+    elif sintaxis not in SIN_COMPRIMIR:
         raise Omitir("ya comprimida")
     original = _get(f"/instances/{iid}/file", timeout=600).content
     if len(original) > MAX_BYTES:
         raise Omitir("muy grande")
     antes = huella_pixeles(iid)
     r = S.post(URL + f"/instances/{iid}/modify", timeout=600,
-               json={"Transcode": DESTINO, "Force": True,
+               json={"Transcode": destino, "Force": True,
                      "Keep": ["StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID"]})
     if r.status_code != 200 or not r.content:
         raise Omitir(f"Orthanc no pudo comprimirla ({r.status_code})")
     nuevo = r.content
-    if len(nuevo) > len(original) * (1 - AHORRO_MINIMO):
+    if not descomprimir and len(nuevo) > len(original) * (1 - AHORRO_MINIMO):
         raise Omitir("no se achica")
     res = subir(nuevo)
-    if S.get(URL + f"/instances/{iid}/metadata/TransferSyntax", timeout=60).text.strip() != DESTINO:
+    if S.get(URL + f"/instances/{iid}/metadata/TransferSyntax", timeout=60).text.strip() != destino:
         raise Omitir("Orthanc no reemplazó la imagen (revisa OverwriteInstances)")
     if res.get("ID") != iid:
         # no debería pasar (mismos UID = mismo ID): por seguridad se repone la original y se borra la copia
@@ -118,7 +132,11 @@ def main():
     ap = argparse.ArgumentParser(description="Compresión sin pérdida de las imágenes del PACS")
     ap.add_argument("--estudios", type=int, default=0, help="máximo de estudios a revisar (0 = todos)")
     ap.add_argument("--desde-horas", type=float, default=0, help="solo estudios sin cambios hace al menos N horas")
+    ap.add_argument("--descomprimir-excluidos", action="store_true",
+                    help="devuelve a sin comprimir las imágenes de los equipos excluidos (ej. Fujifilm)")
     a = ap.parse_args()
+    if a.descomprimir_excluidos:
+        print(f"Devolviendo a sin comprimir las imágenes de: {', '.join(EXCLUIR) or '(ninguno)'}")
 
     t0 = time.time()
     try:
@@ -133,9 +151,17 @@ def main():
         tags = e.get("MainDicomTags", {})
         nombre = f"{tags.get('StudyDate', '')} {tags.get('StudyDescription', '') or tags.get('AccessionNumber', '')}".strip()
         ok_est = antes_est = despues_est = 0
-        for inst in _get(f"/studies/{e['ID']}/instances", timeout=300).json():
+        instancias = []
+        for se in _get(f"/studies/{e['ID']}/series", params={"expand": "true"}, timeout=300).json():
+            fuera = excluido(se.get("MainDicomTags", {}).get("Manufacturer"))
+            if a.descomprimir_excluidos == fuera:      # comprimir: los no excluidos; descomprimir: solo los excluidos
+                instancias += [{"ID": i} for i in se.get("Instances", [])]
+        for inst in instancias:
             try:
-                b, d = comprimir_instancia(inst["ID"])
+                if a.descomprimir_excluidos:
+                    b, d = comprimir_instancia(inst["ID"], SIN_COMPRIMIR_DESTINO, descomprimir=True)
+                else:
+                    b, d = comprimir_instancia(inst["ID"])
                 ok_est += 1
                 antes_est += b
                 despues_est += d
@@ -153,12 +179,12 @@ def main():
             n_ok += ok_est
             total_antes += antes_est
             total_despues += despues_est
-            print(f"{nombre or e['ID']}: {ok_est} imágenes · {mb(antes_est)} → {mb(despues_est)} "
-                  f"({100 - 100 * despues_est / antes_est:.0f} % menos)", flush=True)
+            print(f"{nombre or e['ID']}: {ok_est} imágenes · {mb(antes_est)} → {mb(despues_est)}", flush=True)
     est1 = _get("/statistics").json()
     print("-" * 60)
     if n_ok:
-        print(f"Comprimidas y verificadas: {n_ok} imágenes de {n_est} estudios · {mb(total_antes)} → {mb(total_despues)}")
+        hecho = "Devueltas a sin comprimir" if a.descomprimir_excluidos else "Comprimidas"
+        print(f"{hecho} y verificadas: {n_ok} imágenes de {n_est} estudios · {mb(total_antes)} → {mb(total_despues)}")
     else:
         print("No había imágenes por comprimir.")
     print(f"Ya estaban comprimidas o no se achican: {n_ya} · Avisos: {n_err}")
