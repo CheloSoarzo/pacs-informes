@@ -296,3 +296,10 @@ ecografías en JPEG) no se tocan.
   `docker-compose.instancia.yml`), así los visores cargan más rápido desde el primer momento.
 - Cada noche (01:15) cron repasa con verificación lo que haya quedado sin comprimir. Registro en
   `/var/log/pacs-comprimir.log`.
+
+### Actualización automática
+
+El servidor revisa GitHub cada 5 minutos (cron `pacs revisar`); si hay una versión nueva del PACS o de la agenda,
+corre `pacs actualizar` solo y deja el resultado en la web del PACS (Sistema) y en `/var/log/pacs-actualizacion.log`.
+Viene activada; se maneja con `pacs auto-actualizar si | no | estado`.
+

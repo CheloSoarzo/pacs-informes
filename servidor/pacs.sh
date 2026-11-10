@@ -26,6 +26,8 @@
 #   pacs comprimir [nombre]    comprime SIN PÉRDIDA (JPEG-LS, verificado pixel a pixel) las imágenes guardadas
 #                              (todos los PACS si no se indica uno). Lo nuevo ya llega comprimido; cron repasa cada noche
 #   pacs comprimir <nombre> --probar   solo el primer estudio pendiente, para ver cuánto ahorra
+#   pacs auto-actualizar si|no|estado   el servidor revisa GitHub cada 5 minutos y, si hay una versión nueva
+#                              del PACS o de la agenda, se actualiza solo (viene activado)
 #   pacs base                  (interno) crea la red compartida y la entrada web HTTPS
 set -euo pipefail
 
@@ -555,6 +557,9 @@ cmd_post_actualizar() {
   if [ -n "$con_agenda" ]; then traer_agenda || echo "Aviso: no se pudo actualizar la agenda"; dc "$con_agenda" build agenda || true; fi
   # Transcripción automática de dictados: se reconstruye si está activada
   if dictado_ia_activo; then transc up -d --build || echo "Aviso: no se pudo actualizar el transcriptor"; fi
+  # Actualización automática desde GitHub: viene activada (se apaga con: pacs auto-actualizar no)
+  touch "$INST/servidor.env"
+  grep -qE "^AUTO_ACTUALIZAR=" "$INST/servidor.env" || poner "$INST/servidor.env" AUTO_ACTUALIZAR true
   for n in $(instancias); do
     # PACS creados antes de existir esta opción: son los propios
     grep -qE "^ADMINISTRA_SERVIDOR=" "$INST/$n/.env" || poner "$INST/$n/.env" ADMINISTRA_SERVIDOR true
@@ -600,13 +605,17 @@ cmd_revisar() {
   for n in $(instancias); do
     local f="$INST/$n/data/informes/actualizar.solicitud"
     [ -f "$f" ] || continue
-    if [ "$(leer "$INST/$n/.env" ADMINISTRA_SERVIDOR)" = "true" ]; then pedido="$n"; fi
+    if [ "$(leer "$INST/$n/.env" ADMINISTRA_SERVIDOR)" = "true" ]; then pedido="pedida desde el PACS $n"; fi
     rm -f "$f"     # las de PACS sin permiso se descartan
   done
+  # Actualización automática: cada 5 minutos se revisa si hay algo nuevo en GitHub (PACS o agenda)
+  if [ -z "$pedido" ] && [ "$(leer "$INST/servidor.env" AUTO_ACTUALIZAR)" = "true" ] && [ $((10#$(date +%M) % 5)) -eq 0 ]; then
+    hay_version_nueva && pedido="automática: hay una versión nueva en GitHub"
+  fi
   [ -n "$pedido" ] || return 0
   exec 9>/var/lock/pacs-actualizar.lock
   flock -n 9 || return 0
-  echo "$(date '+%F %T') actualización pedida desde el PACS $pedido"
+  echo "$(date '+%F %T') actualización $pedido"
   local res
   if res="$(bash "$CODIGO/servidor/pacs.sh" actualizar 2>&1)"; then
     res="$(date '+%d/%m/%Y %H:%M') OK, versión $(version)"
@@ -621,6 +630,31 @@ cmd_revisar() {
     fi
   done
   return 0
+}
+
+hay_version_nueva() {  # 0 si en GitHub hay commits nuevos del PACS o de la agenda
+  local dir
+  for dir in "$CODIGO" "$AGENDA_CODIGO"; do
+    [ -d "$dir/.git" ] || continue
+    timeout 60 git -C "$dir" fetch -q origin 2>/dev/null || continue
+    [ "$(git -C "$dir" rev-parse HEAD)" != "$(git -C "$dir" rev-parse '@{u}' 2>/dev/null || git -C "$dir" rev-parse HEAD)" ] && return 0
+  done
+  return 1
+}
+
+cmd_auto_actualizar() {
+  touch "$INST/servidor.env"
+  case "${1:-estado}" in
+    si|activar) poner "$INST/servidor.env" AUTO_ACTUALIZAR true
+       echo "Actualización automática ACTIVADA: cada 5 minutos se revisa GitHub y, si hay versión nueva, se instala sola.";;
+    no|desactivar) poner "$INST/servidor.env" AUTO_ACTUALIZAR false
+       echo "Actualización automática desactivada. Para actualizar: pacs actualizar (o el botón en la web del PACS).";;
+    estado)
+      if [ "$(leer "$INST/servidor.env" AUTO_ACTUALIZAR)" = "true" ]; then echo "Actualización automática: activada"; else echo "Actualización automática: desactivada"; fi
+      echo "Versión instalada: $(version)"
+      echo "Últimas actualizaciones:"; tail -n 6 /var/log/pacs-actualizacion.log 2>/dev/null | sed 's/^/  /' || true;;
+    *) error "uso: pacs auto-actualizar si | no | estado";;
+  esac
 }
 
 cmd_firewall() {
@@ -699,5 +733,6 @@ case "$c" in
   dicom-modo) cmd_dicom_modo "$@";;
   dictado-ia) cmd_dictado_ia "$@";;
   comprimir) cmd_comprimir "$@";;
-  *) sed -n '2,28p' "$0"; exit 1;;
+  auto-actualizar) cmd_auto_actualizar "$@";;
+  *) sed -n '2,30p' "$0"; exit 1;;
 esac
