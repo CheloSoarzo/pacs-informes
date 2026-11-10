@@ -26,6 +26,7 @@
 #   pacs comprimir [nombre]    comprime SIN PÉRDIDA (JPEG-LS, verificado pixel a pixel) las imágenes guardadas
 #                              (todos los PACS si no se indica uno). Lo nuevo ya llega comprimido; cron repasa cada noche
 #   pacs comprimir <nombre> --probar   solo el primer estudio pendiente, para ver cuánto ahorra
+#   pacs comprimir --reparar-visor  repara el caché del visor diagnóstico (error «Something went wrong»)
 #   pacs comprimir --descomprimir-fuji devuelve a sin comprimir las imágenes de CR Fujifilm (no se comprimen)
 #   pacs auto-actualizar si|no|estado   el servidor revisa GitHub cada 5 minutos y, si hay una versión nueva
 #                              del PACS o de la agenda, se actualiza solo (viene activado)
@@ -565,6 +566,13 @@ cmd_post_actualizar() {
     nohup setsid bash -c "sleep 60; bash '$CODIGO/servidor/pacs.sh' comprimir --descomprimir-fuji" \
       >> /var/log/pacs-comprimir.log 2>&1 < /dev/null &
   fi
+  # Una sola vez (v1.1.26): repara el caché del visor diagnóstico que quedó vacío al reemplazar imágenes
+  # (error «The series metadata json does not contain an array» al abrir el estudio)
+  if [ ! -f "$INST/.visor-reparado" ]; then
+    touch "$INST/.visor-reparado"
+    nohup setsid bash -c "for i in \$(seq 40); do sleep 30; docker exec pacs-$(instancias | head -1)-informes-1 grep -q reparar_visor comprimir.py 2>/dev/null && break; done; bash '$CODIGO/servidor/pacs.sh' comprimir --reparar-visor" \
+      >> /var/log/pacs-comprimir.log 2>&1 < /dev/null &
+  fi
   # Actualización automática desde GitHub: viene activada (se apaga con: pacs auto-actualizar no)
   touch "$INST/servidor.env"
   grep -qE "^AUTO_ACTUALIZAR=" "$INST/servidor.env" || poner "$INST/servidor.env" AUTO_ACTUALIZAR true
@@ -680,6 +688,7 @@ cmd_comprimir() {
       --probar) extra="--estudios 1";;
       --noche) extra="--desde-horas 2";;    # tarea nocturna: solo exámenes que ya terminaron de llegar
       --descomprimir-fuji) extra="--descomprimir-excluidos";;   # devuelve a sin comprimir los CR Fujifilm
+      --reparar-visor) extra="--reparar-visor";;   # borra el caché dañado del visor diagnóstico (error al abrir)
       todos) ;;
       *) objetivo="$a";;
     esac

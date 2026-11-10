@@ -21,6 +21,7 @@ import hashlib
 import os
 import sys
 import time
+import zlib
 from datetime import datetime, timedelta
 
 import requests
@@ -67,6 +68,44 @@ def subir(datos):
     r = S.post(URL + "/instances", data=datos, headers={"Content-Type": "application/dicom"}, timeout=600)
     r.raise_for_status()
     return r.json()
+
+
+def limpiar_cache_visor(serie_id):
+    """Borra el caché que guarda el visor diagnóstico (DICOMweb) de la serie; Orthanc lo vuelve a armar solo.
+    Hay que hacerlo después de reemplazar imágenes: el caché puede haber quedado vacío mientras se cambiaban."""
+    try:
+        S.delete(URL + f"/series/{serie_id}/attachments/4301", timeout=60)
+    except requests.RequestException:
+        pass
+
+
+def cache_visor_malo(serie_id):
+    """True si el caché DICOMweb de la serie existe pero no es una lista de imágenes (el visor muestra error)."""
+    r = S.get(URL + f"/series/{serie_id}/attachments/4301/data", timeout=60)
+    if r.status_code != 200:
+        return False                      # no hay caché: está bien, se arma solo
+    partes = r.content.split(b";", 2)
+    if len(partes) != 3 or partes[0] != b"2":
+        return False                      # formato que no conocemos: no se toca
+    try:
+        texto = zlib.decompress(partes[2], 16 + zlib.MAX_WBITS).lstrip()
+    except zlib.error:
+        return True
+    return not texto.startswith(b"[") or texto.rstrip() == b"[]"
+
+
+def reparar_visor():
+    """Revisa todas las series y borra los cachés del visor diagnóstico que quedaron malos."""
+    n = 0
+    for se in _get("/series", timeout=300).json():
+        try:
+            if cache_visor_malo(se):
+                limpiar_cache_visor(se)
+                n += 1
+        except requests.RequestException:
+            pass
+    print(f"Visor diagnóstico: {n} series con caché dañado reparadas" if n else "Visor diagnóstico: caché sin problemas")
+    return n
 
 
 def excluido(fabricante):
@@ -134,7 +173,16 @@ def main():
     ap.add_argument("--desde-horas", type=float, default=0, help="solo estudios sin cambios hace al menos N horas")
     ap.add_argument("--descomprimir-excluidos", action="store_true",
                     help="devuelve a sin comprimir las imágenes de los equipos excluidos (ej. Fujifilm)")
+    ap.add_argument("--reparar-visor", action="store_true",
+                    help="solo revisa y repara el caché del visor diagnóstico (no comprime nada)")
     a = ap.parse_args()
+    if a.reparar_visor:
+        try:
+            reparar_visor()
+        except requests.RequestException as e:
+            print(f"No se pudo conectar con el PACS: {e}")
+            return 1
+        return 0
     if a.descomprimir_excluidos:
         print(f"Devolviendo a sin comprimir las imágenes de: {', '.join(EXCLUIR) or '(ninguno)'}")
 
@@ -155,13 +203,15 @@ def main():
         for se in _get(f"/studies/{e['ID']}/series", params={"expand": "true"}, timeout=300).json():
             fuera = excluido(se.get("MainDicomTags", {}).get("Manufacturer"))
             if a.descomprimir_excluidos == fuera:      # comprimir: los no excluidos; descomprimir: solo los excluidos
-                instancias += [{"ID": i} for i in se.get("Instances", [])]
+                instancias += [{"ID": i, "serie": se["ID"]} for i in se.get("Instances", [])]
+        series_tocadas = set()
         for inst in instancias:
             try:
                 if a.descomprimir_excluidos:
                     b, d = comprimir_instancia(inst["ID"], SIN_COMPRIMIR_DESTINO, descomprimir=True)
                 else:
                     b, d = comprimir_instancia(inst["ID"])
+                series_tocadas.add(inst["serie"])
                 ok_est += 1
                 antes_est += b
                 despues_est += d
@@ -174,6 +224,8 @@ def main():
             except requests.RequestException as x:
                 n_err += 1
                 print(f"  aviso {inst['ID']}: {x}")
+        for serie in series_tocadas:
+            limpiar_cache_visor(serie)
         if ok_est:
             n_est += 1
             n_ok += ok_est
@@ -182,6 +234,10 @@ def main():
             print(f"{nombre or e['ID']}: {ok_est} imágenes · {mb(antes_est)} → {mb(despues_est)}", flush=True)
     est1 = _get("/statistics").json()
     print("-" * 60)
+    try:
+        reparar_visor()
+    except requests.RequestException as x:
+        print(f"  aviso: no se pudo revisar el caché del visor: {x}")
     if n_ok:
         hecho = "Devueltas a sin comprimir" if a.descomprimir_excluidos else "Comprimidas"
         print(f"{hecho} y verificadas: {n_ok} imágenes de {n_est} estudios · {mb(total_antes)} → {mb(total_despues)}")
