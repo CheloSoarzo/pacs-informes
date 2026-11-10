@@ -566,11 +566,11 @@ cmd_post_actualizar() {
     nohup setsid bash -c "sleep 60; bash '$CODIGO/servidor/pacs.sh' comprimir --descomprimir-fuji" \
       >> /var/log/pacs-comprimir.log 2>&1 < /dev/null &
   fi
-  # Una sola vez (v1.1.26): repara el caché del visor diagnóstico que quedó vacío al reemplazar imágenes
-  # (error «The series metadata json does not contain an array» al abrir el estudio)
-  if [ ! -f "$INST/.visor-reparado" ]; then
-    touch "$INST/.visor-reparado"
-    nohup setsid bash -c "for i in \$(seq 40); do sleep 30; docker exec pacs-$(instancias | head -1)-informes-1 grep -q reparar_visor comprimir.py 2>/dev/null && break; done; bash '$CODIGO/servidor/pacs.sh' comprimir --reparar-visor" \
+  # Una sola vez (v1.1.27): arregla las imágenes del CR Fujifilm que el visor diagnóstico no puede abrir
+  # y su caché (error «The series metadata json does not contain an array» al abrir el estudio)
+  if [ ! -f "$INST/.visor-reparado-2" ]; then
+    touch "$INST/.visor-reparado-2"
+    nohup setsid bash -c "for i in \$(seq 40); do sleep 30; docker exec pacs-$(instancias | head -1)-informes-1 grep -q CAMPOS_MALOS comprimir.py 2>/dev/null && break; done; bash '$CODIGO/servidor/pacs.sh' comprimir --reparar-visor" \
       >> /var/log/pacs-comprimir.log 2>&1 < /dev/null &
   fi
   # Actualización automática desde GitHub: viene activada (se apaga con: pacs auto-actualizar no)
@@ -618,6 +618,12 @@ CRON
 # Cada minuto (cron): si el administrador de un PACS propio pidió actualizar desde la web, se actualiza.
 cmd_revisar() {
   local n pedido=""
+  # Cada minuto: arregla para el visor diagnóstico las series que terminaron de llegar (ej. CR Fujifilm)
+  for n in $(instancias); do
+    [ "$(leer "$INST/$n/.env" ACTIVO)" = "false" ] && continue
+    flock -n "/var/lock/pacs-reparar-$n.lock" timeout 300 docker exec "pacs-$n-informes-1" python comprimir.py --reparar-nuevos 2>&1 \
+      | grep -v "^$" >> /var/log/pacs-comprimir.log || true
+  done
   for n in $(instancias); do
     local f="$INST/$n/data/informes/actualizar.solicitud"
     [ -f "$f" ] || continue

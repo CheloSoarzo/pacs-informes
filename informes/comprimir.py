@@ -94,9 +94,95 @@ def cache_visor_malo(serie_id):
     return not texto.startswith(b"[") or texto.rstrip() == b"[]"
 
 
-def reparar_visor():
-    """Revisa todas las series y borra los cachés del visor diagnóstico que quedaron malos."""
+# Campos que algunos equipos mandan con un formato que no corresponde y que impiden al visor diagnóstico
+# (DICOMweb) leer la imagen: «Cannot convert DICOM to DICOMweb». El CR Fujifilm manda TargetExposureIndex
+# (0018,1412) como texto («876 ») cuando el estándar dice número binario de 8 bytes. No se usa para diagnosticar.
+CAMPOS_MALOS = ["0018,1412"]
+ARCHIVO_CAMBIOS = os.path.join(os.environ.get("DATA_DIR", "/data"), "reparar-visor.seq")
+
+
+def arreglar_instancia(iid):
+    """Quita de la imagen los campos que rompen el visor diagnóstico. Los pixeles y los UID no cambian.
+    Devuelve True si la arregló."""
+    tags = _get(f"/instances/{iid}/tags", params={"short": ""}, timeout=60).json()
+    quitar = [t for t in CAMPOS_MALOS if t in tags]
+    if not quitar:
+        return False
+    sintaxis = S.get(URL + f"/instances/{iid}/metadata/TransferSyntax", timeout=60).text.strip()
+    original = _get(f"/instances/{iid}/file", timeout=600).content
+    antes = huella_pixeles(iid)
+    r = S.post(URL + f"/instances/{iid}/modify", timeout=600,
+               json={"Remove": quitar, "Force": True, "Transcode": sintaxis,
+                     "Keep": ["StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID"]})
+    if r.status_code != 200 or not r.content:
+        raise Omitir(f"Orthanc no pudo arreglarla ({r.status_code})")
+    res = subir(r.content)
+    if res.get("ID") != iid:
+        subir(original)
+        if res.get("ID"):
+            S.delete(URL + f"/instances/{res['ID']}", timeout=120)
+        raise Omitir("cambió el identificador")
+    if huella_pixeles(iid) != antes:
+        subir(original)
+        raise Omitir("los pixeles no coincidían: se dejó la original")
+    return True
+
+
+def arreglar_serie(serie_id):
+    """Arregla las imágenes de la serie que lo necesiten y renueva su caché. Devuelve cuántas arregló."""
+    serie = _get(f"/series/{serie_id}", timeout=60).json()
+    if not excluido(serie.get("MainDicomTags", {}).get("Manufacturer")):
+        return 0                           # solo los equipos con este problema (COMPRESION_EXCLUIR, ej. Fujifilm)
     n = 0
+    for iid in serie.get("Instances", []):
+        try:
+            n += arreglar_instancia(iid)
+        except Omitir as x:
+            print(f"  aviso {iid}: {x}")
+    if n:
+        limpiar_cache_visor(serie_id)
+    return n
+
+
+def reparar_nuevos():
+    """Para la revisión de cada minuto: arregla las series que terminaron de llegar desde la última vez."""
+    try:
+        with open(ARCHIVO_CAMBIOS) as fh:
+            desde = int(fh.read().strip() or 0)
+    except (OSError, ValueError):
+        desde = None
+    if desde is None:                      # primera vez: lo antiguo lo arregla la revisión completa
+        desde = _get("/changes", params={"last": ""}, timeout=60).json().get("Last", 0)
+    else:
+        while True:
+            c = _get("/changes", params={"since": desde, "limit": 500}, timeout=120).json()
+            for cambio in c.get("Changes", []):
+                if cambio.get("ChangeType") == "StableSeries":
+                    try:
+                        n = arreglar_serie(cambio["ID"])
+                        if n:
+                            print(f"{datetime.now():%d/%m/%Y %H:%M} serie {cambio['ID']}: {n} imágenes arregladas para el visor")
+                    except requests.RequestException as x:
+                        if getattr(x.response, "status_code", 0) != 404:   # 404: la serie ya no existe
+                            raise
+            desde = c.get("Last", desde)
+            if c.get("Done", True):
+                break
+    with open(ARCHIVO_CAMBIOS, "w") as fh:
+        fh.write(str(desde))
+
+
+def reparar_visor():
+    """Revisa todas las series: arregla las imágenes con campos malos y borra los cachés del visor dañados."""
+    n = 0
+    for se in _get("/series", params={"expand": "true"}, timeout=300).json():
+        if excluido(se.get("MainDicomTags", {}).get("Manufacturer")):
+            try:
+                k = arreglar_serie(se["ID"])
+                if k:
+                    print(f"  serie {se['ID']}: {k} imágenes arregladas")
+            except requests.RequestException as x:
+                print(f"  aviso serie {se['ID']}: {x}")
     for se in _get("/series", timeout=300).json():
         try:
             if cache_visor_malo(se):
@@ -174,8 +260,17 @@ def main():
     ap.add_argument("--descomprimir-excluidos", action="store_true",
                     help="devuelve a sin comprimir las imágenes de los equipos excluidos (ej. Fujifilm)")
     ap.add_argument("--reparar-visor", action="store_true",
-                    help="solo revisa y repara el caché del visor diagnóstico (no comprime nada)")
+                    help="solo revisa y repara las imágenes y el caché del visor diagnóstico (no comprime nada)")
+    ap.add_argument("--reparar-nuevos", action="store_true",
+                    help="arregla para el visor las series que llegaron desde la última vez (tarea de cada minuto)")
     a = ap.parse_args()
+    if a.reparar_nuevos:
+        try:
+            reparar_nuevos()
+        except requests.RequestException as e:
+            print(f"Reparar nuevos: no se pudo conectar con el PACS: {e}")
+            return 1
+        return 0
     if a.reparar_visor:
         try:
             reparar_visor()
