@@ -281,3 +281,18 @@ firewall/            Script que abre el puerto DICOM solo a los centros registra
 
 Firma electrónica avanzada,
 envío automático por WhatsApp Business, informes comparativos lado a lado, visores de escritorio (Weasis/RadiAnt).
+
+### Compresión sin pérdida de las imágenes
+
+`pacs comprimir` pasa las imágenes sin comprimir a **JPEG-LS sin pérdida** (el estándar DICOM para esto): el CT
+queda típicamente 2 a 3 veces más liviano y los pixeles son exactamente los mismos. Cada imagen se verifica pixel a
+pixel (huella SHA-256 de los pixeles antes y después); si no coincide, se repone la original. Los UID no cambian,
+así que informes, links, portal y agenda siguen apuntando al mismo examen. Las imágenes ya comprimidas (ej.
+ecografías en JPEG) no se tocan.
+
+- `pacs comprimir insi --probar` comprime solo el primer estudio pendiente, para ver cuánto ahorra.
+- `pacs comprimir` comprime todo lo pendiente de todos los PACS (se puede repetir: lo ya comprimido se salta).
+- Las imágenes nuevas ya se guardan comprimidas al llegar (`IngestTranscoding` de Orthanc en
+  `docker-compose.instancia.yml`), así los visores cargan más rápido desde el primer momento.
+- Cada noche (01:15) cron repasa con verificación lo que haya quedado sin comprimir. Registro en
+  `/var/log/pacs-comprimir.log`.

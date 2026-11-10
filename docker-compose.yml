@@ -42,6 +42,10 @@ services:
       ORTHANC__DICOM_MODALITIES_IN_DATABASE: "true"
       ORTHANC__DICOM_ASSOCIATION_CLOSE_DELAY: "5"
       ORTHANC__OVERWRITE_INSTANCES: "true"
+      # Cada imagen que llega se guarda comprimida SIN PÉRDIDA (JPEG-LS): pixeles idénticos, 2 a 7 veces menos
+      # espacio y visores más rápidos. Las que ya vienen comprimidas (ej. ecografía en JPEG) se guardan tal cual.
+      ORTHANC__INGEST_TRANSCODING: "${COMPRESION_SINTAXIS:-1.2.840.10008.1.2.4.80}"
+      ORTHANC__INGEST_TRANSCODING_OF_COMPRESSED: "false"
       ORTHANC__STABLE_AGE: "60"
       # El acceso web lo controla la app de informes (un solo login por usuario, vía Caddy).
       # Orthanc NO publica su puerto web: solo Caddy y la app lo alcanzan por la red interna.

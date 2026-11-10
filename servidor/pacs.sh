@@ -23,6 +23,9 @@
 #   pacs dictado-ia activar [small|medium]   transcripción automática de los dictados con IA (Whisper),
 #                              en este mismo servidor y para todos sus PACS (el audio no sale del servidor)
 #   pacs dictado-ia desactivar | estado
+#   pacs comprimir [nombre]    comprime SIN PÉRDIDA (JPEG-LS, verificado pixel a pixel) las imágenes guardadas
+#                              (todos los PACS si no se indica uno). Lo nuevo ya llega comprimido; cron repasa cada noche
+#   pacs comprimir <nombre> --probar   solo el primer estudio pendiente, para ver cuánto ahorra
 #   pacs base                  (interno) crea la red compartida y la entrada web HTTPS
 set -euo pipefail
 
@@ -586,6 +589,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 30 3 * * * root pacs respaldo >> /var/log/pacs-respaldo.log 2>&1
 * * * * * root pacs revisar >> /var/log/pacs-actualizacion.log 2>&1
 */5 * * * * root pacs estado >/dev/null 2>&1
+15 1 * * * root pacs comprimir --noche >> /var/log/pacs-comprimir.log 2>&1
 CRON
   if [ "$CRON_FILE" = /etc/cron.d/pacs ]; then rm -f /etc/cron.d/pacs-firewall /etc/cron.d/pacs-respaldo; fi
 }
@@ -625,6 +629,29 @@ cmd_firewall() {
     [ "$(leer "$INST/$n/.env" ACTIVO)" = "false" ] && continue
     bash "$CODIGO/firewall/sincronizar_firewall.sh" "$INST/$n/.env" | sed "s/^/[$n] /" || true
   done
+}
+
+cmd_comprimir() {
+  local objetivo="" extra="" n hubo=""
+  for a in "$@"; do
+    case "$a" in
+      --probar) extra="--estudios 1";;
+      --noche) extra="--desde-horas 2";;    # tarea nocturna: solo exámenes que ya terminaron de llegar
+      todos) ;;
+      *) objetivo="$a";;
+    esac
+  done
+  exec 9>/var/lock/pacs-comprimir.lock
+  flock -n 9 || { echo "Ya hay una compresión en curso."; return 0; }
+  for n in $(instancias); do
+    [ -n "$objetivo" ] && [ "$n" != "$objetivo" ] && continue
+    [ "$(leer "$INST/$n/.env" ACTIVO)" = "false" ] && continue
+    hubo=1
+    echo "== $n · $(date '+%d/%m/%Y %H:%M')"
+    # shellcheck disable=SC2086
+    docker exec "pacs-$n-informes-1" python comprimir.py $extra || echo "[$n] la compresión no terminó bien"
+  done
+  [ -n "$hubo" ] || error "no existe el PACS «$objetivo» (mira: pacs lista)"
 }
 
 cmd_respaldo() {
@@ -671,5 +698,6 @@ case "$c" in
   estado) cmd_estado;;
   dicom-modo) cmd_dicom_modo "$@";;
   dictado-ia) cmd_dictado_ia "$@";;
-  *) sed -n '2,25p' "$0"; exit 1;;
+  comprimir) cmd_comprimir "$@";;
+  *) sed -n '2,28p' "$0"; exit 1;;
 esac
