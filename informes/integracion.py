@@ -21,6 +21,8 @@ import json
 import os
 import re
 import secrets
+import sqlite3
+import threading
 import uuid
 from datetime import date, datetime, timedelta
 
@@ -389,6 +391,64 @@ def unir_estudios():
     except Exception as e:  # noqa: BLE001  (si el PACS no responde, se reintenta en la próxima consulta)
         app.logger.warning("No se pudieron unir estudios con la agenda: %s", e)
     db.commit()
+    # 3) Fecha de nacimiento: si el equipo no la trajo (el tecnólogo escribió los datos sin el worklist),
+    #    se completa en las imágenes con la de la agenda
+    pendientes = {r["estudio_id"]: _fecha(r["fecha_nac"]) for r in db.execute(
+        """SELECT oe.estudio_id, o.fecha_nac FROM ordenes o JOIN orden_estudios oe ON oe.accesion=o.accesion
+           WHERE o.eliminada=0 AND o.fecha>=? AND o.fecha_nac!=''""", (hace,)).fetchall()
+        if re.fullmatch(r"(19|20)\d{6}", _fecha(r["fecha_nac"])) and r["estudio_id"] not in _fnac_listos}
+    if pendientes:
+        completar_fnac_en_segundo_plano(pendientes)
+
+
+# ---------- fecha de nacimiento desde la agenda ----------
+_fnac_listos = set()          # estudios ya revisados (con fecha) en este proceso
+_fnac_candado = threading.Lock()
+
+
+def completar_fnac_en_segundo_plano(pendientes):
+    """Pone en el PACS la fecha de nacimiento de la agenda a los estudios que llegaron sin ella.
+    Corre aparte (modificar un estudio grande toma tiempo) y solo cuando el estudio terminó de llegar."""
+    if _fnac_candado.locked():
+        return                # ya hay una pasada en curso; lo que falte se toma en la próxima consulta
+    threading.Thread(target=_completar_fnac, args=(dict(pendientes),), daemon=True, name="fnac-agenda").start()
+
+
+def _completar_fnac(pendientes):
+    if not _fnac_candado.acquire(blocking=False):
+        return
+    try:
+        for eid, fnac in pendientes.items():
+            try:
+                st = pacs.get_json(f"/studies/{eid}")
+                if not st:
+                    continue
+                if (st.get("PatientMainDicomTags") or {}).get("PatientBirthDate"):
+                    _fnac_listos.add(eid)          # el equipo ya la trajo (o se corrigió a mano): no se toca
+                    continue
+                if not st.get("IsStable"):
+                    continue                       # todavía llegando imágenes: la próxima vez
+                nuevo = pacs.modificar_estudio(eid, {"PatientBirthDate": fnac})
+                for se in st.get("Series", []):     # el visor diagnóstico vuelve a leer los datos del paciente
+                    try:
+                        pacs._req("DELETE", f"/series/{se}/attachments/4301")
+                    except Exception:  # noqa: BLE001
+                        pass
+                con = sqlite3.connect(os.path.join(Config.DATA_DIR, "informes.db"), timeout=30)
+                try:
+                    con.execute("UPDATE informes SET paciente_fnac=? WHERE estudio_id=? AND COALESCE(paciente_fnac,'')=''",
+                                (fnac, nuevo))
+                    con.execute("INSERT INTO auditoria (ts, usuario, accion, detalle, ip) VALUES (?,?,?,?,?)",
+                                (ahora(), "sistema", "fecha_nacimiento_agenda", f"{nuevo}: {fnac[6:8]}/{fnac[4:6]}/{fnac[:4]}", ""))
+                    con.commit()
+                finally:
+                    con.close()
+                _fnac_listos.add(nuevo)
+                app.logger.info("Fecha de nacimiento de la agenda puesta en el estudio %s", nuevo)
+            except Exception as e:  # noqa: BLE001 - se reintenta en la próxima consulta
+                app.logger.warning("No se pudo poner la fecha de nacimiento en %s: %s", eid, e)
+    finally:
+        _fnac_candado.release()
 
 
 def estado_de(o):

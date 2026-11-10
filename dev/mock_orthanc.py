@@ -64,7 +64,7 @@ def estudio_json(eid):
     tags = {k: v for k, v in e.items() if k[0].isupper()}
     mods = sorted({SERIES[s]["Modality"] for s in e["series_ids"]})
     return {"ID": eid, "Type": "Study", "MainDicomTags": tags,
-            "PatientMainDicomTags": e["paciente"], "Series": e["series_ids"],
+            "PatientMainDicomTags": e["paciente"], "Series": e["series_ids"], "IsStable": e.get("estable", True),
             "RequestedTags": {"ModalitiesInStudy": "\\".join(mods)}}
 
 
@@ -287,6 +287,7 @@ def dev_llega():
                          AccessionNumber=b["AccessionNumber"], InstitutionName="CENTRO NORTE", ReferringPhysicianName="",
                          paciente=dict(PatientName=b.get("PatientName", "PACIENTE^PRUEBA"), PatientID=b.get("PatientID", ""),
                                        PatientBirthDate=b.get("PatientBirthDate", ""), PatientSex="F"),
+                         estable=b.get("estable", True),
                          series=[(b.get("Modality", "CT"), "Axial", 3)])
     e = ESTUDIOS[eid]; e["series_ids"] = []
     for n, (mod, desc, cant) in enumerate(e["series"], 1):
