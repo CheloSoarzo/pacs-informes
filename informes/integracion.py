@@ -831,10 +831,7 @@ def portal_series(estudio_id):
     rut, e = _estudio_del_paciente(estudio_id)
     if not e:
         abort(404)
-    series = pacs.series(estudio_id)
-    for s in series:
-        s["instancias"] = pacs.instancias_ordenadas(s["id"])
-    return jsonify(series=[s for s in series if s["instancias"] and s["modalidad"] not in ("SR", "PR", "KO")])
+    return jsonify(series=pacs.series_visor(estudio_id))
 
 
 @app.route("/paciente/imagenes/<estudio_id>/img/<instancia_id>")
@@ -842,7 +839,8 @@ def portal_img(estudio_id, instancia_id):
     rut, e = _estudio_del_paciente(estudio_id)
     if not e or not pacs.instancia_pertenece(instancia_id, estudio_id):
         abort(404)
-    r = pacs.preview(instancia_id)
+    from rutas_publico import ventana_pedida
+    r = pacs.preview(instancia_id, *ventana_pedida())
     if r is None:
         abort(404)
     from flask import Response

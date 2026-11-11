@@ -101,10 +101,7 @@ def publico_series(token):
     link, inf = _link_publico(token)
     if not link or not _clave_ok(link):
         abort(404)
-    series = pacs.series(inf["estudio_id"])
-    for s in series:
-        s["instancias"] = pacs.instancias_ordenadas(s["id"])
-    return jsonify(series=[s for s in series if s["instancias"] and s["modalidad"] not in ("SR", "PR", "KO")])
+    return jsonify(series=pacs.series_visor(inf["estudio_id"]))
 
 
 @app.route("/r/<token>/img/<instancia_id>")
@@ -125,8 +122,19 @@ def publico_zip(token):
 
 
 # ------------------------------------------------------------------ imágenes (uso interno)
+def ventana_pedida():
+    """Centro y ancho de ventana pedidos por el visor (?wc=&ww=), validados; (None, None) si no vienen."""
+    try:
+        c, a = float(request.args["wc"]), float(request.args["ww"])
+    except (KeyError, ValueError):
+        return None, None
+    if not (-1e6 < c < 1e6 and 0.5 <= a < 2e6):
+        return None, None
+    return round(c, 1), round(a, 1)
+
+
 def _imagen(instancia_id):
-    r = pacs.preview(instancia_id)
+    r = pacs.preview(instancia_id, *ventana_pedida())
     if r is None:
         abort(404)
     return Response(r.content, mimetype=r.headers.get("Content-Type", "image/png"),
@@ -157,10 +165,7 @@ def img(instancia_id):
 @login_requerido()
 def series_json(estudio_id):
     estudio_visible(estudio_id)
-    series = pacs.series(estudio_id)
-    for s in series:
-        s["instancias"] = pacs.instancias_ordenadas(s["id"])
-    return jsonify(series=[s for s in series if s["instancias"]])
+    return jsonify(series=pacs.series_visor(estudio_id))
 
 
 @app.route("/estudio/<estudio_id>/zip")

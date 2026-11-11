@@ -163,6 +163,51 @@ class Orthanc:
         out.sort(key=lambda s: s["numero"])
         return out
 
+    def series_visor(self, estudio_id):
+        """Series para el visor simple: con sus imágenes ordenadas y la ventana original del equipo
+        (centro, ancho) para ajustar brillo y contraste. Sin informes estructurados ni objetos que no son imágenes."""
+        out = []
+        for s in self.series(estudio_id):
+            if s["modalidad"] in ("SR", "PR", "KO"):
+                continue
+            s["instancias"] = self.instancias_ordenadas(s["id"])
+            if s["instancias"]:
+                s["ventana"] = self.ventana(s["instancias"][len(s["instancias"]) // 2])
+                out.append(s)
+        return out
+
+    def _tag(self, instancia_id, tag):
+        try:
+            r = self._req("GET", f"/instances/{instancia_id}/content/{tag}")
+            return r.text.strip() if r is not None else ""
+        except OrthancError:
+            return ""
+
+    def ventana(self, instancia_id):
+        """{centro, ancho, invertida} de la ventana que trae la imagen (en las mismas unidades que usa Orthanc al dibujarla,
+        ej. Hounsfield en el TC). None si es una imagen en color (ecografía), que no se ventanea."""
+        foto = self._tag(instancia_id, "0028-0004").upper()
+        if foto and not foto.startswith("MONOCHROME"):
+            return None
+
+        def primero(v):
+            try:
+                return float(v.split("\\")[0])
+            except (ValueError, AttributeError):
+                return None
+        c, a = primero(self._tag(instancia_id, "0028-1050")), primero(self._tag(instancia_id, "0028-1051"))
+        inv = foto == "MONOCHROME1"          # se dibuja invertida (ej. CR Fujifilm)
+        if c is not None and a and a > 0:
+            return {"centro": c, "ancho": a, "invertida": inv}
+        # Sin ventana en la imagen: todo el rango posible de valores
+        bits = primero(self._tag(instancia_id, "0028-0101")) or 12
+        con_signo = self._tag(instancia_id, "0028-0103") == "1"
+        pendiente = primero(self._tag(instancia_id, "0028-1053")) or 1
+        intercepto = primero(self._tag(instancia_id, "0028-1052")) or 0
+        bajo, alto = (-(2 ** (bits - 1)), 2 ** (bits - 1) - 1) if con_signo else (0, 2 ** bits - 1)
+        bajo, alto = bajo * pendiente + intercepto, alto * pendiente + intercepto
+        return {"centro": (bajo + alto) / 2, "ancho": max(1.0, alto - bajo), "invertida": inv}
+
     def instancias_ordenadas(self, serie_id):
         inst = self.get_json(f"/series/{serie_id}/instances") or []
         inst.sort(key=lambda i: _int(i.get("MainDicomTags", {}).get("InstanceNumber")))
@@ -255,13 +300,15 @@ class Orthanc:
                 self._dims.clear()
         return self._dims[instancia_id]
 
-    def preview(self, instancia_id):
+    def preview(self, instancia_id, centro=None, ancho=None):
         """Imagen JPEG para ver en el navegador (vista rápida, portal del paciente, CD).
 
         Usa la ventana (brillo/contraste) que define el equipo en cada imagen —ej. partes blandas en el TC, la
         ventana del Fuji en los RX— y no el rango completo de valores, que deja las imágenes grises y lavadas.
         Las imágenes muy grandes se achican a 2000 px para que carguen rápido en el celular."""
         params = {"quality": 90}
+        if centro is not None and ancho:                 # brillo/contraste elegido en el visor
+            params.update({"window-center": f"{centro:g}", "window-width": f"{ancho:g}"})
         dims = self._dimensiones(instancia_id)
         if dims and max(dims) > self.VISTA_MAX:
             params.update(width=self.VISTA_MAX, height=self.VISTA_MAX, smooth=1)
