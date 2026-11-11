@@ -2,6 +2,7 @@
 import os
 import re
 from datetime import date, timedelta
+from email.utils import parseaddr
 
 from flask import abort, flash, redirect, render_template, request, url_for
 from werkzeug.security import generate_password_hash
@@ -248,11 +249,12 @@ def admin_frases():
 @login_requerido("ajustes")
 def admin_ajustes():
     db = get_db()
-    claves = ["correo_asunto", "correo_cuerpo", "envio_auto_email", "validar_al_transcribir", "webhook_url", "horas_alerta",
+    claves = ["correo_remitente", "correo_asunto", "correo_cuerpo", "envio_auto_email", "validar_al_transcribir", "webhook_url", "horas_alerta",
               "horas_alerta_urgente"]
     if request.method == "POST":
         f = request.form
         valores = {
+            "correo_remitente": re.sub(r'[<>"\r\n,;]', "", f.get("correo_remitente", "")).strip()[:80],
             "correo_asunto": f.get("correo_asunto", "").strip()[:200],
             "correo_cuerpo": f.get("correo_cuerpo", "")[:5000],
             "envio_auto_email": "1" if f.get("envio_auto_email") else "0",
@@ -273,7 +275,8 @@ def admin_ajustes():
         return redirect(url_for("admin_ajustes"))
     valores = {r["clave"]: r["valor"] for r in db.execute("SELECT * FROM ajustes").fetchall()}
     return render_template("admin_ajustes.html", v={k: valores.get(k, "") for k in claves},
-                           correo_ok=correo_configurado(), smtp_host=Config.SMTP_HOST, sistema=_estado_sistema())
+                           correo_ok=correo_configurado(), smtp_host=Config.SMTP_HOST, sistema=_estado_sistema(),
+                           remitente_actual=parseaddr(Config.SMTP_FROM)[0], remitente_dir=parseaddr(Config.SMTP_FROM)[1])
 
 
 # ------------------------------------------------------------------ logo del centro

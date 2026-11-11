@@ -58,7 +58,7 @@ def enviar_mensaje(para, asunto, texto, html=None, nombre_remitente=""):
     return destinos
 
 
-def enviar_informe(para, asunto_tpl, cuerpo_tpl, datos, pdf_bytes, nombre_pdf):
+def enviar_informe(para, asunto_tpl, cuerpo_tpl, datos, pdf_bytes, nombre_pdf, nombre_remitente=""):
     """datos: paciente, examen, fecha, link, clave, centro, telefono_centro."""
     if not configurado():
         raise CorreoError("El correo saliente no está configurado (SMTP_HOST / SMTP_FROM).")
@@ -71,7 +71,8 @@ def enviar_informe(para, asunto_tpl, cuerpo_tpl, datos, pdf_bytes, nombre_pdf):
     msg = EmailMessage()
     msg["Subject"] = _rellenar(asunto_tpl, datos).replace("\n", " ")
     nombre_from, dir_from = parseaddr(Config.SMTP_FROM)
-    msg["From"] = formataddr((nombre_from or datos.get("centro", ""), dir_from))
+    # Nombre que ve el paciente (Correo y ajustes → «Nombre del remitente»; si está vacío, el del servidor)
+    msg["From"] = formataddr((nombre_remitente or nombre_from or datos.get("centro", ""), dir_from))
     msg["To"] = direccion
     msg.set_content(_rellenar(cuerpo_tpl, datos))
     if pdf_bytes:

@@ -12,6 +12,11 @@
     {% else %}
       <p class="peq aviso-info">El correo saliente aún no está configurado. Lo configura quien administra el servidor (variables SMTP_HOST, SMTP_USER, SMTP_PASSWORD y SMTP_FROM). Mientras tanto puedes dejar listo el texto.</p>
     {% endif %}
+    <label for="correo_remitente">Nombre del remitente</label>
+    <input type="text" id="correo_remitente" name="correo_remitente" maxlength="80" value="{{ v.correo_remitente }}"
+           placeholder="{{ remitente_actual or 'Ej: Centro de Imágenes INSI' }}">
+    <p class="peq suave">Es el nombre que ve el paciente en su bandeja de entrada{% if remitente_dir %} (el correo sale desde {{ remitente_dir }}){% endif %}.
+      Si lo dejas vacío se usa «{{ remitente_actual or 'el nombre del centro' }}».</p>
     <label for="correo_asunto">Asunto</label>
     <input type="text" id="correo_asunto" name="correo_asunto" value="{{ v.correo_asunto }}">
     <label for="correo_cuerpo">Mensaje</label>

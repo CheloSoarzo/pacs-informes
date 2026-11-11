@@ -30,7 +30,7 @@ def enviar_correo_informe(inf, para):
              "centro": c["nombre"], "telefono_centro": c["telefono"]}
     try:
         direccion = enviar_informe(para, ajuste("correo_asunto"), ajuste("correo_cuerpo"), datos,
-                                   pdf_de(inf), nombre_archivo(inf))
+                                   pdf_de(inf), nombre_archivo(inf), nombre_remitente=ajuste("correo_remitente") or "")
     except CorreoError as e:
         registrar_entrega(inf["estudio_id"], "email", f"ERROR a {para}: {e}")
         return False, str(e)
