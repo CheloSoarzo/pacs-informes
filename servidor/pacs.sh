@@ -17,7 +17,7 @@
 #   pacs respaldo-configurar   conecta el respaldo externo con Backblaze B2 (pide keyID, applicationKey y bucket)
 #   pacs respaldo-clave        muestra las claves de cifrado del respaldo (guárdalas fuera del servidor)
 #   pacs correo-configurar     correo saliente de los PACS (ej. Brevo) y a quién llega el resumen diario y los avisos
-#   pacs resumen               envía ahora el resumen del estado de los sistemas (cron: todos los días a las 00:00)
+#   pacs resumen               envía ahora el resumen del estado de los sistemas (cron: 00:05, resume el día que terminó)
 #   pacs respaldo-subir        sube ahora a Backblaze lo que falte (sin volver a copiar las bases)
 #   pacs respaldo-estado       último respaldo externo y cuánto ocupa
 #   pacs respaldo-probar       baja archivos al azar del respaldo y los compara con el servidor (cron: día 1 de cada mes)
@@ -617,16 +617,22 @@ escribir_version() {
 }
 
 instalar_cron() {
+  # El servidor trabaja en hora de Chile: las tareas de la noche corren a la hora que dice aquí
+  local zona; zona="$(leer "$INST/servidor.env" ZONA_HORARIA)"; zona="${zona:-America/Santiago}"
+  if command -v timedatectl >/dev/null && [ "$(timedatectl show -p Timezone --value 2>/dev/null)" != "$zona" ]; then
+    timedatectl set-timezone "$zona" 2>/dev/null && { systemctl restart cron 2>/dev/null || true; }
+  fi
   cat > "$CRON_FILE" <<CRON
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Hora de Chile (America/Santiago). Noche: 22:00 compresión del día, 23:00 respaldo, 00:05 resumen del día
 */5 * * * * root pacs firewall >> /var/log/pacs-firewall.log 2>&1
 @reboot root sleep 90 && pacs firewall >> /var/log/pacs-firewall.log 2>&1
-30 3 * * * root pacs respaldo >> /var/log/pacs-respaldo.log 2>&1
 * * * * * root pacs revisar >> /var/log/pacs-actualizacion.log 2>&1
 */5 * * * * root pacs estado >/dev/null 2>&1
-15 1 * * * root pacs comprimir --noche >> /var/log/pacs-comprimir.log 2>&1
+0 22 * * * root pacs comprimir --noche >> /var/log/pacs-comprimir.log 2>&1
+0 23 * * * root pacs respaldo >> /var/log/pacs-respaldo.log 2>&1
+5 0 * * * root pacs resumen >> /var/log/pacs-resumen.log 2>&1
 0 5 1 * * root pacs respaldo-probar >> /var/log/pacs-respaldo.log 2>&1
-0 0 * * * root pacs resumen >> /var/log/pacs-resumen.log 2>&1
 CRON
   if [ "$CRON_FILE" = /etc/cron.d/pacs ]; then rm -f /etc/cron.d/pacs-firewall /etc/cron.d/pacs-respaldo; fi
 }
@@ -930,7 +936,7 @@ CONF
     && rclone --config "$RCLONE_CONF" cat "${REMOTO}prueba.txt" >/dev/null \
     || error "no se pudo escribir en el bucket: revisa keyID, applicationKey y nombre del bucket"
   rm -f /tmp/pacs-prueba-respaldo.txt
-  echo "Conexión OK. El respaldo externo corre cada noche después del respaldo de las bases (03:30)."
+  echo "Conexión OK. El respaldo externo corre cada noche a las 23:00 (hora de Chile)."
   echo
   cmd_respaldo_clave
   echo
