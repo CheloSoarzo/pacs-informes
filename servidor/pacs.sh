@@ -16,6 +16,8 @@
 #                              de todo (imágenes, bases, configuración) en Backblaze B2 (lo hace cron cada noche)
 #   pacs respaldo-configurar   conecta el respaldo externo con Backblaze B2 (pide keyID, applicationKey y bucket)
 #   pacs respaldo-clave        muestra las claves de cifrado del respaldo (guárdalas fuera del servidor)
+#   pacs correo-configurar     correo saliente de los PACS (ej. Brevo) y a quién llega el resumen diario y los avisos
+#   pacs resumen               envía ahora el resumen del estado de los sistemas (cron: todos los días a las 00:00)
 #   pacs respaldo-subir        sube ahora a Backblaze lo que falte (sin volver a copiar las bases)
 #   pacs respaldo-estado       último respaldo externo y cuánto ocupa
 #   pacs respaldo-probar       baja archivos al azar del respaldo y los compara con el servidor (cron: día 1 de cada mes)
@@ -458,6 +460,12 @@ cmd_estado() {
     printf ']}\n'
   } > "$dir/.estado.json"
   mv "$dir/.estado.json" "$dir/estado.json"
+  # Aviso inmediato (una vez al día) si el disco pasa del 80 %
+  if [ "${total:-0}" -gt 0 ] && [ $(( 100 * usado / total )) -ge 80 ] && [ "$(cat /var/lib/pacs-aviso-disco 2>/dev/null)" != "$(date +%F)" ]; then
+    date +%F > /var/lib/pacs-aviso-disco
+    avisar "Disco del servidor al $(( 100 * usado / total )) %" "El disco del servidor está al $(( 100 * usado / total )) % de su capacidad.
+Conviene agregar un disco lento (HDD) en Vultr y mover las imágenes antiguas antes de que se llene."
+  fi
 }
 
 cmd_panel_clave() {
@@ -618,6 +626,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 */5 * * * * root pacs estado >/dev/null 2>&1
 15 1 * * * root pacs comprimir --noche >> /var/log/pacs-comprimir.log 2>&1
 0 5 1 * * root pacs respaldo-probar >> /var/log/pacs-respaldo.log 2>&1
+0 0 * * * root pacs resumen >> /var/log/pacs-resumen.log 2>&1
 CRON
   if [ "$CRON_FILE" = /etc/cron.d/pacs ]; then rm -f /etc/cron.d/pacs-firewall /etc/cron.d/pacs-respaldo; fi
 }
@@ -741,6 +750,93 @@ cmd_respaldo() {
   respaldo_remoto
 }
 
+# ---------- Correo de los sistemas: resumen diario y avisos ----------
+# Los PACS envían por SMTP (ej. Brevo): smtp-relay.brevo.com, puerto 587, usuario y clave SMTP de Brevo.
+# RESUMEN_PARA (servidor.env): a quién llegan el resumen de las 00:00 y los avisos.
+
+pacs_con_correo() {  # el primer PACS activo con el correo saliente configurado
+  local n
+  for n in $(instancias); do
+    [ "$(leer "$INST/$n/.env" ACTIVO)" = "false" ] && continue
+    [ -n "$(leer "$INST/$n/.env" SMTP_HOST)" ] && [ -n "$(leer "$INST/$n/.env" SMTP_FROM)" ] && { echo "$n"; return 0; }
+  done
+  return 1
+}
+
+# avisar "<asunto>" "<texto>"  — aviso inmediato por correo (si está configurado); nunca hace fallar al que lo llama
+avisar() {
+  local para n
+  para="$(leer "$INST/servidor.env" RESUMEN_PARA)"
+  [ -n "$para" ] || return 0
+  n="$(pacs_con_correo)" || return 0
+  printf '%s\n' "$2" | timeout 60 docker exec -i "pacs-$n-informes-1" python resumen_cli.py aviso --para "$para" \
+    --asunto "$1 · $(hostname)" >/dev/null 2>&1 || true
+}
+
+cmd_correo_configurar() {
+  echo "Correo saliente de los PACS (resumen diario, avisos y envío de informes a pacientes)"
+  echo "Con Brevo: Configuración → SMTP y API → pestaña SMTP (servidor, puerto, login y una clave SMTP)."
+  echo
+  local host puerto usuario clave remitente para n
+  read -rp "Servidor SMTP [smtp-relay.brevo.com]: " host; host="${host:-smtp-relay.brevo.com}"
+  read -rp "Puerto [587]: " puerto; puerto="${puerto:-587}"
+  read -rp "Usuario / login SMTP: " usuario
+  read -rsp "Clave SMTP (no se ve al escribir): " clave; echo
+  read -rp "Dirección remitente (verificada en Brevo, ej. informes@inq.cl): " remitente
+  read -rp "¿A qué correo(s) envío el resumen diario y los avisos? (separados por coma): " para
+  [ -n "$usuario" ] && [ -n "$clave" ] && [[ "$remitente" == *@*.* ]] || error "faltan datos"
+  [[ "$clave" == *"|"* ]] && error "la clave no puede tener el carácter |"
+  for n in $(instancias); do
+    local e="$INST/$n/.env" centro
+    centro="$(leer "$e" CENTRO_NOMBRE | tr -d '"<>')"
+    poner "$e" SMTP_HOST "$host"; poner "$e" SMTP_PORT "$puerto"; poner "$e" SMTP_USER "$usuario"
+    poner "$e" SMTP_PASSWORD "$clave"; poner "$e" SMTP_FROM "${centro:-Centro} <$remitente>"
+    poner "$e" SMTP_SSL "$([ "$puerto" = 465 ] && echo true || echo false)"; poner "$e" SMTP_STARTTLS true
+    [ "$(leer "$e" ACTIVO)" = "false" ] || dc "$n" up -d >/dev/null 2>&1
+  done
+  [ -n "$para" ] && poner "$INST/servidor.env" RESUMEN_PARA "$para"
+  echo "Esperando que los PACS se reinicien..."; sleep 15
+  n="$(pacs_con_correo)" || error "no quedó ningún PACS con correo"
+  if [ -n "$para" ]; then
+    docker exec "pacs-$n-informes-1" python resumen_cli.py probar --para "$para" \
+      || error "no se pudo enviar: revisa usuario, clave y que el remitente esté verificado en Brevo"
+  fi
+  echo "Listo. El resumen diario llega a las 00:00 (para probarlo ahora: pacs resumen)."
+}
+
+# Resumen del día (cron a las 00:00: resume el día que terminó)
+cmd_resumen() {
+  local para n fecha primero=1 caidos="" c
+  para="$(leer "$INST/servidor.env" RESUMEN_PARA)"
+  [ -n "$para" ] || { echo "Falta el destinatario (pacs correo-configurar)"; return 0; }
+  n="$(pacs_con_correo)" || { echo "El correo saliente no está configurado (pacs correo-configurar)"; return 0; }
+  if [ "$(date +%H)" -lt 6 ]; then fecha="$(date -d yesterday +%F)"; else fecha="$(date +%F)"; fi
+  cmd_estado >/dev/null 2>&1 || true
+  for c in $(instancias); do
+    [ "$(leer "$INST/$c/.env" ACTIVO)" = "false" ] && continue
+    while read -r nombre estado; do
+      [ "$estado" = running ] || caidos="$caidos \"$nombre ($estado)\","
+    done < <(docker ps -a --filter "name=^pacs-$c-" --format '{{.Names}} {{.State}}')
+  done
+  local respaldo_conf=false srv; [ -f "$RCLONE_CONF" ] && grep -q "^\[pacs-cifrado\]" "$RCLONE_CONF" && respaldo_conf=true
+  srv="$(sed -n 's/.*"servidor":\({[^}]*}\).*/\1/p' "$INST/caddy/portal/panel/estado.json" 2>/dev/null || true)"
+  [ -n "$srv" ] || srv='{}'
+  {
+    printf '{"fecha":"%s","version":"%s","servidor":%s,"respaldo":{"configurado":%s,"estado":"%s"},"contenedores_caidos":[%s],"pacs":[' \
+      "$fecha" "$(js "$(version_sistema)")" \
+      "$srv" \
+      "$respaldo_conf" "$(js "$(cat "$ESTADO_REMOTO" 2>/dev/null)")" "${caidos%,}"
+    for c in $(instancias); do
+      [ "$(leer "$INST/$c/.env" ACTIVO)" = "false" ] && continue
+      local d; d="$(timeout 600 docker exec "pacs-$c-informes-1" python resumen_cli.py datos --fecha "$fecha" 2>/dev/null | tail -n1 || true)"
+      case "$d" in "{"*"}") ;; *) d="{\"centro\":\"$c\",\"error_pacs\":\"sin respuesta\"}";; esac
+      [ $primero = 1 ] || printf ','; primero=0
+      printf '%s' "$d"
+    done
+    printf ']}\n'
+  } | docker exec -i "pacs-$n-informes-1" python resumen_cli.py enviar --para "$para"
+}
+
 # ---------- Respaldo fuera del servidor (Backblaze B2), cifrado ----------
 # Todo sale cifrado con rclone (crypt): Backblaze guarda los archivos sin poder leer nombres, RUT ni imágenes.
 # La clave de cifrado vive en /root/.config/rclone/rclone.conf y hay que guardarla también fuera del servidor
@@ -783,6 +879,8 @@ respaldo_remoto() {
   else
     echo "error $(date '+%Y-%m-%d %H:%M:%S') $fallas partes fallaron" > "$ESTADO_REMOTO"
     echo "$(date '+%d/%m/%Y %H:%M') Respaldo externo: $fallas partes fallaron (se reintenta mañana)"
+    avisar "Falló el respaldo externo" "El respaldo de esta noche a Backblaze falló en $fallas partes. Se reintenta mañana.
+Detalle en el servidor: /var/log/pacs-respaldo.log  (pacs respaldo-estado)"
     return 1
   fi
 }
@@ -875,6 +973,8 @@ cmd_respaldo_probar() {
   done
   rm -rf "$tmp"
   echo "$(date '+%d/%m/%Y %H:%M') Prueba de restauración: $ok archivos idénticos, $mal con problemas"
+  [ "$mal" = 0 ] || avisar "Prueba de restauración con problemas" "La prueba mensual bajó archivos del respaldo y $mal no coinciden con el servidor ($ok sí).
+Revisar: pacs respaldo-probar"
   [ "$mal" = 0 ]
 }
 
@@ -898,6 +998,8 @@ case "$c" in
   respaldo-estado) cmd_respaldo_estado;;
   respaldo-probar) cmd_respaldo_probar;;
   respaldo-subir) respaldo_remoto;;
+  correo-configurar) cmd_correo_configurar;;
+  resumen) cmd_resumen;;
   agenda) cmd_agenda "$@";;
   agenda-importar) cmd_agenda_importar "$@";;
   portal) cmd_portal "$@"; cmd_estado;;
