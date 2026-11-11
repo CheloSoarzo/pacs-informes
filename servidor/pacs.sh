@@ -12,7 +12,13 @@
 #   pacs actualizar            baja la última versión de GitHub y reinicia todos los PACS
 #                              (también desde la web: Administración → Ajustes → Sistema, en los PACS propios)
 #   pacs firewall              aplica la lista blanca DICOM de cada PACS (lo hace cron cada 5 min)
-#   pacs respaldo              respaldo de las bases de datos de todos los PACS (lo hace cron cada noche)
+#   pacs respaldo              respaldo de las bases de datos de todos los PACS y, si está configurado, copia cifrada
+#                              de todo (imágenes, bases, configuración) en Backblaze B2 (lo hace cron cada noche)
+#   pacs respaldo-configurar   conecta el respaldo externo con Backblaze B2 (pide keyID, applicationKey y bucket)
+#   pacs respaldo-clave        muestra las claves de cifrado del respaldo (guárdalas fuera del servidor)
+#   pacs respaldo-subir        sube ahora a Backblaze lo que falte (sin volver a copiar las bases)
+#   pacs respaldo-estado       último respaldo externo y cuánto ocupa
+#   pacs respaldo-probar       baja archivos al azar del respaldo y los compara con el servidor (cron: día 1 de cada mes)
 #   pacs agenda <nombre> <dominio>    agrega (o cambia) la agenda del centro, unida a su PACS
 #   pacs agenda-importar <nombre> <archivo.db>   carga el respaldo de la agenda que estaba en Render
 #   pacs portal <dominio>      página de ingreso común (ej: examenes.inq.cl) con el acceso de pacientes y del personal
@@ -611,6 +617,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 * * * * * root pacs revisar >> /var/log/pacs-actualizacion.log 2>&1
 */5 * * * * root pacs estado >/dev/null 2>&1
 15 1 * * * root pacs comprimir --noche >> /var/log/pacs-comprimir.log 2>&1
+0 5 1 * * root pacs respaldo-probar >> /var/log/pacs-respaldo.log 2>&1
 CRON
   if [ "$CRON_FILE" = /etc/cron.d/pacs ]; then rm -f /etc/cron.d/pacs-firewall /etc/cron.d/pacs-respaldo; fi
 }
@@ -729,8 +736,146 @@ cmd_respaldo() {
         && mv "$INST/$n/data/agenda/respaldo.db" "$RESPALDOS/$n/agenda_$hoy.db" || echo "[$n] fallo respaldo agenda"
     fi
   done
-  find "$RESPALDOS" -type f -mtime +14 -delete
+  find "$RESPALDOS" -type f -name "*_20*" -mtime +14 -delete
   echo "Respaldos en $RESPALDOS"
+  respaldo_remoto
+}
+
+# ---------- Respaldo fuera del servidor (Backblaze B2), cifrado ----------
+# Todo sale cifrado con rclone (crypt): Backblaze guarda los archivos sin poder leer nombres, RUT ni imágenes.
+# La clave de cifrado vive en /root/.config/rclone/rclone.conf y hay que guardarla también fuera del servidor
+# (pacs respaldo-clave): sin ella el respaldo no se puede abrir.
+RCLONE_CONF=/root/.config/rclone/rclone.conf
+REMOTO=pacs-cifrado:
+ESTADO_REMOTO="$RESPALDOS/estado-remoto.txt"
+
+respaldo_remoto() {
+  if ! [ -f "$RCLONE_CONF" ] || ! grep -q "^\[pacs-cifrado\]" "$RCLONE_CONF"; then
+    echo "Respaldo externo: no configurado (pacs respaldo-configurar)"; return 0
+  fi
+  command -v rclone >/dev/null || { echo "Respaldo externo: falta rclone"; return 1; }
+  local n ini fallas=0 opciones=(--config "$RCLONE_CONF" --fast-list --transfers 4 --checkers 8 --retries 5
+    --low-level-retries 20 --stats-one-line --stats 0 -v)
+  ini=$(date +%s)
+  echo "$(date '+%d/%m/%Y %H:%M') Respaldo externo: inicio"
+  # Copias de las bases (las de esta noche y las de los últimos 14 días)
+  rclone sync "$RESPALDOS" "${REMOTO}bases" --exclude "estado-remoto.txt" "${opciones[@]}" 2>&1 | tail -3 || fallas=$((fallas+1))
+  # Configuración de cada PACS y del servidor (contraseñas de la base, dominios, token de la agenda)
+  rclone sync "$INST" "${REMOTO}configuracion" --include "*/.env" --include "/servidor.env" "${opciones[@]}" 2>&1 | tail -3 \
+    || fallas=$((fallas+1))
+  for n in $(instancias); do
+    # Imágenes: los archivos que guarda Orthanc (el índice va en las bases)
+    [ -d "$INST/$n/data/orthanc" ] && { rclone sync "$INST/$n/data/orthanc" "${REMOTO}$n/imagenes" "${opciones[@]}" 2>&1 \
+      | tail -3 || fallas=$((fallas+1)); }
+    # Informes: audios de los dictados, logos, firmas (la base va aparte, copiada sin cortes)
+    [ -d "$INST/$n/data/informes" ] && { rclone sync "$INST/$n/data/informes" "${REMOTO}$n/informes" \
+      --exclude "informes.db*" --exclude "respaldo.db" "${opciones[@]}" 2>&1 | tail -3 || fallas=$((fallas+1)); }
+    # Agenda: la llave de las claves del portal del paciente y archivos (la base va aparte)
+    if [ -d "$INST/$n/data/agenda" ]; then
+      rclone sync "$INST/$n/data/agenda" "${REMOTO}$n/agenda" --exclude "agenda.db*" --exclude "respaldo.db" \
+        "${opciones[@]}" 2>&1 | tail -3 || fallas=$((fallas+1))
+    fi
+  done
+  local seg=$(( $(date +%s) - ini ))
+  if [ "$fallas" = 0 ]; then
+    echo "ok $(date '+%Y-%m-%d %H:%M:%S') ${seg}s" > "$ESTADO_REMOTO"
+    echo "$(date '+%d/%m/%Y %H:%M') Respaldo externo: OK en ${seg} s"
+  else
+    echo "error $(date '+%Y-%m-%d %H:%M:%S') $fallas partes fallaron" > "$ESTADO_REMOTO"
+    echo "$(date '+%d/%m/%Y %H:%M') Respaldo externo: $fallas partes fallaron (se reintenta mañana)"
+    return 1
+  fi
+}
+
+cmd_respaldo_configurar() {
+  if ! command -v rclone >/dev/null; then
+    echo "Instalando rclone..."; apt-get update -qq && apt-get install -y -qq rclone >/dev/null || error "no se pudo instalar rclone"
+  fi
+  echo "Respaldo externo en Backblaze B2"
+  echo "Necesitas: el nombre del bucket y una Application Key (keyID + applicationKey) con acceso solo a ese bucket."
+  echo
+  local id clave bucket
+  read -rp "keyID: " id
+  read -rsp "applicationKey (no se ve al escribir): " clave; echo
+  read -rp "Nombre del bucket: " bucket
+  [ -n "$id" ] && [ -n "$clave" ] && [ -n "$bucket" ] || error "faltan datos"
+  mkdir -p "$(dirname "$RCLONE_CONF")"; chmod 700 "$(dirname "$RCLONE_CONF")"
+  local p1 p2
+  if grep -q "^\[pacs-cifrado\]" "$RCLONE_CONF" 2>/dev/null; then
+    echo "Ya había un respaldo configurado: se mantiene su clave de cifrado (los archivos ya subidos siguen sirviendo)."
+    p1=$(awk '/^\[pacs-cifrado\]/{f=1} f&&/^password = /{print $3; exit}' "$RCLONE_CONF")
+    p2=$(awk '/^\[pacs-cifrado\]/{f=1} f&&/^password2 = /{print $3; exit}' "$RCLONE_CONF")
+  else
+    p1=$(rclone obscure "$(openssl rand -base64 33 | tr -d '/+=' | cut -c1-40)")
+    p2=$(rclone obscure "$(openssl rand -base64 33 | tr -d '/+=' | cut -c1-40)")
+  fi
+  umask 077
+  cat > "$RCLONE_CONF" <<CONF
+[backblaze]
+type = b2
+account = $id
+key = $clave
+hard_delete = false
+
+[pacs-cifrado]
+type = crypt
+remote = backblaze:$bucket/servidor
+filename_encryption = standard
+directory_name_encryption = true
+password = $p1
+password2 = $p2
+CONF
+  chmod 600 "$RCLONE_CONF"
+  echo "Probando..."
+  echo "prueba $(date)" > /tmp/pacs-prueba-respaldo.txt
+  rclone --config "$RCLONE_CONF" copyto /tmp/pacs-prueba-respaldo.txt "${REMOTO}prueba.txt" \
+    && rclone --config "$RCLONE_CONF" cat "${REMOTO}prueba.txt" >/dev/null \
+    || error "no se pudo escribir en el bucket: revisa keyID, applicationKey y nombre del bucket"
+  rm -f /tmp/pacs-prueba-respaldo.txt
+  echo "Conexión OK. El respaldo externo corre cada noche después del respaldo de las bases (03:30)."
+  echo
+  cmd_respaldo_clave
+  echo
+  echo "Para subir todo ahora (la primera vez puede tardar): pacs respaldo"
+}
+
+cmd_respaldo_clave() {
+  [ -f "$RCLONE_CONF" ] || error "el respaldo externo no está configurado (pacs respaldo-configurar)"
+  echo "==================== GUARDA ESTO FUERA DEL SERVIDOR ===================="
+  echo "Sin estas dos claves el respaldo NO se puede abrir (ni Backblaze ni nadie puede recuperarlas)."
+  echo "Guárdalas en tu gestor de contraseñas o impresas en un lugar seguro."
+  echo
+  echo "  Clave de cifrado 1: $(rclone reveal "$(awk '/^\[pacs-cifrado\]/{f=1} f&&/^password = /{print $3; exit}' "$RCLONE_CONF")")"
+  echo "  Clave de cifrado 2: $(rclone reveal "$(awk '/^\[pacs-cifrado\]/{f=1} f&&/^password2 = /{print $3; exit}' "$RCLONE_CONF")")"
+  echo "  Bucket: $(awk '/^\[pacs-cifrado\]/{f=1} f&&/^remote = /{print $3; exit}' "$RCLONE_CONF")"
+  echo "========================================================================="
+}
+
+cmd_respaldo_estado() {
+  [ -f "$RCLONE_CONF" ] || { echo "Respaldo externo: no configurado (pacs respaldo-configurar)"; return 0; }
+  echo "Último respaldo externo: $(cat "$ESTADO_REMOTO" 2>/dev/null || echo 'todavía no corre')"
+  echo "Tamaño en Backblaze (cifrado):"
+  rclone --config "$RCLONE_CONF" size "backblaze:$(awk '/^\[pacs-cifrado\]/{f=1} f&&/^remote = /{print $3; exit}' "$RCLONE_CONF" | cut -d: -f2)"
+}
+
+# Prueba de que el respaldo sirve: baja algunos archivos al azar y los compara con los del servidor
+cmd_respaldo_probar() {
+  [ -f "$RCLONE_CONF" ] || error "el respaldo externo no está configurado"
+  local n f rel ok=0 mal=0 tmp; tmp=$(mktemp -d)
+  for n in $(instancias); do
+    while IFS= read -r f; do
+      rel="${f#"$INST/$n/data/orthanc/"}"
+      if rclone --config "$RCLONE_CONF" copyto "${REMOTO}$n/imagenes/$rel" "$tmp/x" 2>/dev/null && cmp -s "$f" "$tmp/x"; then
+        ok=$((ok+1))
+      else
+        mal=$((mal+1)); echo "  [$n] no coincide o no está: $rel"
+      fi
+      rm -f "$tmp/x"
+    done < <(find "$INST/$n/data/orthanc" -type f -mmin +1500 2>/dev/null | shuf -n 5)
+  done
+  rm -rf "$tmp"
+  echo "$(date '+%d/%m/%Y %H:%M') Prueba de restauración: $ok archivos idénticos, $mal con problemas"
+  [ "$mal" = 0 ]
 }
 
 c="${1:-}"; shift || true
@@ -748,6 +893,11 @@ case "$c" in
   instalar-cron) instalar_cron;;
   firewall) cmd_firewall;;
   respaldo) cmd_respaldo;;
+  respaldo-configurar) cmd_respaldo_configurar;;
+  respaldo-clave) cmd_respaldo_clave;;
+  respaldo-estado) cmd_respaldo_estado;;
+  respaldo-probar) cmd_respaldo_probar;;
+  respaldo-subir) respaldo_remoto;;
   agenda) cmd_agenda "$@";;
   agenda-importar) cmd_agenda_importar "$@";;
   portal) cmd_portal "$@"; cmd_estado;;
