@@ -261,6 +261,103 @@ def armar_caja(info):
     return asunto, texto, cuerpo
 
 
+def pdf_caja(info):
+    """PDF de la caja del día: resumen y detalle de cada pago, por centro (A4 horizontal)."""
+    import io
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    fecha = _fecha_cl(info.get("fecha", ""))
+    AZUL, GRIS, ROJO = colors.HexColor("#1E3A5F"), colors.HexColor("#F1F5F9"), colors.HexColor("#9A3412")
+    st = {"t": ParagraphStyle("t", fontName="Helvetica-Bold", fontSize=16, leading=20, textColor=AZUL, spaceAfter=4),
+          "h": ParagraphStyle("h", fontName="Helvetica-Bold", fontSize=12.5, textColor=AZUL, spaceBefore=10, spaceAfter=4),
+          "n": ParagraphStyle("n", fontName="Helvetica", fontSize=9.5, leading=12),
+          "c": ParagraphStyle("c", fontName="Helvetica", fontSize=8, leading=9.5),
+          "a": ParagraphStyle("a", fontName="Helvetica-Bold", fontSize=9.5, leading=12, textColor=ROJO)}
+    e = lambda x: html.escape(str(x or ""))  # noqa: E731
+    total = sum((p.get("caja") or {}).get("recaudado") or 0 for p in info.get("pacs", []))
+    aten = sum((p.get("caja") or {}).get("atenciones") or 0 for p in info.get("pacs", []))
+    flow = [Paragraph(f"Caja del día · {fecha}", st["t"]),
+            Paragraph(f"Total de los centros: <b>{_pesos(total)}</b> en {aten} atenciones", st["n"])]
+
+    def tabla(filas, anchos, cab=True, num_desde=None, estilos=()):
+        t = Table(filas, colWidths=anchos, repeatRows=1 if cab else 0, hAlign="LEFT")
+        ts = [("FONT", (0, 0), (-1, -1), "Helvetica", 8.5), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+              ("LINEBELOW", (0, 0), (-1, -1), 0.25, colors.HexColor("#CBD5E1")),
+              ("TOPPADDING", (0, 0), (-1, -1), 2.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5)]
+        if cab:
+            ts += [("BACKGROUND", (0, 0), (-1, 0), GRIS), ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 8.5)]
+        if num_desde is not None:
+            ts.append(("ALIGN", (num_desde, 0), (-1, -1), "RIGHT"))
+        t.setStyle(TableStyle(ts + list(estilos)))
+        return t
+
+    for p in info.get("pacs", []):
+        nom, c = p.get("centro") or "Centro", p.get("caja") or {}
+        flow.append(Paragraph(e(nom), st["h"]))
+        if c.get("error"):
+            flow.append(Paragraph(f"No se pudo leer la caja: {e(c['error'])}", st["a"]))
+            continue
+        ci = c.get("cierre")
+        if not c.get("atenciones") and not ci and not c.get("pagos"):
+            flow.append(Paragraph("Sin pagos registrados.", st["n"]))
+            continue
+        res = [["Atenciones", c.get("atenciones", 0), "Valor total", _pesos(c.get("valor"))],
+               ["Recaudado", _pesos(c.get("recaudado")), "Bonificación", _pesos(c.get("bonificacion"))],
+               ["Efectivo esperado", _pesos(c.get("efectivo_esperado")), "Descuentos", _pesos(c.get("descuentos"))],
+               ["Efectivo contado", _pesos(ci["efectivo_contado"]) if ci else "caja sin cerrar",
+                "Diferencia", _pesos(ci["diferencia"]) if ci else "—"]]
+        flow.append(tabla(res, [38 * mm, 32 * mm, 30 * mm, 32 * mm], cab=False,
+                          estilos=[("FONT", (0, 0), (0, -1), "Helvetica-Bold", 8.5), ("FONT", (2, 0), (2, -1), "Helvetica-Bold", 8.5),
+                                   ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("ALIGN", (3, 0), (3, -1), "RIGHT")]))
+        if ci and ci.get("diferencia"):
+            flow.append(Paragraph(f"Diferencia de caja: {_pesos(ci['diferencia'])}"
+                                  + (f" · {e(ci.get('observaciones'))}" if ci.get("observaciones") else ""), st["a"]))
+        partes = []
+        for titulo, k in (("Medio de pago", "por_medio"), ("Equipo", "por_equipo"), ("Previsión", "por_prevision")):
+            filas = [[titulo, "N°", "Monto"]] + [[EQUIPOS.get(n, n) if k == "por_equipo" else n, v["cantidad"], _pesos(v["monto"])]
+                                                  for n, v in sorted((c.get(k) or {}).items(), key=lambda x: -x[1]["monto"])]
+            if len(filas) > 1:
+                partes.append(tabla(filas, [34 * mm, 12 * mm, 26 * mm], num_desde=1))
+        if partes:
+            flow += [Spacer(1, 5), Table([partes], hAlign="LEFT", style=[("VALIGN", (0, 0), (-1, -1), "TOP"),
+                                                                         ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                                                                         ("RIGHTPADDING", (0, 0), (-1, -1), 10)])]
+        pagos = c.get("pagos") or []
+        if pagos:
+            filas = [["Hora", "Paciente", "RUT", "Examen", "Previsión", "Medio de pago", "Valor", "Bonif.", "Desc.", "Pagó", "Boleta / bono"]]
+            anul = []
+            for i, x in enumerate(pagos, 1):
+                filas.append([x.get("hora", ""), Paragraph(e(x.get("paciente")), st["c"]), x.get("rut", ""),
+                              Paragraph(e(x.get("examen")), st["c"]), x.get("prevision", ""), Paragraph(e(x.get("medio")), st["c"]),
+                              _pesos(x.get("valor")), _pesos(x.get("bonificacion")),
+                              _pesos(x.get("descuento")) if x.get("descuento") else "", _pesos(x.get("copago")),
+                              Paragraph(e(" · ".join(v for v in (x.get("boleta"), x.get("folio_bono")) if v)
+                                          + (f" ANULADO: {x.get('motivo_anulacion')}" if x.get("anulado") else "")), st["c"])])
+                if x.get("anulado"):
+                    anul.append(("TEXTCOLOR", (0, i), (-1, i), colors.HexColor("#94A3B8")))
+            flow += [Spacer(1, 6), Paragraph(f"Detalle de pagos ({len(pagos)})", st["n"]),
+                     tabla(filas, [11 * mm, 44 * mm, 21 * mm, 50 * mm, 20 * mm, 36 * mm, 18 * mm, 18 * mm, 14 * mm, 18 * mm, 27 * mm],
+                           estilos=[("ALIGN", (6, 0), (9, -1), "RIGHT")] + anul)]
+        else:
+            flow.append(Paragraph("Sin pagos registrados.", st["n"]))
+
+    def pie(canvas, doc):
+        canvas.setFont("Helvetica", 7.5)
+        canvas.setFillColor(colors.HexColor("#64748B"))
+        canvas.drawString(12 * mm, 8 * mm, f"Caja del día {fecha} · versión {info.get('version', '')} · © MSC26")
+        canvas.drawRightString(landscape(A4)[0] - 12 * mm, 8 * mm, f"Página {doc.page}")
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm,
+                            bottomMargin=14 * mm, title=f"Caja {fecha}", author="© MSC26")
+    doc.build(flow, onFirstPage=pie, onLaterPages=pie)
+    return buf.getvalue()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("accion", choices=["datos", "enviar", "caja", "aviso", "probar"])
@@ -276,8 +373,14 @@ def main():
             correo.enviar_mensaje(a.para, asunto, texto, cuerpo, nombre_remitente="Sistemas HISRIS")
             print(f"Resumen enviado a {a.para}: {asunto}")
         elif a.accion == "caja":
-            asunto, texto, cuerpo = armar_caja(json.load(sys.stdin))
-            correo.enviar_mensaje(a.para, asunto, texto, cuerpo, nombre_remitente="Caja HISRIS")
+            info = json.load(sys.stdin)
+            asunto, texto, cuerpo = armar_caja(info)
+            adjuntos = []
+            try:
+                adjuntos.append((f"caja-{info.get('fecha', '')}.pdf", pdf_caja(info), "application/pdf"))
+            except Exception as e:  # noqa: BLE001 - sin PDF igual se envía el correo
+                texto += f"\n(No se pudo armar el PDF: {e})\n"
+            correo.enviar_mensaje(a.para, asunto, texto, cuerpo, nombre_remitente="Caja HISRIS", adjuntos=adjuntos)
             print(f"Caja enviada a {a.para}: {asunto}")
         elif a.accion == "aviso":
             texto = sys.stdin.read().strip()

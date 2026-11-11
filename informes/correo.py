@@ -39,7 +39,7 @@ def _smtp_enviar(msg):
         raise CorreoError(f"No se pudo enviar el correo: {e}") from e
 
 
-def enviar_mensaje(para, asunto, texto, html=None, nombre_remitente=""):
+def enviar_mensaje(para, asunto, texto, html=None, nombre_remitente="", adjuntos=()):
     """Correo simple (resumen diario, avisos). para: una o varias direcciones separadas por coma."""
     if not configurado():
         raise CorreoError("El correo saliente no está configurado (SMTP_HOST / SMTP_FROM).")
@@ -54,6 +54,9 @@ def enviar_mensaje(para, asunto, texto, html=None, nombre_remitente=""):
     msg.set_content(texto)
     if html:
         msg.add_alternative(html, subtype="html")
+    for nombre, datos, tipo in adjuntos:          # (nombre_archivo, bytes, "application/pdf")
+        principal, sub = tipo.split("/", 1)
+        msg.add_attachment(datos, maintype=principal, subtype=sub, filename=nombre)
     _smtp_enviar(msg)
     return destinos
 

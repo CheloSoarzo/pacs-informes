@@ -860,7 +860,7 @@ cmd_resumen_caja() {
     for c in $(instancias); do
       [ "$(leer "$INST/$c/.env" ACTIVO)" = "false" ] && continue
       [ -n "$(leer "$INST/$c/.env" AGENDA_DOMINIO)" ] || continue
-      local cj; cj="$(timeout 120 docker exec "pacs-$c-agenda-1" node --no-warnings scripts/resumen-caja.js --fecha "$fecha" 2>/dev/null | tail -n1 || true)"
+      local cj; cj="$(timeout 120 docker exec "pacs-$c-agenda-1" node --no-warnings scripts/resumen-caja.js --fecha "$fecha" --detalle 2>/dev/null | tail -n1 || true)"
       case "$cj" in "{"*"}") ;; *) cj='{"error":"sin respuesta de la agenda"}';; esac
       [ $primero = 1 ] || printf ','; primero=0
       printf '{"centro":"%s","caja":%s}' "$(js "$(leer "$INST/$c/.env" CENTRO_NOMBRE)")" "$cj"
