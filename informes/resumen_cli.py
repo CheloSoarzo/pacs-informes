@@ -122,6 +122,50 @@ def _gb(b):
     return f"{(b or 0) / 1e9:,.1f} GB".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _pesos(n):
+    n = round(n or 0)
+    return ("-" if n < 0 else "") + "$" + f"{abs(n):,}".replace(",", ".")
+
+
+EQUIPOS = {"tc": "TC", "rx": "RX", "eco": "Eco"}
+
+
+def _caja(nom, c, avisos):
+    """Líneas de caja de un centro (y avisos si la caja no se cerró o hay diferencia)."""
+    if not c:
+        return []
+    if c.get("error"):
+        avisos.append(f"{nom}: no se pudo leer la caja ({c['error']})")
+        return []
+    if not c.get("atenciones") and not c.get("cierre"):
+        return [f"{nom}: sin pagos registrados"]
+    medios = " · ".join(f"{k} {_pesos(v['monto'])}" for k, v in sorted(c.get("por_medio", {}).items(),
+                                                                       key=lambda x: -x[1]["monto"]) if v["monto"])
+    prev = ", ".join(f"{k} {v['cantidad']}" for k, v in sorted(c.get("por_prevision", {}).items()))
+    eq = ", ".join(f"{EQUIPOS.get(k, k)} {_pesos(v['monto'])}" for k, v in sorted(c.get("por_equipo", {}).items()))
+    out = [f"{nom}: {_pesos(c.get('recaudado'))} recaudado en {c.get('atenciones', 0)} atenciones",
+           f"{nom} · por medio de pago: {medios or 'sin montos'}"]
+    if eq:
+        out.append(f"{nom} · por equipo: {eq}")
+    if prev:
+        out.append(f"{nom} · previsión: {prev} · bonificación {_pesos(c.get('bonificacion'))}"
+                   + (f" · descuentos {_pesos(c.get('descuentos'))}" if c.get("descuentos") else ""))
+    if c.get("anulados"):
+        out.append(f"{nom} · {c['anulados']} pago{'s' if c['anulados'] != 1 else ''} anulado{'s' if c['anulados'] != 1 else ''}")
+    ci = c.get("cierre")
+    if ci:
+        dif = ci.get("diferencia") or 0
+        txt = (f"Cierre de caja{(' por ' + ci['por']) if ci.get('por') else ''}: efectivo esperado "
+               f"{_pesos(c.get('efectivo_esperado'))}, contado {_pesos(ci.get('efectivo_contado'))}")
+        if dif:
+            avisos.append(f"{nom}: diferencia de caja de {_pesos(dif)} ({'sobra' if dif > 0 else 'falta'} efectivo)"
+                          + (f" · {ci['observaciones']}" if ci.get("observaciones") else ""))
+        out.append(f"{nom} · {txt}" + (" · sin diferencia" if not dif else ""))
+    elif c.get("atenciones"):
+        avisos.append(f"{nom}: la caja del día no se cerró (efectivo esperado {_pesos(c.get('efectivo_esperado'))})")
+    return out
+
+
 def armar(info):
     """Devuelve (asunto, texto, html) a partir del JSON que arma `pacs resumen`."""
     fecha = info.get("fecha", date.today().isoformat())
@@ -162,10 +206,14 @@ def armar(info):
             dias = (hoy - datetime.strptime(ult, "%Y-%m-%d").date()).days
             if dias >= DIAS_SIN_ENVIO:
                 avisos.append(f"{nom}: el equipo {equipo} no envía imágenes desde el {_fecha_cl(ult)} ({dias} días)")
+    caja = []
+    for p in info.get("pacs", []):
+        caja += _caja(p.get("centro") or p.get("nombre", ""), p.get("caja"), avisos)
     asunto = (f"⚠️ {len(avisos)} aviso{'s' if len(avisos) != 1 else ''}" if avisos else "✅ Todo OK") + \
         f" · Estado de los sistemas {_fecha_cl(fecha)}"
     texto = f"Estado de los sistemas · {_fecha_cl(fecha)}\n\n" + \
         "".join(f"⚠️ {a}\n" for a in avisos) + "".join(f"✅ {x}\n" for x in lineas) + \
+        (("\nCaja\n" + "".join(f"💵 {x}\n" for x in caja)) if caja else "") + \
         f"\nVersión {info.get('version', '')} · © MSC26\n"
     filas = "".join(f'<tr><td style="padding:6px 8px;vertical-align:top">⚠️</td><td style="padding:6px 8px;color:#9A3412">'
                     f'<b>{html.escape(a)}</b></td></tr>' for a in avisos) + \
@@ -174,6 +222,9 @@ def armar(info):
     cuerpo = (f'<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;font-size:15px;color:#1E293B;max-width:640px">'
               f'<h2 style="font-size:18px;margin:0 0 12px">Estado de los sistemas · {_fecha_cl(fecha)}</h2>'
               f'<table style="border-collapse:collapse;width:100%">{filas}</table>'
+              + (f'<h3 style="font-size:16px;margin:18px 0 6px">Caja</h3><table style="border-collapse:collapse;width:100%">'
+                 + "".join(f'<tr><td style="padding:5px 8px;vertical-align:top">💵</td><td style="padding:5px 8px">{html.escape(x)}</td></tr>'
+                           for x in caja) + '</table>' if caja else '') +
               f'<p style="color:#64748B;font-size:12px;margin-top:16px">Versión {html.escape(info.get("version", ""))}'
               f' · © MSC26</p></div>')
     return asunto, texto, cuerpo

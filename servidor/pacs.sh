@@ -838,6 +838,12 @@ cmd_resumen() {
       [ "$(leer "$INST/$c/.env" ACTIVO)" = "false" ] && continue
       local d; d="$(timeout 600 docker exec "pacs-$c-informes-1" python resumen_cli.py datos --fecha "$fecha" 2>/dev/null | tail -n1 || true)"
       case "$d" in "{"*"}") ;; *) d="{\"centro\":\"$c\",\"error_pacs\":\"sin respuesta\"}";; esac
+      # Caja del día (si el centro tiene agenda)
+      if [ -n "$(leer "$INST/$c/.env" AGENDA_DOMINIO)" ]; then
+        local cj; cj="$(timeout 120 docker exec "pacs-$c-agenda-1" node --no-warnings scripts/resumen-caja.js --fecha "$fecha" 2>/dev/null | tail -n1 || true)"
+        case "$cj" in "{"*"}") ;; *) cj='{"error":"sin respuesta de la agenda"}';; esac
+        d="${d%\}},\"caja\":$cj}"
+      fi
       [ $primero = 1 ] || printf ','; primero=0
       printf '%s' "$d"
     done
