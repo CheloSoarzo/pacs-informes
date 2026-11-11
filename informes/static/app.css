@@ -365,12 +365,12 @@ td.mono { white-space: nowrap; }
 /* ---- Visor dentro de la pantalla del informe ---- */
 .visor-caja { display: grid; gap: 6px; }
 .visor-pestanas { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
-.visor-pestanas [role=tab], .btn-visor { border: 1px solid var(--borde, #D0D7DE); background: var(--panel, #fff); color: inherit;
+.visor-pestanas [role=tab], .btn-visor { border: 1px solid var(--borde); background: var(--panel, #fff); color: inherit;
   border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer; }
 .visor-pestanas [role=tab][aria-selected=true] { background: var(--primario); color: #fff; border-color: var(--primario); }
 .btn-visor[aria-pressed=true] { background: var(--primario-claro); border-color: var(--primario); }
 .visor-pestanas .espacio { flex: 1; }
-.visor-marco { height: calc(100vh - 140px); min-height: 480px; background: #000; border-radius: var(--radio, 8px); overflow: hidden; }
+.visor-marco { height: calc(100vh - 140px); min-height: 480px; background: #000; border-radius: var(--radio); overflow: hidden; }
 .visor-marco iframe { width: 100%; height: 100%; border: 0; display: block; }
 .visor-marco:fullscreen, .visor:fullscreen { height: 100vh; border-radius: 0; }
 .visor-ayuda { margin: 0; }
@@ -586,3 +586,12 @@ a.btn.desactivado { pointer-events: none; opacity: .6; }
 .btn-grupo .btn + .btn { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; }
 .pasos-horos { margin: 6px 0 10px; padding-left: 20px; }
 .pasos-horos li { margin-bottom: 6px; }
+
+/* Imágenes para el paciente y su médico tratante: vista simple / visor diagnóstico */
+.imgs-paciente .imgs-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 18px 0 8px; }
+.imgs-paciente .imgs-cab h2 { margin: 0; }
+.modos-visor { display: inline-flex; border: 1px solid var(--borde); border-radius: 8px; overflow: hidden; }
+.modos-visor button { background: transparent; border: 0; padding: 7px 14px; font: inherit; font-size: 14px; cursor: pointer; color: inherit; }
+.modos-visor button + button { border-left: 1px solid var(--borde); }
+.modos-visor button[aria-selected="true"] { background: var(--primario); color: #fff; }
+.iframe-diag { display: block; width: 100%; height: min(82vh, 900px); min-height: 420px; border: 0; border-radius: var(--radio); background: #000; }

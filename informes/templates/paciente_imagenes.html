@@ -28,16 +28,10 @@
   <div class="flash info">El informe del médico radiólogo aún está en proceso. Cuando esté listo aparecerá en «Mis exámenes» para verlo y descargarlo.</div>
   {% endif %}
 
-  <h2>Imágenes</h2>
-  <div class="visor" id="visor"></div>
-  <p class="suave peq">Desliza hacia arriba o abajo (o usa la rueda del mouse) para recorrer las imágenes. Las imágenes de esta vista son de referencia; para diagnóstico se usa el estudio original.</p>
+  {% with url_series=url_for('portal_series', estudio_id=estudio_id), url_img=url_for('portal_img', estudio_id=estudio_id, instancia_id='X')[:-1] %}
+  {% include "_imagenes_paciente.html" %}
+  {% endwith %}
 </div>
-<script src="{{ url_for('static', filename='visor.js') }}"></script>
-<script>
-  new VisorSimple(document.getElementById('visor'),
-    {{ url_for('portal_series', estudio_id=estudio_id)|tojson }},
-    {{ (url_for('portal_img', estudio_id=estudio_id, instancia_id='X')[:-1])|tojson }});
-</script>
 {% include "_pie.html" %}
 </body>
 </html>

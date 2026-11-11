@@ -35,6 +35,63 @@ def _acceso_uid(u, uid):
     return ok
 
 
+def estudios_del_paciente():
+    """Estudios que puede ver el paciente con su sesión actual: los de su portal (RUT y clave) y los de los
+    links de informe que abrió. Conjunto de IDs de Orthanc (vacío si no hay paciente)."""
+    from flask import session
+    from db import ahora, get_db
+    from integracion import _examenes_de, _rut_paciente
+    ids = set()
+    rut = _rut_paciente()
+    if rut:
+        ids |= {e["estudio_id"] for e in _examenes_de(rut) if e["estudio_id"]}
+    links = [int(k[3:]) for k, v in session.items() if k.startswith("lk_") and v is True and k[3:].isdigit()]
+    if links:
+        marcas = ",".join("?" * len(links))
+        for r in get_db().execute(
+                f"SELECT i.estudio_id FROM links l JOIN informes i ON i.id=l.informe_id WHERE l.id IN ({marcas}) "
+                f"AND l.revocado=0 AND l.expira>=?", (*links, ahora())):
+            ids.add(r[0])
+    return ids
+
+
+_cache_paciente = {}
+
+
+def _acceso_paciente(ruta, qs):
+    """Visor diagnóstico (OHIF/Stone) para el paciente: solo lectura y solo sus propios estudios.
+    None si no hay sesión de paciente (sigue el control normal); True/False si la hay."""
+    from flask import session
+    clave = (session.get("paciente_rut") or "",
+             tuple(sorted(k for k, v in session.items() if k.startswith("lk_") and v is True)))
+    if clave == ("", ()):
+        return None
+    hit = _cache_paciente.get(clave)
+    if not hit or hit[1] < time.time():
+        ids = estudios_del_paciente()
+        if len(_cache_paciente) > 5000:
+            _cache_paciente.clear()
+        hit = _cache_paciente[clave] = (ids, time.time() + 120)
+    ids = hit[0]
+    if not ids:
+        return None
+    if ruta.startswith(("/ohif/", "/stone-webviewer/")) or ruta in ("/system", "/plugins"):
+        return True                     # archivos del visor, sin datos de pacientes
+    if ruta.startswith("/dicom-web/studies"):
+        m = RE_UID_RUTA.match(ruta)
+        uid = m.group(1) if m else (qs.get("StudyInstanceUID") or [""])[0]
+        if uid and re.fullmatch(r"[0-9.]+", uid):
+            cu = (clave, uid)
+            if cu not in _cache_paciente:
+                est = pacs.estudio_por_uid(uid)
+                _cache_paciente[cu] = (bool(est) and est["id"] in ids, 0)
+                if _cache_paciente[cu][0]:
+                    auditar(clave[0] or "paciente", "visor_diagnostico_paciente", f"{uid}",
+                            request.headers.get("X-Forwarded-For", ip()))
+            return _cache_paciente[cu][0]
+    return False
+
+
 @app.route("/api/auth/pacs")
 def auth_pacs():
     metodo = request.headers.get("X-Forwarded-Method", "GET").upper()
@@ -42,6 +99,11 @@ def auth_pacs():
     partes = urlsplit(uri)
     ruta, qs = partes.path, parse_qs(partes.query)
     u = usuario_actual()
+
+    if not u and metodo in ("GET", "HEAD", "OPTIONS"):
+        permitido = _acceso_paciente(ruta, qs)
+        if permitido is not None:
+            return Response("ok") if permitido else Response("Solo puedes ver tus propios exámenes.", 403)
 
     if not u:
         if metodo == "GET" and "text/html" in request.headers.get("Accept", ""):

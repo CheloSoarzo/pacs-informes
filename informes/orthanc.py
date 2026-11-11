@@ -316,10 +316,70 @@ class Orthanc:
             r = self._req("GET", f"/instances/{instancia_id}/rendered", params=params,
                           headers={"Accept": "image/jpeg"})
             if r is not None and r.content:
-                return r
+                return self._recortar(instancia_id, r)
         except OrthancError:
             pass
         return self._req("GET", f"/instances/{instancia_id}/preview", headers={"Accept": "image/jpeg"})
+
+    _campos = {}
+
+    def campo_expuesto(self, instancia_id):
+        """Zona expuesta de una radiografía (CR/DX) como fracciones (x0, y0, x1, y1) de la imagen, o None.
+
+        Algunos lectores (ej. el CR Fujifilm) envían la placa completa de 35 cm con todo lo que queda fuera del
+        colimador en negro: unos dedos quedan como una figura chica en un rincón. Se busca el rectángulo que no es
+        negro (en una copia chica, con la ventana del equipo) y se guarda por imagen."""
+        if instancia_id in self._campos:
+            return self._campos[instancia_id]
+        caja = None
+        try:
+            if self._tag(instancia_id, "0008-0060").upper() in ("CR", "DX"):
+                from io import BytesIO
+                from PIL import Image
+                r = self._req("GET", f"/instances/{instancia_id}/rendered", params={"width": 256, "height": 256},
+                              headers={"Accept": "image/jpeg"})
+                im = Image.open(BytesIO(r.content)).convert("L")
+                w, h = im.size
+                px = im.load()
+                filas, cols = [0] * h, [0] * w
+                for y in range(h):
+                    for x in range(w):
+                        if px[x, y] > 20:
+                            filas[y] += 1
+                            cols[x] += 1
+                ys = [i for i, v in enumerate(filas) if v > w * 0.01]
+                xs = [i for i, v in enumerate(cols) if v > h * 0.01]
+                if xs and ys:
+                    m = 0.015                                   # un poco de borde alrededor
+                    x0, x1 = max(0.0, xs[0] / w - m), min(1.0, (xs[-1] + 1) / w + m)
+                    y0, y1 = max(0.0, ys[0] / h - m), min(1.0, (ys[-1] + 1) / h + m)
+                    if (x1 - x0) * (y1 - y0) < 0.85 and (x1 - x0) > 0.05 and (y1 - y0) > 0.05:
+                        caja = (x0, y0, x1, y1)
+        except Exception:                                       # nunca romper la imagen por esto
+            caja = None
+        if len(self._campos) > 20000:
+            self._campos.clear()
+        self._campos[instancia_id] = caja
+        return caja
+
+    def _recortar(self, instancia_id, r):
+        """Deja solo la zona expuesta (ver campo_expuesto). Devuelve algo con .content y .headers como la respuesta."""
+        caja = self.campo_expuesto(instancia_id)
+        if not caja:
+            return r
+        try:
+            from io import BytesIO
+            from types import SimpleNamespace
+            from PIL import Image
+            im = Image.open(BytesIO(r.content))
+            w, h = im.size
+            x0, y0, x1, y1 = caja
+            im = im.crop((int(x0 * w), int(y0 * h), int(round(x1 * w)), int(round(y1 * h))))
+            buf = BytesIO()
+            im.save(buf, "JPEG", quality=90)
+            return SimpleNamespace(content=buf.getvalue(), headers={"Content-Type": "image/jpeg"})
+        except Exception:
+            return r
 
     def archivo_zip(self, estudio_id):
         """Devuelve la respuesta en streaming con el ZIP del estudio."""

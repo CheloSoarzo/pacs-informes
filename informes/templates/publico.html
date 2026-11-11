@@ -56,16 +56,10 @@
   <div class="flash error">El informe de este examen está en revisión. Vuelve a abrir este mismo link más tarde.</div>
   {% endif %}
 
-  <h2>Imágenes</h2>
-  <div class="visor" id="visor"></div>
-  <p class="suave peq">Desliza hacia arriba o abajo (o usa la rueda del mouse) para recorrer las imágenes. Las imágenes de esta vista son de referencia; para diagnóstico se usa el estudio original.</p>
+  {% with url_series=url_for('publico_series', token=token), url_img=url_for('publico_img', token=token, instancia_id='X')[:-1] %}
+  {% include "_imagenes_paciente.html" %}
+  {% endwith %}
 </div>
-<script src="{{ url_for('static', filename='visor.js') }}"></script>
-<script>
-  new VisorSimple(document.getElementById('visor'),
-    {{ url_for('publico_series', token=token)|tojson }},
-    {{ (url_for('publico_img', token=token, instancia_id='X')[:-1])|tojson }});
-</script>
 {% include "_pie.html" %}
 </body>
 </html>

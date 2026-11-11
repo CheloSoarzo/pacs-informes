@@ -1,0 +1,42 @@
+{# Imágenes del examen para el paciente y su médico tratante: vista simple (celular) y visor diagnóstico (OHIF).
+   Variables: url_series, url_img, visor_ohif (vacío si el estudio no está en el PACS). #}
+<div class="imgs-paciente">
+  <div class="imgs-cab">
+    <h2>Imágenes</h2>
+    {% if visor_ohif %}
+    <div class="modos-visor" role="tablist" aria-label="Forma de ver las imágenes">
+      <button type="button" role="tab" data-modo="simple" aria-selected="true">Vista simple</button>
+      <button type="button" role="tab" data-modo="diag" aria-selected="false">Visor diagnóstico</button>
+    </div>
+    {% endif %}
+  </div>
+  <div class="modo-simple">
+    <div class="visor" id="visor"></div>
+    <p class="suave peq">Desliza hacia arriba o abajo (o usa la rueda del mouse) para recorrer las imágenes. Con «☀ Brillo y contraste» puedes ajustar la imagen arrastrando sobre ella.</p>
+  </div>
+  {% if visor_ohif %}
+  <div class="modo-diag" hidden>
+    <iframe class="iframe-diag" title="Visor diagnóstico" allow="fullscreen" data-src="{{ visor_ohif }}"></iframe>
+    <p class="suave peq">Visor completo para su médico: brillo y contraste (clic izquierdo y arrastrar), zoom (clic derecho o rueda), mover (clic central), medidas y todas las series.
+      <a href="{{ visor_ohif }}" target="_blank" rel="noopener">Abrir en pantalla completa ↗</a></p>
+  </div>
+  {% endif %}
+</div>
+<script src="{{ url_for('static', filename='visor.js') }}"></script>
+<script>
+  new VisorSimple(document.getElementById('visor'), {{ url_series|tojson }}, {{ url_img|tojson }});
+  (function () {
+    const caja = document.querySelector('.imgs-paciente'), tabs = caja.querySelector('.modos-visor');
+    if (!tabs) return;
+    const simple = caja.querySelector('.modo-simple'), diag = caja.querySelector('.modo-diag'), ifr = caja.querySelector('.iframe-diag');
+    function modo(m) {
+      for (const b of tabs.children) b.setAttribute('aria-selected', String(b.dataset.modo === m));
+      simple.hidden = m !== 'simple'; diag.hidden = m !== 'diag';
+      if (m === 'diag' && !ifr.src) ifr.src = ifr.dataset.src;      // se carga solo cuando se usa
+      try { localStorage.setItem('visor-paciente', m); } catch (e) { /* */ }
+    }
+    tabs.addEventListener('click', e => { const b = e.target.closest('[data-modo]'); if (b) modo(b.dataset.modo); });
+    let m = null; try { m = localStorage.getItem('visor-paciente'); } catch (e) { /* */ }
+    modo(m || (window.matchMedia('(min-width: 900px)').matches ? 'diag' : 'simple'));
+  })();
+</script>

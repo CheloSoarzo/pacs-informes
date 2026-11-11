@@ -823,7 +823,9 @@ def portal_imagenes(estudio_id):
     if not e:
         abort(404)
     auditar(rut, "portal_ver_imagenes", f"estudio {estudio_id}", request.remote_addr or "")
-    return render_template("paciente_imagenes.html", c=centro_info(), e=e, estudio_id=estudio_id)
+    from rutas_publico import visor_ohif_de
+    return render_template("paciente_imagenes.html", c=centro_info(), e=e, estudio_id=estudio_id,
+                           visor_ohif=visor_ohif_de(estudio_id))
 
 
 @app.route("/paciente/imagenes/<estudio_id>/series")

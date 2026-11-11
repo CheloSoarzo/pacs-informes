@@ -139,7 +139,7 @@ def armar_lista(args):
     if solo_solicitados(u):
         palabras = (u["filtro_solicitante"] or "").replace("^", " ").split()
         solicitante = max(palabras, key=len) if palabras else ""
-        # Médico solicitante: los exámenes a los que se le dio acceso (de cualquier fecha) + los que lo
+        # Médico solicitante: los exámenes a los que se le dio acceso + los que lo
         # nombran como solicitante (si tiene su nombre configurado)
         estudios = [e for e in pacs.buscar_estudios(d, h, f["q"], f["modalidad"], solicitante=solicitante)
                     if ve_estudio(u, e)] if solicitante else []
@@ -152,6 +152,9 @@ def armar_lista(args):
             if not e or not ve_estudio(u, e):
                 continue
             if f["modalidad"] and f["modalidad"] not in e["modalidad"].split("/"):
+                continue
+            # sin búsqueda por paciente, respetar el período elegido (Hoy, Ayer, Desde/Hasta)
+            if not f["q"] and not (d <= (e["fecha_raw"] or "") <= h):
                 continue
             if f["q"] and not (all(p in _normal(e["paciente_nombre"]) for p in q_txt.split())
                                or (q_id and q_id in re.sub(r"[^0-9A-Za-z]", "", e["paciente_id"]).upper())
