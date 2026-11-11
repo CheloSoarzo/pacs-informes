@@ -17,7 +17,9 @@
 #   pacs respaldo-configurar   conecta el respaldo externo con Backblaze B2 (pide keyID, applicationKey y bucket)
 #   pacs respaldo-clave        muestra las claves de cifrado del respaldo (guárdalas fuera del servidor)
 #   pacs correo-configurar     correo saliente de los PACS (ej. Brevo) y a quién llega el resumen diario y los avisos
-#   pacs resumen [--ayer]      envía ahora el resumen del día en curso (cron: 08:00 con --ayer, el día anterior completo)
+#   pacs resumen [--ayer]      envía ahora el estado de los sistemas del día en curso (cron: 08:00 con --ayer, día anterior)
+#   pacs resumen-caja [--ayer] envía ahora la caja de cada centro del día (cron: 20:00)
+#   pacs correo-destinos estado|caja "a@x.cl, b@x.cl"   a quién llega cada correo (sin datos: muestra los actuales)
 #   pacs respaldo-subir        sube ahora a Backblaze lo que falte (sin volver a copiar las bases)
 #   pacs respaldo-estado       último respaldo externo y cuánto ocupa
 #   pacs respaldo-probar       baja archivos al azar del respaldo y los compara con el servidor (cron: día 1 de cada mes)
@@ -624,7 +626,7 @@ instalar_cron() {
   fi
   cat > "$CRON_FILE" <<CRON
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-# Hora de Chile (America/Santiago). Madrugada: 02:00 compresión, 03:00 respaldo, 08:00 resumen del día anterior
+# Hora de Chile (America/Santiago). 02:00 compresión, 03:00 respaldo, 08:00 estado del día anterior, 20:00 caja del día
 # (fuera del horario en que trabajan el radiólogo y la transcripcionista)
 */5 * * * * root pacs firewall >> /var/log/pacs-firewall.log 2>&1
 @reboot root sleep 90 && pacs firewall >> /var/log/pacs-firewall.log 2>&1
@@ -633,6 +635,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 0 2 * * * root pacs comprimir --noche >> /var/log/pacs-comprimir.log 2>&1
 0 3 * * * root pacs respaldo >> /var/log/pacs-respaldo.log 2>&1
 0 8 * * * root pacs resumen --ayer >> /var/log/pacs-resumen.log 2>&1
+0 20 * * * root pacs resumen-caja >> /var/log/pacs-resumen.log 2>&1
 0 5 1 * * root pacs respaldo-probar >> /var/log/pacs-respaldo.log 2>&1
 CRON
   if [ "$CRON_FILE" = /etc/cron.d/pacs ]; then rm -f /etc/cron.d/pacs-firewall /etc/cron.d/pacs-respaldo; fi
@@ -838,17 +841,53 @@ cmd_resumen() {
       [ "$(leer "$INST/$c/.env" ACTIVO)" = "false" ] && continue
       local d; d="$(timeout 600 docker exec "pacs-$c-informes-1" python resumen_cli.py datos --fecha "$fecha" 2>/dev/null | tail -n1 || true)"
       case "$d" in "{"*"}") ;; *) d="{\"centro\":\"$c\",\"error_pacs\":\"sin respuesta\"}";; esac
-      # Caja del día (si el centro tiene agenda)
-      if [ -n "$(leer "$INST/$c/.env" AGENDA_DOMINIO)" ]; then
-        local cj; cj="$(timeout 120 docker exec "pacs-$c-agenda-1" node --no-warnings scripts/resumen-caja.js --fecha "$fecha" 2>/dev/null | tail -n1 || true)"
-        case "$cj" in "{"*"}") ;; *) cj='{"error":"sin respuesta de la agenda"}';; esac
-        d="${d%\}},\"caja\":$cj}"
-      fi
       [ $primero = 1 ] || printf ','; primero=0
       printf '%s' "$d"
     done
     printf ']}\n'
   } | docker exec -i "pacs-$n-informes-1" python resumen_cli.py enviar --para "$para"
+}
+
+# Resumen de caja de cada centro (cron 20:00: la caja del día). Va a CAJA_PARA (pacs correo-destinos caja ...)
+cmd_resumen_caja() {
+  local para n fecha primero=1 c
+  para="$(leer "$INST/servidor.env" CAJA_PARA)"
+  [ -n "$para" ] || { echo "Falta a quién enviar la caja (pacs correo-destinos caja correo@x.cl)"; return 0; }
+  n="$(pacs_con_correo)" || { echo "El correo saliente no está configurado (pacs correo-configurar)"; return 0; }
+  if [ "${1:-}" = "--ayer" ]; then fecha="$(date -d yesterday +%F)"; else fecha="$(date +%F)"; fi
+  {
+    printf '{"fecha":"%s","version":"%s","pacs":[' "$fecha" "$(js "$(version_sistema)")"
+    for c in $(instancias); do
+      [ "$(leer "$INST/$c/.env" ACTIVO)" = "false" ] && continue
+      [ -n "$(leer "$INST/$c/.env" AGENDA_DOMINIO)" ] || continue
+      local cj; cj="$(timeout 120 docker exec "pacs-$c-agenda-1" node --no-warnings scripts/resumen-caja.js --fecha "$fecha" 2>/dev/null | tail -n1 || true)"
+      case "$cj" in "{"*"}") ;; *) cj='{"error":"sin respuesta de la agenda"}';; esac
+      [ $primero = 1 ] || printf ','; primero=0
+      printf '{"centro":"%s","caja":%s}' "$(js "$(leer "$INST/$c/.env" CENTRO_NOMBRE)")" "$cj"
+    done
+    printf ']}\n'
+  } | docker exec -i "pacs-$n-informes-1" python resumen_cli.py caja --para "$para"
+}
+
+# pacs correo-destinos estado|caja "a@x.cl, b@x.cl"   (sin correos: muestra los actuales)
+cmd_correo_destinos() {
+  local cual="${1:-}" lista="${2:-}" var
+  case "$cual" in
+    estado) var=RESUMEN_PARA;; caja) var=CAJA_PARA;;
+    "") echo "Estado de los sistemas (08:00, día anterior): $(leer "$INST/servidor.env" RESUMEN_PARA)"
+        echo "Caja de los centros (20:00, el día):          $(leer "$INST/servidor.env" CAJA_PARA)"; return 0;;
+    *) error "uso: pacs correo-destinos estado|caja \"correo1@x.cl, correo2@x.cl\"";;
+  esac
+  [ -n "$lista" ] || error "faltan los correos"
+  local limpio="" x
+  IFS=',' read -ra partes <<<"$lista"
+  for x in "${partes[@]}"; do
+    x="$(echo "$x" | tr -d ' <>"|')"
+    [[ "$x" =~ ^[^@]+@[^@]+\.[^@]+$ ]] || error "correo no válido: $x"
+    limpio="${limpio:+$limpio,}$x"
+  done
+  poner "$INST/servidor.env" "$var" "$limpio"
+  echo "Listo: $var=$limpio"
 }
 
 # ---------- Respaldo fuera del servidor (Backblaze B2), cifrado ----------
@@ -1014,6 +1053,8 @@ case "$c" in
   respaldo-subir) respaldo_remoto;;
   correo-configurar) cmd_correo_configurar;;
   resumen) cmd_resumen "$@";;
+  resumen-caja) cmd_resumen_caja "$@";;
+  correo-destinos) cmd_correo_destinos "$@";;
   agenda) cmd_agenda "$@";;
   agenda-importar) cmd_agenda_importar "$@";;
   portal) cmd_portal "$@"; cmd_estado;;

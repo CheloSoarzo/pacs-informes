@@ -230,9 +230,40 @@ def armar(info):
     return asunto, texto, cuerpo
 
 
+def armar_caja(info):
+    """(asunto, texto, html) del correo de caja de las 20:00: la caja del día de cada centro."""
+    fecha = info.get("fecha", date.today().isoformat())
+    avisos, bloques, total, aten = [], [], 0, 0
+    for p in info.get("pacs", []):
+        nom = p.get("centro") or "Centro"
+        lineas = _caja(nom, p.get("caja"), avisos)
+        c = p.get("caja") or {}
+        total += c.get("recaudado") or 0
+        aten += c.get("atenciones") or 0
+        if lineas:
+            bloques.append((nom, lineas))
+    asunto = (f"⚠️ Caja {_fecha_cl(fecha)} · {len(avisos)} aviso{'s' if len(avisos) != 1 else ''}" if avisos
+              else f"💵 Caja {_fecha_cl(fecha)}") + f" · {_pesos(total)}"
+    texto = f"Caja del día {_fecha_cl(fecha)}\n\nTotal de los centros: {_pesos(total)} en {aten} atenciones\n\n" + \
+        "".join(f"⚠️ {a}\n" for a in avisos) + \
+        "".join("\n" + "".join(f"💵 {x}\n" for x in ls) for _, ls in bloques) + \
+        f"\nVersión {info.get('version', '')} · © MSC26\n"
+    filas_av = "".join(f'<tr><td style="padding:6px 8px">⚠️</td><td style="padding:6px 8px;color:#9A3412"><b>'
+                       f'{html.escape(a)}</b></td></tr>' for a in avisos)
+    cuerpo = (f'<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;font-size:15px;color:#1E293B;max-width:640px">'
+              f'<h2 style="font-size:18px;margin:0 0 4px">Caja del día · {_fecha_cl(fecha)}</h2>'
+              f'<p style="margin:0 0 12px;font-size:16px">Total de los centros: <b>{_pesos(total)}</b> en {aten} atenciones</p>'
+              + (f'<table style="border-collapse:collapse;width:100%">{filas_av}</table>' if avisos else '')
+              + "".join(f'<h3 style="font-size:16px;margin:16px 0 4px">{html.escape(nom)}</h3><table style="border-collapse:collapse;width:100%">'
+                        + "".join(f'<tr><td style="padding:4px 8px">{html.escape(x.split(nom, 1)[-1].lstrip(" ·:"))}</td></tr>'
+                                  for x in ls) + '</table>' for nom, ls in bloques)
+              + f'<p style="color:#64748B;font-size:12px;margin-top:16px">Versión {html.escape(info.get("version", ""))} · © MSC26</p></div>')
+    return asunto, texto, cuerpo
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("accion", choices=["datos", "enviar", "aviso", "probar"])
+    ap.add_argument("accion", choices=["datos", "enviar", "caja", "aviso", "probar"])
     ap.add_argument("--fecha", default=date.today().isoformat())
     ap.add_argument("--para", default="")
     ap.add_argument("--asunto", default="")
@@ -244,6 +275,10 @@ def main():
             asunto, texto, cuerpo = armar(json.load(sys.stdin))
             correo.enviar_mensaje(a.para, asunto, texto, cuerpo, nombre_remitente="Sistemas HISRIS")
             print(f"Resumen enviado a {a.para}: {asunto}")
+        elif a.accion == "caja":
+            asunto, texto, cuerpo = armar_caja(json.load(sys.stdin))
+            correo.enviar_mensaje(a.para, asunto, texto, cuerpo, nombre_remitente="Caja HISRIS")
+            print(f"Caja enviada a {a.para}: {asunto}")
         elif a.accion == "aviso":
             texto = sys.stdin.read().strip()
             correo.enviar_mensaje(a.para, f"⚠️ {a.asunto}", texto + "\n\n© MSC26", nombre_remitente="Sistemas HISRIS")
