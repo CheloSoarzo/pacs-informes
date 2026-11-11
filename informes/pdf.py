@@ -24,11 +24,11 @@ ESTILOS = {
     "centro": ParagraphStyle("centro", fontName="Helvetica-Bold", fontSize=13, textColor=AZUL, leading=16),
     "contacto": ParagraphStyle("contacto", fontName="Helvetica", fontSize=8, textColor=GRIS, leading=10),
     "titulo": ParagraphStyle("titulo", fontName="Helvetica-Bold", fontSize=12, textColor=AZUL,
-                             leading=15, spaceBefore=4, spaceAfter=6),
+                             leading=15, spaceBefore=4, spaceAfter=14),
     "etq": ParagraphStyle("etq", fontName="Helvetica-Bold", fontSize=8, textColor=GRIS, leading=10),
     "val": ParagraphStyle("val", fontName="Helvetica", fontSize=9, leading=11),
     "seccion": ParagraphStyle("seccion", fontName="Helvetica-Bold", fontSize=10, textColor=AZUL,
-                              leading=13, spaceBefore=8, spaceAfter=2),
+                              leading=13, spaceBefore=12, spaceAfter=5),
     "texto": ParagraphStyle("texto", fontName="Helvetica", fontSize=10, leading=14, alignment=TA_LEFT),
     "firma": ParagraphStyle("firma", fontName="Helvetica", fontSize=9, leading=12),
     "firma_b": ParagraphStyle("firma_b", fontName="Helvetica-Bold", fontSize=10, leading=13),
@@ -37,6 +37,10 @@ ESTILOS = {
 
 # Líneas como "HALLAZGOS:" o "IMPRESIÓN:" se muestran como subtítulo
 RE_SECCION = re.compile(r"^[A-ZÁÉÍÓÚÑÜ0-9 /().,-]{3,60}:$")
+# Subtítulos habituales aunque estén escritos en minúscula («Hallazgos:», «Impresión diagnóstica:»)
+RE_SECCION_COMUN = re.compile(r"^(técnica|tecnica|antecedentes|indicación|indicacion|motivo( del examen)?|hallazgos?|"
+                              r"impresión|impresion|conclusión|conclusion|conclusiones|diagnóstico|diagnostico|"
+                              r"comentarios?|observaciones?|sugerencias?|recomendaciones?)( [a-záéíóúñ]+){0,2}:$", re.I)
 
 
 def _cuerpo(texto):
@@ -52,9 +56,9 @@ def _cuerpo(texto):
         if not plano.strip():                    # línea en blanco: separa párrafos
             if buf:
                 cerrar()
-                flow.append(Spacer(1, 4))
+                flow.append(Spacer(1, 7))
             continue
-        if RE_SECCION.match(plano.strip()):
+        if RE_SECCION.match(plano.strip()) or RE_SECCION_COMUN.match(plano.strip()):
             cerrar()
             flow.append(Paragraph(marcado.strip(), ESTILOS["seccion"]))
         else:

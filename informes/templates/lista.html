@@ -2,6 +2,14 @@
 {% block titulo %}Estudios{% endblock %}
 {% block contenido %}
 <form class="filtros" method="get" id="form-filtros">
+  <div class="rangos-rapidos" role="group" aria-label="Período rápido">
+    <button type="button" class="rango" data-r="hoy">Hoy</button>
+    <button type="button" class="rango" data-r="ayer">Ayer</button>
+    <button type="button" class="rango" data-r="3d">3 días</button>
+    <button type="button" class="rango" data-r="7d">Última semana</button>
+    <button type="button" class="rango" data-r="mes">Este mes</button>
+    <button type="button" class="rango" data-r="30d">Últimos 30 días</button>
+  </div>
   <div class="f-q"><label for="q">Paciente, RUT o N° examen</label>
     <input type="search" id="q" name="q" value="{{ f.q }}" placeholder="Buscar en todo el archivo…"></div>
   <div><label for="desde">Desde</label><input type="date" id="desde" name="desde" value="{{ f.desde }}"></div>

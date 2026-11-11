@@ -59,3 +59,28 @@
     }, seg * 1000);
   }
 })();
+
+
+// Botones de período rápido (Hoy, Ayer, 3 días, Última semana, Este mes, Últimos 30 días): llenan Desde/Hasta y buscan
+(function () {
+  const caja = document.querySelector('.rangos-rapidos');
+  const fd = document.getElementById('desde'), fh = document.getElementById('hasta');
+  if (!caja || !fd || !fh) return;
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const menos = n => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
+  const hoy = iso(new Date());
+  const rangos = {
+    hoy: [hoy, hoy], ayer: [menos(1), menos(1)], '3d': [menos(2), hoy], '7d': [menos(6), hoy],
+    mes: [hoy.slice(0, 8) + '01', hoy], '30d': [menos(29), hoy],
+  };
+  const q = document.getElementById('q');
+  for (const b of caja.querySelectorAll('.rango')) {
+    const [a, z] = rangos[b.dataset.r];
+    b.setAttribute('aria-pressed', String(!(q && q.value) && fd.value === a && fh.value === z));
+    b.addEventListener('click', () => {
+      fd.value = a; fh.value = z;
+      if (q) q.value = '';                     // la búsqueda por texto ignora las fechas: se limpia
+      document.getElementById('form-filtros').submit();
+    });
+  }
+})();

@@ -240,10 +240,39 @@ class Orthanc:
     def borrar_modalidad(self, nombre):
         self._req("DELETE", f"/modalities/{nombre}")
 
+    VISTA_MAX = 2000          # lado máximo (px) de las imágenes de la vista rápida, el portal y el CD
+    _dims = {}
+
+    def _dimensiones(self, instancia_id):
+        if instancia_id not in self._dims:
+            try:
+                f = self._req("GET", f"/instances/{instancia_id}/content/0028-0010")
+                c = self._req("GET", f"/instances/{instancia_id}/content/0028-0011")
+                self._dims[instancia_id] = (int(f.text.strip()), int(c.text.strip())) if f is not None and c is not None else None
+            except (OrthancError, ValueError):
+                self._dims[instancia_id] = None
+            if len(self._dims) > 20000:
+                self._dims.clear()
+        return self._dims[instancia_id]
+
     def preview(self, instancia_id):
-        r = self._req("GET", f"/instances/{instancia_id}/preview",
-                      headers={"Accept": "image/jpeg"})
-        return r
+        """Imagen JPEG para ver en el navegador (vista rápida, portal del paciente, CD).
+
+        Usa la ventana (brillo/contraste) que define el equipo en cada imagen —ej. partes blandas en el TC, la
+        ventana del Fuji en los RX— y no el rango completo de valores, que deja las imágenes grises y lavadas.
+        Las imágenes muy grandes se achican a 2000 px para que carguen rápido en el celular."""
+        params = {"quality": 90}
+        dims = self._dimensiones(instancia_id)
+        if dims and max(dims) > self.VISTA_MAX:
+            params.update(width=self.VISTA_MAX, height=self.VISTA_MAX, smooth=1)
+        try:
+            r = self._req("GET", f"/instances/{instancia_id}/rendered", params=params,
+                          headers={"Accept": "image/jpeg"})
+            if r is not None and r.content:
+                return r
+        except OrthancError:
+            pass
+        return self._req("GET", f"/instances/{instancia_id}/preview", headers={"Accept": "image/jpeg"})
 
     def archivo_zip(self, estudio_id):
         """Devuelve la respuesta en streaming con el ZIP del estudio."""

@@ -56,6 +56,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primario-cl
 /* Filtros */
 .filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; align-items: end; margin-bottom: 14px; }
 .filtros .f-q { grid-column: span 2; }
+.rangos-rapidos { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.rango { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--borde);
+  background: var(--panel); color: var(--texto); cursor: pointer; }
+.rango:hover { background: var(--primario-claro); }
+.rango[aria-pressed="true"] { background: var(--primario); border-color: var(--primario); color: #fff; font-weight: 600; }
+.rango:focus-visible { outline: 2px solid var(--primario); outline-offset: 2px; }
 .chips { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .chip { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--borde); background: #fff; font-size: 13px; color: var(--texto); }
 .chip.activo { background: var(--primario); color: #fff; border-color: var(--primario); }
