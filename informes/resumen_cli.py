@@ -130,6 +130,27 @@ def _pesos(n):
 EQUIPOS = {"tc": "TC", "rx": "RX", "eco": "Eco"}
 
 
+DIAS_SEMANA = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+
+def _dia_cl(iso):
+    """'2026-11-13' -> 'viernes 13/11/2026'."""
+    try:
+        d = date.fromisoformat(iso)
+        return f"{DIAS_SEMANA[d.weekday()]} {d:%d/%m/%Y}"
+    except (TypeError, ValueError):
+        return iso or ""
+
+
+def _texto_deposito(tj):
+    """Depósito estimado de las ventas con tarjeta (comisión aproximada del proveedor, ej. Klap)."""
+    deps = tj.get("depositos") or []
+    cuando = " · ".join(f"{_dia_cl(d['fecha'])}" + (f" {_pesos(d['neto'])}" if len(deps) > 1 else "") for d in deps)
+    return (f"tarjetas {_pesos(tj.get('bruto'))} − comisión {tj.get('proveedor') or ''} {_pesos(tj.get('comision'))}"
+            + (f" − IVA {_pesos(tj.get('iva'))}" if tj.get("iva") else "")
+            + f" → debería depositarse {_pesos(tj.get('neto'))} el {cuando} (aproximado)")
+
+
 def _caja(nom, c, avisos):
     """Líneas de caja de un centro (y avisos si la caja no se cerró o hay diferencia)."""
     if not c:
@@ -150,6 +171,9 @@ def _caja(nom, c, avisos):
     if prev:
         out.append(f"{nom} · previsión: {prev} · bonificación {_pesos(c.get('bonificacion'))}"
                    + (f" · descuentos {_pesos(c.get('descuentos'))}" if c.get("descuentos") else ""))
+    tj = c.get("tarjetas")
+    if tj and tj.get("neto"):
+        out.append(f"{nom} · {_texto_deposito(tj)}")
     if c.get("anulados"):
         out.append(f"{nom} · {c['anulados']} pago{'s' if c['anulados'] != 1 else ''} anulado{'s' if c['anulados'] != 1 else ''}")
     ci = c.get("cierre")
@@ -316,6 +340,26 @@ def pdf_caja(info):
         if ci and ci.get("diferencia"):
             flow.append(Paragraph(f"Diferencia de caja: {_pesos(ci['diferencia'])}"
                                   + (f" · {e(ci.get('observaciones'))}" if ci.get("observaciones") else ""), st["a"]))
+        tj = c.get("tarjetas")
+        if tj and tj.get("bruto"):
+            fil = [["Tarjetas " + (tj.get("proveedor") or ""), "N°", "Ventas", "Comisión", "Descuento"]]
+            for k, n in (("debito", "Débito"), ("credito", "Crédito")):
+                x = tj.get(k) or {}
+                if x.get("cantidad"):
+                    tasa = f"{str(x.get('tasa')).replace('.', ',')} %" + (f" + {_pesos(tj.get('fijo'))}" if tj.get("fijo") else "")
+                    fil.append([n, x["cantidad"], _pesos(x["bruto"]), tasa, "-" + _pesos(x["comision"])])
+            if tj.get("iva"):
+                fil.append(["IVA de la comisión", "", "", "19 %", "-" + _pesos(tj["iva"])])
+            deps = tj.get("depositos") or []
+            cuando = "<br/>".join(e(_dia_cl(d["fecha"])) + (f": {_pesos(d['neto'])}" if len(deps) > 1 else "") for d in deps)
+            caja = Table([[Paragraph("DEBERÍA DEPOSITARSE (APROX.)", st["c"])],
+                          [Paragraph(f"<b>{_pesos(tj.get('neto'))}</b>", ParagraphStyle("dep", fontName="Helvetica", fontSize=15, leading=18))],
+                          [Paragraph(cuando, st["c"])]], colWidths=[62 * mm],
+                         style=[("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#E1F0EE")), ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                                ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)])
+            flow += [Spacer(1, 6), Table([[tabla(fil, [34 * mm, 10 * mm, 24 * mm, 28 * mm, 24 * mm], estilos=[("ALIGN", (1, 0), (2, -1), "RIGHT"), ("ALIGN", (4, 0), (4, -1), "RIGHT")]), caja]],
+                                         hAlign="LEFT", style=[("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                                                               ("RIGHTPADDING", (0, 0), (-1, -1), 10)])]
         partes = []
         for titulo, k in (("Medio de pago", "por_medio"), ("Equipo", "por_equipo"), ("Previsión", "por_prevision")):
             filas = [[titulo, "N°", "Monto"]] + [[EQUIPOS.get(n, n) if k == "por_equipo" else n, v["cantidad"], _pesos(v["monto"])]
