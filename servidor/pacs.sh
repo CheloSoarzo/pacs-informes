@@ -187,8 +187,9 @@ logo_de() {  # dirección del logo de un PACS en el portal (vacía si no tiene)
 
 # Página del portal común: un botón por centro para pacientes y otro para el personal
 generar_portal() {
-  mkdir -p "$INST/caddy/portal/panel"
+  mkdir -p "$INST/caddy/portal/panel" "$INST/caddy/portal/msc26"
   cp "$CODIGO/servidor/panel.html" "$INST/caddy/portal/panel/index.html" 2>/dev/null || true
+  cp "$CODIGO"/servidor/marca/* "$INST/caddy/portal/msc26/" 2>/dev/null || true   # logo MSC26 (favicon, firma)
   copiar_logos
   local f="$INST/caddy/portal/index.html" n botones_p="" botones_s=""
   for n in $(instancias); do
@@ -202,7 +203,7 @@ generar_portal() {
   done
   cat > "$f" <<EOF
 <!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Exámenes en línea</title><style>
+<title>Exámenes en línea</title><link rel="icon" href="/msc26/favicon.svg" type="image/svg+xml"><link rel="icon" href="/msc26/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/msc26/apple-touch-icon.png"><style>
 :root{--bg:#f4f6f8;--p:#fff;--t:#18212b;--s:#5b6573;--b:#dce2e8;--a:#1f5fa8}
 @media (prefers-color-scheme:dark){:root{--bg:#0f151b;--p:#16202a;--t:#e6edf3;--s:#93a3b2;--b:#2a3846;--a:#6fb1e0}}
 body{margin:0;background:var(--bg);color:var(--t);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -214,11 +215,11 @@ h2{font-size:16px;margin:0 0 12px}.b{display:block;text-align:center;padding:14p
 img{background:#fff;border-radius:8px;object-fit:contain}.fila b img{height:34px;max-width:90px;padding:3px 5px;border:1px solid var(--b)}
 .b.centro{display:flex;align-items:center;justify-content:center;gap:14px;background:var(--p);color:var(--t);border:2px solid var(--a);padding:12px}
 .b.centro img{height:56px;max-width:150px;padding:4px 6px}.b.centro span{font-size:17px}
-footer{text-align:center;color:var(--s);font-size:12px;margin-top:22px}
+footer{text-align:center;color:var(--s);font-size:12px;margin-top:22px}.msc26-iso{vertical-align:-2px;margin-right:6px}
 </style></head><body><main><h1>Exámenes en línea</h1><p>Elija dónde se realizó su examen</p>
 <section><h2>Pacientes</h2>$botones_p<small>Ingrese con su RUT y la clave de la hoja que recibió en recepción.</small></section>
 <section><h2>Personal</h2>$botones_s<a class="b" href="/panel/">Panel de servidores</a></section>
-<footer>$(leer "$INST/servidor.env" PORTAL_DOMINIO || true) · Versión $(version_sistema) · © 2026 MSC26</footer></main></body></html>
+<footer><svg class="msc26-iso" width="14" height="14" viewBox="0 0 160 160" aria-hidden="true"><path d="M54.6 134.4 A60 60 0 1 1 105.4 134.4" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round"/><circle cx="80" cy="82" r="18" fill="currentColor"/><rect x="6" y="104" width="148" height="16" rx="8" fill="#14B8A6"/></svg>$(leer "$INST/servidor.env" PORTAL_DOMINIO || true) · Versión $(version_sistema) · © 2026 MSC26</footer></main></body></html>
 EOF
 }
 

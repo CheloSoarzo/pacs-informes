@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Servidores PACS</title>
+<link rel="icon" href="/msc26/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/msc26/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/msc26/apple-touch-icon.png">
 <style>
 :root{
   --bg:#eef2f5; --panel:#ffffff; --sunk:#f4f7f9; --line:#d9e1e7; --fg:#17232e; --muted:#5b6b78;
@@ -27,6 +30,9 @@
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 header{background:var(--head);color:var(--head-fg);padding:14px 20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+header .marca{display:block;height:30px;width:auto}
+header .sep{width:1px;align-self:stretch;background:rgba(255,255,255,.2)}
+.msc26-iso{vertical-align:-2px;margin-right:6px}
 header h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.2px}
 header .sub{font-size:13px;opacity:.75}
 header .esp{flex:1}
@@ -84,6 +90,8 @@ footer{max-width:1240px;margin:0 auto;padding:0 16px 24px;color:var(--muted);fon
 </head>
 <body>
 <header>
+  <img class="marca" src="/msc26/msc26-logo-horizontal-negativo.svg" alt="MSC26" width="114" height="30">
+  <div class="sep" aria-hidden="true"></div>
   <div><h1>Servidores PACS</h1><div class="sub">Centros de imágenes</div></div>
   <span class="esp"></span>
   <span class="pill" id="disco" title="Disco del servidor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg><span>—</span></span>
@@ -125,7 +133,7 @@ function pintar(){
   const lista=(d.pacs||[]).filter(p=>(inact||p.activo)&&(!q||[p.nombre,p.centro,p.dominio].join(" ").toLowerCase().includes(q)));
   $("#cuantos span").textContent=`${(d.pacs||[]).filter(p=>p.activo).length} PACS activos`;
   $("#generado").textContent=d.generado?`Datos del ${fecha(d.generado)}`:"";
-  $("#firma").textContent=`${location.host} · Versión ${d.version||""} · © 2026 MSC26`;
+  $("#firma").innerHTML='<svg class="msc26-iso" width="14" height="14" viewBox="0 0 160 160" aria-hidden="true"><path d="M54.6 134.4 A60 60 0 1 1 105.4 134.4" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round"/><circle cx="80" cy="82" r="18" fill="currentColor"/><rect x="6" y="104" width="148" height="16" rx="8" fill="#14B8A6"/></svg>'; $("#firma").append(`${location.host} · Versión ${d.version||""} · © 2026 MSC26`);
   if(!lista.length){$("#lista").innerHTML=`<div class="vacio">${q?"Ningún PACS coincide con la búsqueda.":"No hay PACS para mostrar."}</div>`;return}
   $("#lista").innerHTML=lista.map((p,i)=>{
     const x=p.datos||{}, total=p.cuota_gb?p.cuota_gb*1e9:(s.disco_total||0), pct=total?Math.min(100,Math.round(p.usado*100/total)):0;
