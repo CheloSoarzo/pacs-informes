@@ -596,3 +596,12 @@ a.btn.desactivado { pointer-events: none; opacity: .6; }
 .modos-visor button + button { border-left: 1px solid var(--borde); }
 .modos-visor button[aria-selected="true"] { background: var(--primario); color: #fff; }
 .iframe-diag { display: block; width: 100%; height: min(82vh, 900px); min-height: 420px; border: 0; border-radius: var(--radio); background: #000; }
+
+/* Firma del desarrollador a la derecha de la barra superior */
+.msc26-marca { display: flex; align-items: center; gap: 8px; padding-left: 16px; border-left: 1px solid rgba(255,255,255,.18);
+  color: #fff; --msc26-acento: #14B8A6; text-decoration: none; white-space: nowrap; }
+.msc26-marca .msc26-txt { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--barra-texto); opacity: .8; }
+.msc26-marca .msc26-logo { display: block; height: 22px; width: auto; }
+@media (max-width: 1360px) { .msc26-marca .msc26-txt { display: none; } }
+@media (max-width: 900px) { .msc26-marca { padding-left: 10px; } }
+@media print { .msc26-marca { display: none; } }
