@@ -58,7 +58,13 @@ class Orthanc:
         if r.status_code == 404:
             return None
         if r.status_code >= 400:
-            raise OrthancError(f"PACS respondió {r.status_code} en {path}")
+            motivo = ""
+            try:
+                j = r.json()
+                motivo = " · ".join(x for x in (j.get("Message"), j.get("Details")) if x)
+            except ValueError:
+                motivo = (r.text or "")[:200]
+            raise OrthancError(f"PACS respondió {r.status_code} en {path}" + (f": {motivo}" if motivo else ""))
         return r
 
     def get_json(self, path, **kw):
@@ -229,14 +235,55 @@ class Orthanc:
                 return self.estudio(item["ID"])
         return None
 
-    def modificar_estudio(self, estudio_id, reemplazos):
-        """Corrige tags DICOM de todo el estudio (datos del paciente y del examen).
+    TAGS_PACIENTE = ("PatientName", "PatientID", "PatientBirthDate", "PatientSex")
+    _CONSERVAR_UID = ["StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID"]
+
+    def modificar_estudio(self, estudio_id, reemplazos, cambios_ids=None):
+        """Corrige tags DICOM del estudio (datos del paciente y del examen).
 
         Se conservan los UID (el estudio sigue siendo el mismo para visores y equipos). Si cambia el RUT/ID del
-        paciente, Orthanc le asigna otro ID interno: se devuelve el ID nuevo y se borra la copia anterior."""
+        paciente, Orthanc le asigna otro ID interno: se devuelve el ID nuevo y se borra la copia anterior.
+
+        Si el paciente tiene otros exámenes y se corrigen sus datos (nombre, RUT, nacimiento, sexo), Orthanc no deja
+        cambiarlos en un solo estudio (el paciente quedaría con dos nombres): se corrigen en TODOS sus exámenes.
+        cambios_ids (dict) recibe {id_anterior: id_nuevo} de todos los estudios que cambiaron de ID."""
+        cambios_ids = {} if cambios_ids is None else cambios_ids
+        pac = {k: v for k, v in reemplazos.items() if k in self.TAGS_PACIENTE}
+        exa = {k: v for k, v in reemplazos.items() if k not in self.TAGS_PACIENTE}
+        st = self.get_json(f"/studies/{estudio_id}")
+        if not st:
+            raise OrthancError("El estudio ya no existe en el PACS")
+        paciente = self.get_json(f"/patients/{st['ParentPatient']}") if pac else None
+        if pac and paciente and len(paciente.get("Studies") or []) > 1:
+            uid = st.get("MainDicomTags", {}).get("StudyInstanceUID", "")
+            uids = {}
+            for sid in paciente["Studies"]:
+                o = self.get_json(f"/studies/{sid}") or {}
+                uids[sid] = o.get("MainDicomTags", {}).get("StudyInstanceUID", "")
+            rep = dict(pac)
+            rep.setdefault("PatientID", (paciente.get("MainDicomTags") or {}).get("PatientID", ""))
+            r = self._req("POST", f"/patients/{paciente['ID']}/modify", timeout=1800, json={
+                "Replace": rep, "Keep": self._CONSERVAR_UID, "Force": True, "KeepSource": True})
+            if r is None:
+                raise OrthancError("El paciente ya no existe en el PACS")
+            nuevo_pac = r.json().get("ID")
+            if not nuevo_pac:
+                raise OrthancError("El PACS no devolvió el paciente modificado")
+            if nuevo_pac != paciente["ID"]:
+                self._req("DELETE", f"/patients/{paciente['ID']}")
+            # IDs nuevos de cada estudio (cambian solo si cambió el RUT): se buscan por su StudyInstanceUID
+            nuevo_id = estudio_id
+            for sid, u in uids.items():
+                e = self.estudio_por_uid(u) if u else None
+                if e and e["id"] != sid:
+                    cambios_ids[sid] = e["id"]
+                if u == uid and e:
+                    nuevo_id = e["id"]
+            return self.modificar_estudio(nuevo_id, exa, cambios_ids) if exa else nuevo_id
+
         r = self._req("POST", f"/studies/{estudio_id}/modify", timeout=900, json={
             "Replace": reemplazos,
-            "Keep": ["StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID"],
+            "Keep": self._CONSERVAR_UID,
             "Force": True,            # necesario para conservar UID y cambiar datos del paciente
             "KeepSource": True,       # se borra el original solo si quedó con otro ID
         })
@@ -247,7 +294,14 @@ class Orthanc:
             raise OrthancError("El PACS no devolvió el estudio modificado")
         if nuevo != estudio_id:
             self._req("DELETE", f"/studies/{estudio_id}")
+            cambios_ids[estudio_id] = nuevo
         return nuevo
+
+    def estudios_del_paciente(self, estudio_id):
+        """IDs de todos los estudios del mismo paciente (incluido este)."""
+        st = self.get_json(f"/studies/{estudio_id}") or {}
+        p = self.get_json(f"/patients/{st.get('ParentPatient')}") if st.get("ParentPatient") else None
+        return list((p or {}).get("Studies") or [estudio_id])
 
     def borrar_estudio(self, estudio_id):
         """Borra el estudio completo del PACS (todas sus series e imágenes). No se puede deshacer."""

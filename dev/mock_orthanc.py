@@ -59,11 +59,20 @@ for eid, e in ESTUDIOS.items():
             INSTANCIAS[iid] = dict(serie=sid, estudio=eid, InstanceNumber=str(k), total=cant, mod=mod)
 
 
+def pac_id(pid):
+    import hashlib
+    return hashlib.sha1(pid.encode()).hexdigest()[:12]
+
+
+def estudios_de(pacid):
+    return [k for k, e in ESTUDIOS.items() if pac_id(e["paciente"]["PatientID"]) == pacid]
+
+
 def estudio_json(eid):
     e = ESTUDIOS[eid]
     tags = {k: v for k, v in e.items() if k[0].isupper()}
     mods = sorted({SERIES[s]["Modality"] for s in e["series_ids"]})
-    return {"ID": eid, "Type": "Study", "MainDicomTags": tags,
+    return {"ID": eid, "Type": "Study", "MainDicomTags": tags, "ParentPatient": pac_id(e["paciente"]["PatientID"]),
             "PatientMainDicomTags": e["paciente"], "Series": e["series_ids"], "IsStable": e.get("estable", True),
             "RequestedTags": {"ModalitiesInStudy": "\\".join(mods)}}
 
@@ -129,12 +138,63 @@ def lookup():
 PACIENTE_TAGS = {"PatientName", "PatientID", "PatientBirthDate", "PatientSex"}
 
 
+@app.get("/patients/<pacid>")
+def paciente(pacid):
+    ests = estudios_de(pacid)
+    if not ests:
+        abort(404)
+    return jsonify({"ID": pacid, "Type": "Patient", "MainDicomTags": ESTUDIOS[ests[0]]["paciente"], "Studies": ests})
+
+
+@app.post("/patients/<pacid>/modify")
+def modificar_paciente(pacid):
+    ests = estudios_de(pacid)
+    if not ests:
+        abort(404)
+    rep = request.get_json().get("Replace", {})
+    if "PatientID" not in rep:      # como Orthanc: a nivel paciente el PatientID es obligatorio
+        return jsonify({"HttpStatus": 400, "Message": "Bad request", "Details": "When modifying a patient, her PatientID is required to be modified"}), 400
+    for k in ests:
+        _aplicar(k, rep)
+    return jsonify({"ID": pac_id(rep["PatientID"]), "Type": "Patient"})
+
+
+@app.delete("/patients/<pacid>")
+def borrar_paciente(pacid):
+    ests = estudios_de(pacid)
+    if not ests:
+        abort(404)
+    for k in ests:
+        ESTUDIOS.pop(k)
+    return jsonify({})
+
+
+def _aplicar(eid, rep):
+    e = ESTUDIOS[eid]
+    nuevo = eid
+    if "PatientID" in rep and rep["PatientID"] != e["paciente"]["PatientID"]:
+        nuevo = eid + "-mod"
+    destino = dict(e, paciente=dict(e["paciente"]))
+    for k, v in rep.items():
+        (destino["paciente"] if k in PACIENTE_TAGS else destino)[k] = v
+    ESTUDIOS[nuevo] = destino
+    for sid in e["series_ids"]:
+        SERIES[sid]["estudio"] = nuevo
+        for iid in SERIES[sid]["instancias"]:
+            INSTANCIAS[iid]["estudio"] = nuevo
+    return nuevo
+
+
 @app.post("/studies/<eid>/modify")
 def modificar(eid):
     if eid not in ESTUDIOS:
         abort(404)
     rep = request.get_json().get("Replace", {})
     e = ESTUDIOS[eid]
+    # como el Orthanc real: no deja cambiar datos del paciente en un solo estudio si el paciente tiene más
+    if any(k in PACIENTE_TAGS for k in rep) and "PatientID" not in rep and len(estudios_de(pac_id(e["paciente"]["PatientID"]))) > 1:
+        return jsonify({"HttpStatus": 400, "Message": "Bad request",
+                        "Details": "Cannot modify patient tags of a study whose patient has other studies"}), 400
     nuevo = eid
     if "PatientID" in rep and rep["PatientID"] != e["paciente"]["PatientID"]:
         nuevo = eid + "-mod"

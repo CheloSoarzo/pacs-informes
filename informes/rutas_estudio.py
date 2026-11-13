@@ -809,12 +809,24 @@ def datos_paciente(estudio_id):
         flash("No hubo cambios.", "info")
         return _volver(estudio_id)
 
-    nuevo_id = pacs.modificar_estudio(estudio_id, tags)
+    cambios_ids = {}
+    otros = [s for s in pacs.estudios_del_paciente(estudio_id) if s != estudio_id] \
+        if any(k in tags for k in pacs.TAGS_PACIENTE) else []
+    nuevo_id = pacs.modificar_estudio(estudio_id, tags, cambios_ids)
     db = get_db()
-    if nuevo_id != estudio_id:
-        # El PACS le dio otro ID interno (cambió el RUT): se mueve todo lo asociado al estudio
+    for viejo, nuevo in cambios_ids.items():
+        # El PACS le dio otro ID interno (cambió el RUT): se mueve todo lo asociado a cada estudio
         for tabla in TABLAS_CON_ESTUDIO:
-            db.execute(f"UPDATE {tabla} SET estudio_id=? WHERE estudio_id=?", (nuevo_id, estudio_id))
+            db.execute(f"UPDATE {tabla} SET estudio_id=? WHERE estudio_id=?", (nuevo, viejo))
+    # Los otros exámenes del mismo paciente también cambiaron sus datos: se actualizan sus informes y dictados
+    for viejo in otros:
+        sid = cambios_ids.get(viejo, viejo)
+        e2 = pacs.estudio(sid)
+        if e2:
+            db.execute("UPDATE informes SET paciente_nombre=?, paciente_id=?, paciente_fnac=?, paciente_sexo=? WHERE estudio_id=?",
+                       (e2["paciente_nombre"], e2["paciente_id"], e2["paciente_fnac_raw"], e2["paciente_sexo"], sid))
+            db.execute("UPDATE dictados SET paciente_nombre=?, paciente_id=? WHERE estudio_id=?",
+                       (e2["paciente_nombre"], e2["paciente_id"], sid))
     # Los informes y dictados guardan una copia de los datos (para el PDF y las listas): se actualiza
     est2 = pacs.estudio(nuevo_id) or est
     campos = {"paciente_nombre": est2["paciente_nombre"], "paciente_id": est2["paciente_id"],
@@ -828,9 +840,10 @@ def datos_paciente(estudio_id):
                (est2["paciente_nombre"], est2["paciente_id"], est2["descripcion"], nuevo_id))
     db.commit()
     cambios = "; ".join(f"{k}: {actual_tag(est, k)} → {v}" for k, v in tags.items())
-    registrar("editar_paciente", f"{nuevo_id} | {cambios}")
-    flash("Datos del paciente corregidos" + (" (el informe validado mostrará los datos nuevos)."
-                                             if inf and inf["estado"] == "firmado" else "."), "ok")
+    registrar("editar_paciente", f"{nuevo_id} | {cambios}" + (f" | también en {len(otros)} examen(es) más del paciente" if otros else ""))
+    flash("Datos del paciente corregidos"
+          + (f" en este examen y en {len(otros)} examen{'es' if len(otros) > 1 else ''} más del mismo paciente" if otros else "")
+          + (" (el informe validado mostrará los datos nuevos)." if inf and inf["estado"] == "firmado" else "."), "ok")
     return _volver(nuevo_id)
 
 

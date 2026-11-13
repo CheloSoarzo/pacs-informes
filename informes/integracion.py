@@ -428,7 +428,7 @@ def _completar_fnac(pendientes):
                     continue
                 if not st.get("IsStable"):
                     continue                       # todavía llegando imágenes: la próxima vez
-                nuevo = pacs.modificar_estudio(eid, {"PatientBirthDate": fnac})
+                nuevo = pacs.modificar_estudio(eid, {"PatientBirthDate": fnac})   # si tiene más exámenes, va a todos
                 for se in st.get("Series", []):     # el visor diagnóstico vuelve a leer los datos del paciente
                     try:
                         pacs._req("DELETE", f"/series/{se}/attachments/4301")
