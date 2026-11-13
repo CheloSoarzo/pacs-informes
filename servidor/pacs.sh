@@ -823,7 +823,17 @@ cmd_resumen() {
   n="$(pacs_con_correo)" || { echo "El correo saliente no está configurado (pacs correo-configurar)"; return 0; }
   # --ayer (cron de las 08:00): el día anterior completo. A mano: el día en curso
   if [ "${1:-}" = "--ayer" ]; then fecha="$(date -d yesterday +%F)"; else fecha="$(date +%F)"; fi
+  local t0=$SECONDS tmp; tmp="$(mktemp -d)"
+  echo "[$(date '+%d/%m/%Y %H:%M:%S')] Resumen de los sistemas del $(date -d "$fecha" +%d/%m/%Y): inicio"
+  # Los datos de cada centro se piden a la vez (antes, uno tras otro)
+  for c in $(instancias); do
+    [ "$(leer "$INST/$c/.env" ACTIVO)" = "false" ] && continue
+    ( s0=$SECONDS
+      timeout 600 docker exec "pacs-$c-informes-1" python resumen_cli.py datos --fecha "$fecha" 2>/dev/null | tail -n1 > "$tmp/$c.json" || true
+      echo "[$(date '+%H:%M:%S')]   $c: datos en $((SECONDS - s0)) s" ) &
+  done
   cmd_estado >/dev/null 2>&1 || true
+  wait
   for c in $(instancias); do
     [ "$(leer "$INST/$c/.env" ACTIVO)" = "false" ] && continue
     while read -r nombre estado; do
@@ -840,13 +850,15 @@ cmd_resumen() {
       "$respaldo_conf" "$(js "$(cat "$ESTADO_REMOTO" 2>/dev/null)")" "${caidos%,}"
     for c in $(instancias); do
       [ "$(leer "$INST/$c/.env" ACTIVO)" = "false" ] && continue
-      local d; d="$(timeout 600 docker exec "pacs-$c-informes-1" python resumen_cli.py datos --fecha "$fecha" 2>/dev/null | tail -n1 || true)"
+      local d; d="$(cat "$tmp/$c.json" 2>/dev/null || true)"
       case "$d" in "{"*"}") ;; *) d="{\"centro\":\"$c\",\"error_pacs\":\"sin respuesta\"}";; esac
       [ $primero = 1 ] || printf ','; primero=0
       printf '%s' "$d"
     done
     printf ']}\n'
   } | docker exec -i "pacs-$n-informes-1" python resumen_cli.py enviar --para "$para"
+  rm -rf "$tmp"
+  echo "[$(date '+%d/%m/%Y %H:%M:%S')] Resumen terminado en $((SECONDS - t0)) s"
 }
 
 # Resumen de caja de cada centro (cron 20:00: la caja del día). Va a CAJA_PARA (pacs correo-destinos caja ...)

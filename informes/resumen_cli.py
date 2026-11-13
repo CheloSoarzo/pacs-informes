@@ -12,6 +12,7 @@ import html
 import json
 import os
 import sqlite3
+import time
 import sys
 from datetime import date, datetime, timedelta
 
@@ -58,6 +59,9 @@ def _estudios(desde, hasta):
     return out
 
 
+VISOR_SEGUNDOS = 120   # tiempo máximo para revisar el visor diagnóstico de los estudios del día
+
+
 def _visor_falla(est):
     """True si el visor diagnóstico (DICOMweb) no puede leer alguna serie del estudio."""
     for se in est["series"]:
@@ -68,7 +72,7 @@ def _visor_falla(est):
                 continue
             sop = _get(f"/instances/{inst[0]}").get("MainDicomTags", {}).get("SOPInstanceUID", "")
             r = S.get(URL + f"/dicom-web/studies/{est['uid']}/series/{s['MainDicomTags'].get('SeriesInstanceUID', '')}"
-                            f"/instances/{sop}/metadata", timeout=120)
+                            f"/instances/{sop}/metadata", timeout=30)
             if r.status_code != 200:
                 return True
         except requests.RequestException:
@@ -92,7 +96,16 @@ def datos(fecha):
         out["estudios"] = len(del_dia)
         out["por_equipo"] = por_equipo
         out["ultimo_envio"] = {k: f"{v[:4]}-{v[4:6]}-{v[6:]}" for k, v in ultimo.items()}
-        out["visor_falla"] = [e["id"] for e in del_dia if _visor_falla(e)]
+        # Revisión del visor diagnóstico con tope de tiempo: el resumen debe llegar a la hora aunque el día tenga muchos estudios
+        limite, falla, sin_revisar = time.monotonic() + VISOR_SEGUNDOS, [], 0
+        for e in del_dia:
+            if time.monotonic() > limite:
+                sin_revisar += 1
+            elif _visor_falla(e):
+                falla.append(e["id"])
+        out["visor_falla"] = falla
+        if sin_revisar:
+            out["visor_sin_revisar"] = sin_revisar
     except Exception as e:  # noqa: BLE001
         out["error_pacs"] = str(e)[:200]
     try:
@@ -223,6 +236,8 @@ def armar(info):
         if pend:
             lineas.append(f"{nom}: {p.get('dictados_pendientes', 0)} dictados por transcribir · "
                           f"{p.get('por_validar', 0)} informes por validar")
+        if p.get("visor_sin_revisar"):
+            lineas.append(f"{nom}: {p['visor_sin_revisar']} estudios del día quedaron sin revisar en el visor (había muchos)")
         if p.get("visor_falla"):
             avisos.append(f"{nom}: {len(p['visor_falla'])} estudios del día que el visor diagnóstico no abre")
         hoy = datetime.strptime(fecha, "%Y-%m-%d").date()
