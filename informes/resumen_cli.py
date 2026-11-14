@@ -145,10 +145,13 @@ def _dia_cl(iso):
 def _texto_deposito(tj):
     """Depósito estimado de las ventas con tarjeta (comisión aproximada del proveedor, ej. Klap)."""
     deps = tj.get("depositos") or []
-    cuando = " · ".join(f"{_dia_cl(d['fecha'])}" + (f" {_pesos(d['neto'])}" if len(deps) > 1 else "") for d in deps)
+    if len(deps) > 3:      # semana o mes: el total y entre qué días
+        cuando = f"{len(deps)} depósitos, entre el {_dia_cl(deps[0]['fecha'])} y el {_dia_cl(deps[-1]['fecha'])}"
+    else:
+        cuando = " · ".join(f"{_dia_cl(d['fecha'])}" + (f" {_pesos(d['neto'])}" if len(deps) > 1 else "") for d in deps)
     return (f"tarjetas {_pesos(tj.get('bruto'))} − comisión {tj.get('proveedor') or ''} {_pesos(tj.get('comision'))}"
             + (f" − IVA {_pesos(tj.get('iva'))}" if tj.get("iva") else "")
-            + f" → debería depositarse {_pesos(tj.get('neto'))} el {cuando} (aproximado)")
+            + f" → debería depositarse {_pesos(tj.get('neto'))} " + ("en " if len(deps) > 3 else "el ") + f"{cuando} (aproximado)")
 
 
 def _caja(nom, c, avisos):
@@ -176,6 +179,17 @@ def _caja(nom, c, avisos):
         out.append(f"{nom} · {_texto_deposito(tj)}")
     if c.get("anulados"):
         out.append(f"{nom} · {c['anulados']} pago{'s' if c['anulados'] != 1 else ''} anulado{'s' if c['anulados'] != 1 else ''}")
+    dias = c.get("por_dia")
+    if dias is not None:          # semana o mes: cierres por día en vez del cierre del día
+        con = [d for d in dias if d.get("atenciones")]
+        sin = [d for d in con if not d.get("cerrada")]
+        out.append(f"{nom} · {len(con)} días con atención, {len(con) - len(sin)} con caja cerrada")
+        if sin:
+            avisos.append(f"{nom}: {len(sin)} día{'s' if len(sin) != 1 else ''} sin cierre de caja ("
+                          + ", ".join(_fecha_cl(d['fecha'])[:5] for d in sin) + ")")
+        if c.get("diferencias"):
+            avisos.append(f"{nom}: diferencias de caja en el período por {_pesos(c['diferencias'])}")
+        return out
     ci = c.get("cierre")
     if ci:
         dif = ci.get("diferencia") or 0
@@ -254,6 +268,24 @@ def armar(info):
     return asunto, texto, cuerpo
 
 
+MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
+         "noviembre", "diciembre"]
+
+
+def _titulos_caja(info):
+    """(título, nombre corto para el asunto, nombre del PDF) según sea día, semana o mes."""
+    fecha, desde, hasta = info.get("fecha", ""), info.get("desde") or info.get("fecha", ""), info.get("hasta") or info.get("fecha", "")
+    per = info.get("periodo") or ""
+    if per == "semana":
+        t = f"Caja semanal · {_fecha_cl(desde)[:5]} al {_fecha_cl(hasta)}"
+        return t, t, f"caja-semana-{desde}.pdf"
+    if per == "mes":
+        m = f"{MESES[int(desde[5:7]) - 1]} {desde[:4]}" if len(desde) >= 7 else desde
+        t = f"Caja de {m}" + ("" if (date.fromisoformat(hasta) + timedelta(days=1)).day == 1 else f" (al {_fecha_cl(hasta)})")
+        return t, t, f"caja-mes-{desde[:7]}.pdf"
+    return f"Caja del día · {_fecha_cl(fecha)}", f"Caja {_fecha_cl(fecha)}", f"caja-{fecha}.pdf"
+
+
 def armar_caja(info):
     """(asunto, texto, html) del correo de caja de las 20:00: la caja del día de cada centro."""
     fecha = info.get("fecha", date.today().isoformat())
@@ -266,16 +298,17 @@ def armar_caja(info):
         aten += c.get("atenciones") or 0
         if lineas:
             bloques.append((nom, lineas))
-    asunto = (f"⚠️ Caja {_fecha_cl(fecha)} · {len(avisos)} aviso{'s' if len(avisos) != 1 else ''}" if avisos
-              else f"💵 Caja {_fecha_cl(fecha)}") + f" · {_pesos(total)}"
-    texto = f"Caja del día {_fecha_cl(fecha)}\n\nTotal de los centros: {_pesos(total)} en {aten} atenciones\n\n" + \
+    titulo, corto, _ = _titulos_caja(info)
+    asunto = (f"⚠️ {corto} · {len(avisos)} aviso{'s' if len(avisos) != 1 else ''}" if avisos
+              else f"💵 {corto}") + f" · {_pesos(total)}"
+    texto = f"{titulo}\n\nTotal de los centros: {_pesos(total)} en {aten} atenciones\n\n" + \
         "".join(f"⚠️ {a}\n" for a in avisos) + \
         "".join("\n" + "".join(f"💵 {x}\n" for x in ls) for _, ls in bloques) + \
         f"\nVersión {info.get('version', '')} · © MSC26\n"
     filas_av = "".join(f'<tr><td style="padding:6px 8px">⚠️</td><td style="padding:6px 8px;color:#9A3412"><b>'
                        f'{html.escape(a)}</b></td></tr>' for a in avisos)
     cuerpo = (f'<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;font-size:15px;color:#1E293B;max-width:640px">'
-              f'<h2 style="font-size:18px;margin:0 0 4px">Caja del día · {_fecha_cl(fecha)}</h2>'
+              f'<h2 style="font-size:18px;margin:0 0 4px">{html.escape(titulo)}</h2>'
               f'<p style="margin:0 0 12px;font-size:16px">Total de los centros: <b>{_pesos(total)}</b> en {aten} atenciones</p>'
               + (f'<table style="border-collapse:collapse;width:100%">{filas_av}</table>' if avisos else '')
               + "".join(f'<h3 style="font-size:16px;margin:16px 0 4px">{html.escape(nom)}</h3><table style="border-collapse:collapse;width:100%">'
@@ -294,7 +327,7 @@ def pdf_caja(info):
     from reportlab.lib.units import mm
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-    fecha = _fecha_cl(info.get("fecha", ""))
+    titulo_doc, _, _ = _titulos_caja(info)
     AZUL, GRIS, ROJO = colors.HexColor("#1E3A5F"), colors.HexColor("#F1F5F9"), colors.HexColor("#9A3412")
     st = {"t": ParagraphStyle("t", fontName="Helvetica-Bold", fontSize=16, leading=20, textColor=AZUL, spaceAfter=4),
           "h": ParagraphStyle("h", fontName="Helvetica-Bold", fontSize=12.5, textColor=AZUL, spaceBefore=10, spaceAfter=4),
@@ -304,7 +337,7 @@ def pdf_caja(info):
     e = lambda x: html.escape(str(x or ""))  # noqa: E731
     total = sum((p.get("caja") or {}).get("recaudado") or 0 for p in info.get("pacs", []))
     aten = sum((p.get("caja") or {}).get("atenciones") or 0 for p in info.get("pacs", []))
-    flow = [Paragraph(f"Caja del día · {fecha}", st["t"]),
+    flow = [Paragraph(e(titulo_doc), st["t"]),
             Paragraph(f"Total de los centros: <b>{_pesos(total)}</b> en {aten} atenciones", st["n"])]
 
     def tabla(filas, anchos, cab=True, num_desde=None, estilos=()):
@@ -329,11 +362,18 @@ def pdf_caja(info):
         if not c.get("atenciones") and not ci and not c.get("pagos"):
             flow.append(Paragraph("Sin pagos registrados.", st["n"]))
             continue
+        dias = c.get("por_dia")
+        if dias is not None:      # semana o mes
+            con = [d for d in dias if d.get("atenciones")]
+            cerr = [d for d in con if d.get("cerrada")]
+            ultima = ["Días con caja cerrada", f"{len(cerr)} de {len(con)}", "Diferencias", _pesos(c.get("diferencias"))]
+        else:
+            ultima = ["Efectivo contado", _pesos(ci["efectivo_contado"]) if ci else "caja sin cerrar",
+                      "Diferencia", _pesos(ci["diferencia"]) if ci else "—"]
         res = [["Atenciones", c.get("atenciones", 0), "Valor total", _pesos(c.get("valor"))],
                ["Recaudado", _pesos(c.get("recaudado")), "Bonificación", _pesos(c.get("bonificacion"))],
                ["Efectivo esperado", _pesos(c.get("efectivo_esperado")), "Descuentos", _pesos(c.get("descuentos"))],
-               ["Efectivo contado", _pesos(ci["efectivo_contado"]) if ci else "caja sin cerrar",
-                "Diferencia", _pesos(ci["diferencia"]) if ci else "—"]]
+               ultima]
         flow.append(tabla(res, [38 * mm, 32 * mm, 30 * mm, 32 * mm], cab=False,
                           estilos=[("FONT", (0, 0), (0, -1), "Helvetica-Bold", 8.5), ("FONT", (2, 0), (2, -1), "Helvetica-Bold", 8.5),
                                    ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("ALIGN", (3, 0), (3, -1), "RIGHT")]))
@@ -372,6 +412,19 @@ def pdf_caja(info):
             flow += [Spacer(1, 5), Table([partes], hAlign="LEFT", style=[("VALIGN", (0, 0), (-1, -1), "TOP"),
                                                                          ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                                                          ("RIGHTPADDING", (0, 0), (-1, -1), 10)])]
+        if dias:
+            DS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
+            fil = [["Día", "Atenciones", "Recaudado", "Efectivo esperado", "Cierre", "Diferencia"]]
+            for d in dias:
+                dd = date.fromisoformat(d["fecha"])
+                fil.append([f"{DS[dd.weekday()]} {dd:%d/%m}", d.get("atenciones", 0), _pesos(d.get("recaudado")),
+                            _pesos(d.get("efectivo_esperado")), "cerrada" if d.get("cerrada") else ("sin cerrar" if d.get("atenciones") else "—"),
+                            _pesos(d["diferencia"]) if d.get("diferencia") else "—"])
+            fil.append(["Total", c.get("atenciones", 0), _pesos(c.get("recaudado")), _pesos(c.get("efectivo_esperado")), "",
+                        _pesos(c.get("diferencias")) if c.get("diferencias") else "—"])
+            flow += [Spacer(1, 6), Paragraph("Por día", st["n"]),
+                     tabla(fil, [24 * mm, 22 * mm, 28 * mm, 32 * mm, 22 * mm, 24 * mm], num_desde=1,
+                           estilos=[("ALIGN", (4, 0), (4, -1), "LEFT"), ("FONT", (0, -1), (-1, -1), "Helvetica-Bold", 8.5)])]
         pagos = c.get("pagos") or []
         if pagos:
             filas = [["Hora", "Paciente", "RUT", "Examen", "Previsión", "Medio de pago", "Valor", "Bonif.", "Desc.", "Pagó", "Boleta / bono"]]
@@ -388,18 +441,18 @@ def pdf_caja(info):
             flow += [Spacer(1, 6), Paragraph(f"Detalle de pagos ({len(pagos)})", st["n"]),
                      tabla(filas, [11 * mm, 44 * mm, 21 * mm, 50 * mm, 20 * mm, 36 * mm, 18 * mm, 18 * mm, 14 * mm, 18 * mm, 27 * mm],
                            estilos=[("ALIGN", (6, 0), (9, -1), "RIGHT")] + anul)]
-        else:
+        elif dias is None:        # en semana y mes no va la lista de pacientes
             flow.append(Paragraph("Sin pagos registrados.", st["n"]))
 
     def pie(canvas, doc):
         canvas.setFont("Helvetica", 7.5)
         canvas.setFillColor(colors.HexColor("#64748B"))
-        canvas.drawString(12 * mm, 8 * mm, f"Caja del día {fecha} · versión {info.get('version', '')} · © MSC26")
+        canvas.drawString(12 * mm, 8 * mm, f"{titulo_doc} · versión {info.get('version', '')} · © MSC26")
         canvas.drawRightString(landscape(A4)[0] - 12 * mm, 8 * mm, f"Página {doc.page}")
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm,
-                            bottomMargin=14 * mm, title=f"Caja {fecha}", author="© MSC26")
+                            bottomMargin=14 * mm, title=titulo_doc, author="© MSC26")
     doc.build(flow, onFirstPage=pie, onLaterPages=pie)
     return buf.getvalue()
 
@@ -423,7 +476,7 @@ def main():
             asunto, texto, cuerpo = armar_caja(info)
             adjuntos = []
             try:
-                adjuntos.append((f"caja-{info.get('fecha', '')}.pdf", pdf_caja(info), "application/pdf"))
+                adjuntos.append((_titulos_caja(info)[2], pdf_caja(info), "application/pdf"))
             except Exception as e:  # noqa: BLE001 - sin PDF igual se envía el correo
                 texto += f"\n(No se pudo armar el PDF: {e})\n"
             correo.enviar_mensaje(a.para, asunto, texto, cuerpo, nombre_remitente="Caja HISRIS", adjuntos=adjuntos)

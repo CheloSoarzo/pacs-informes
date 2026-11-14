@@ -19,6 +19,8 @@
 #   pacs correo-configurar     correo saliente de los PACS (ej. Brevo) y a quién llega el resumen diario y los avisos
 #   pacs resumen [--ayer]      envía ahora el estado de los sistemas del día en curso (cron: 08:00 con --ayer, día anterior)
 #   pacs resumen-caja [--ayer] envía ahora la caja de cada centro del día (cron: 20:00)
+#   pacs resumen-caja --semana envía la caja de lunes a hoy, sin lista de pacientes (cron: sábado 20:15)
+#   pacs resumen-caja --mes    envía la caja del mes hasta hoy, sin lista de pacientes (cron: último día del mes 20:30)
 #   pacs correo-destinos estado|caja "a@x.cl, b@x.cl"   a quién llega cada correo (sin datos: muestra los actuales)
 #   pacs respaldo-subir        sube ahora a Backblaze lo que falte (sin volver a copiar las bases)
 #   pacs respaldo-estado       último respaldo externo y cuánto ocupa
@@ -627,7 +629,8 @@ instalar_cron() {
   fi
   cat > "$CRON_FILE" <<CRON
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-# Hora de Chile (America/Santiago). 02:00 compresión, 03:00 respaldo, 08:00 estado del día anterior, 20:00 caja del día
+# Hora de Chile (America/Santiago). 02:00 compresión, 03:00 respaldo, 08:00 estado del día anterior, 20:00 caja del día,
+# sábado 20:15 caja de la semana (lunes a sábado), último día del mes 20:30 caja del mes
 # (fuera del horario en que trabajan el radiólogo y la transcripcionista)
 */5 * * * * root pacs firewall >> /var/log/pacs-firewall.log 2>&1
 @reboot root sleep 90 && pacs firewall >> /var/log/pacs-firewall.log 2>&1
@@ -637,6 +640,8 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 0 3 * * * root pacs respaldo >> /var/log/pacs-respaldo.log 2>&1
 0 8 * * * root pacs resumen --ayer >> /var/log/pacs-resumen.log 2>&1
 0 20 * * * root pacs resumen-caja >> /var/log/pacs-resumen.log 2>&1
+15 20 * * 6 root pacs resumen-caja --semana >> /var/log/pacs-resumen.log 2>&1
+30 20 28-31 * * root pacs resumen-caja --mes --solo-fin-de-mes >> /var/log/pacs-resumen.log 2>&1
 0 5 1 * * root pacs respaldo-probar >> /var/log/pacs-respaldo.log 2>&1
 CRON
   if [ "$CRON_FILE" = /etc/cron.d/pacs ]; then rm -f /etc/cron.d/pacs-firewall /etc/cron.d/pacs-respaldo; fi
@@ -867,13 +872,28 @@ cmd_resumen_caja() {
   para="$(leer "$INST/servidor.env" CAJA_PARA)"
   [ -n "$para" ] || { echo "Falta a quién enviar la caja (pacs correo-destinos caja correo@x.cl)"; return 0; }
   n="$(pacs_con_correo)" || { echo "El correo saliente no está configurado (pacs correo-configurar)"; return 0; }
-  if [ "${1:-}" = "--ayer" ]; then fecha="$(date -d yesterday +%F)"; else fecha="$(date +%F)"; fi
+  local desde hasta periodo="" args
+  case "${1:-}" in
+    --ayer) fecha="$(date -d yesterday +%F)";;
+    --semana) periodo=semana; fecha="$(date +%F)";;
+    --mes) periodo=mes; fecha="$(date +%F)"
+           # el cron corre los días 28 a 31: solo envía el último día del mes
+           if [ "${2:-}" = "--solo-fin-de-mes" ] && [ "$(date -d tomorrow +%d)" != "01" ]; then return 0; fi;;
+    *) fecha="$(date +%F)";;
+  esac
+  case "$periodo" in
+    semana) desde="$(date -d "$fecha -$(( $(date -d "$fecha" +%u) - 1 )) days" +%F)"; hasta="$fecha"
+            [ "$(date -d "$fecha" +%u)" = 7 ] && hasta="$(date -d "$fecha -1 day" +%F)";;   # domingo: hasta el sábado
+    mes)    desde="$(date -d "$fecha" +%Y-%m-01)"; hasta="$fecha";;
+    *)      desde="$fecha"; hasta="$fecha";;
+  esac
+  if [ -n "$periodo" ]; then args="--desde $desde --hasta $hasta"; else args="--fecha $fecha --detalle"; fi
   {
-    printf '{"fecha":"%s","version":"%s","pacs":[' "$fecha" "$(js "$(version_sistema)")"
+    printf '{"fecha":"%s","desde":"%s","hasta":"%s","periodo":"%s","version":"%s","pacs":[' "$fecha" "$desde" "$hasta" "$periodo" "$(js "$(version_sistema)")"
     for c in $(instancias); do
       [ "$(leer "$INST/$c/.env" ACTIVO)" = "false" ] && continue
       [ -n "$(leer "$INST/$c/.env" AGENDA_DOMINIO)" ] || continue
-      local cj; cj="$(timeout 120 docker exec "pacs-$c-agenda-1" node --no-warnings scripts/resumen-caja.js --fecha "$fecha" --detalle 2>/dev/null | tail -n1 || true)"
+      local cj; cj="$(timeout 120 docker exec "pacs-$c-agenda-1" node --no-warnings scripts/resumen-caja.js $args 2>/dev/null | tail -n1 || true)"
       case "$cj" in "{"*"}") ;; *) cj='{"error":"sin respuesta de la agenda"}';; esac
       [ $primero = 1 ] || printf ','; primero=0
       printf '{"centro":"%s","caja":%s}' "$(js "$(leer "$INST/$c/.env" CENTRO_NOMBRE)")" "$cj"
@@ -888,7 +908,7 @@ cmd_correo_destinos() {
   case "$cual" in
     estado) var=RESUMEN_PARA;; caja) var=CAJA_PARA;;
     "") echo "Estado de los sistemas (08:00, día anterior): $(leer "$INST/servidor.env" RESUMEN_PARA)"
-        echo "Caja de los centros (20:00, el día):          $(leer "$INST/servidor.env" CAJA_PARA)"; return 0;;
+        echo "Caja de los centros (20:00 diaria, sábado semanal, fin de mes mensual): $(leer "$INST/servidor.env" CAJA_PARA)"; return 0;;
     *) error "uso: pacs correo-destinos estado|caja \"correo1@x.cl, correo2@x.cl\"";;
   esac
   [ -n "$lista" ] || error "faltan los correos"
