@@ -346,7 +346,9 @@ def pdf_caja(info):
             for k, n in (("debito", "Débito"), ("credito", "Crédito")):
                 x = tj.get(k) or {}
                 if x.get("cantidad"):
-                    tasa = f"{str(x.get('tasa')).replace('.', ',')} %" + (f" + {_pesos(tj.get('fijo'))}" if tj.get("fijo") else "")
+                    fijo = (f" + {str(tj['fijo_uf']).replace('.', ',')} UF" if tj.get("fijo_uf")
+                            else f" + {_pesos(tj.get('fijo'))}" if tj.get("fijo") else "")
+                    tasa = f"{str(x.get('tasa')).replace('.', ',')} %" + fijo
                     fil.append([n, x["cantidad"], _pesos(x["bruto"]), tasa, "-" + _pesos(x["comision"])])
             if tj.get("iva"):
                 fil.append(["IVA de la comisión", "", "", "19 %", "-" + _pesos(tj["iva"])])
