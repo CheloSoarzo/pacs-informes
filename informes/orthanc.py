@@ -468,6 +468,7 @@ class Orthanc:
             "edad": edad(pt.get("PatientBirthDate", ""), st.get("StudyDate", "")),
             "modalidad": mods,
             "n_series": len(est.get("Series", [])),
+            "estable": est.get("IsStable", True),     # False: las imágenes siguen llegando
         }
 
 

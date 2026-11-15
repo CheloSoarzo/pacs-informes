@@ -1,10 +1,12 @@
 <!doctype html>
-<html lang="es"{% if usuario and usuario.paleta %} data-paleta="{{ usuario.paleta }}"{% endif %}>
+<html lang="es"{% if usuario and usuario.paleta %} data-paleta="{{ usuario.paleta }}"{% endif %}{% if dn %} class="dn"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titulo %}Informes{% endblock %} · {{ centro }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  {% if dn %}<link rel="stylesheet" href="{{ url_for('static', filename='nuevo.css') }}">
+  <script>try{if(localStorage.getItem('dn-plegado')==='1')document.documentElement.classList.add('plegado')}catch(e){}</script>{% endif %}
   <script src="{{ url_for('static', filename='fecha-cl.js') }}"></script>
 <link rel="icon" href="{{ url_for('static', filename='msc26/favicon.svg') }}" type="image/svg+xml">
 <link rel="icon" href="{{ url_for('static', filename='msc26/favicon.ico') }}" sizes="any">
@@ -16,19 +18,19 @@
 <header class="barra">
   <a class="marca" href="{{ url_for('lista') }}">{% if logo_url %}<span class="marca-logo"><img src="{{ logo_url }}" alt=""></span>{% endif %}<span>{{ centro }}</span></a>
   <nav>
-    <a href="{{ url_for('lista') }}" class="{{ 'activo' if ep in ('lista','estudio') and request.args.get('estado') != 'por_validar' }}">Estudios</a>
+    <a href="{{ url_for('lista') }}" data-n="estudios" class="{{ 'activo' if ep in ('lista','estudio') and request.args.get('estado') != 'por_validar' }}">Estudios</a>
     {% if puede('transcribir') or puede('dictar') or puede('dictados_escuchar') %}
       {% set nd = n_dictados() %}
-      <a href="{{ url_for('cola_dictados') }}" class="{{ 'activo' if ep == 'cola_dictados' }}">Dictados{% if nd %} <span class="contador">{{ nd }}</span>{% endif %}</a>
+      <a href="{{ url_for('cola_dictados') }}" data-n="dictados" class="{{ 'activo' if ep == 'cola_dictados' }}">Dictados{% if nd %} <span class="contador">{{ nd }}</span>{% endif %}</a>
     {% endif %}
     {% if puede('firmar') %}
-      <a href="{{ url_for('lista', estado='por_validar', asignado='mio', desde='2000-01-01') }}" class="{{ 'activo' if ep == 'lista' and request.args.get('estado') == 'por_validar' }}">Por validar</a>
+      <a href="{{ url_for('lista', estado='por_validar', asignado='mio', desde='2000-01-01') }}" data-n="validar" class="{{ 'activo' if ep == 'lista' and request.args.get('estado') == 'por_validar' }}">Por validar</a>
     {% endif %}
     {% if puede('estadisticas') %}
-      <a href="{{ url_for('estadisticas') }}" class="{{ 'activo' if ep == 'estadisticas' }}">Estadísticas</a>
+      <a href="{{ url_for('estadisticas') }}" data-n="estadisticas" class="{{ 'activo' if ep == 'estadisticas' }}">Estadísticas</a>
     {% endif %}
     {% if puede('pacs_subir') %}
-      <a href="{{ PACS_PUBLIC_URL }}/ui/app/" target="_blank" rel="noopener">PACS / subir ↗</a>
+      <a href="{{ PACS_PUBLIC_URL }}/ui/app/" data-n="pacs" target="_blank" rel="noopener">PACS / subir ↗</a>
     {% endif %}
     {% if puede('usuarios') or puede('plantillas') or puede('frases') or puede('ajustes') or puede('auditoria') or puede('equipos') %}
     <details class="menu {{ 'activo' if ep and ep.startswith('admin_') }}">
@@ -46,6 +48,13 @@
     {% endif %}
   </nav>
   <div class="quien">
+    {% if dn %}
+    <form method="post" action="{{ url_for('cuenta') }}" class="dn-tema" role="group" aria-label="Tema">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="volver" value="{{ request.full_path.rstrip('?') }}">
+      <button type="submit" name="paleta" value="nuevo-oscuro" aria-pressed="{{ 'true' if usuario.paleta == 'nuevo-oscuro' else 'false' }}" title="Tema oscuro">🌙<span> Oscuro</span></button>
+      <button type="submit" name="paleta" value="nuevo-claro" aria-pressed="{{ 'true' if usuario.paleta == 'nuevo-claro' else 'false' }}" title="Tema claro">☀<span> Claro</span></button>
+    </form>
+    {% endif %}
     <a href="{{ url_for('cuenta') }}">{{ usuario.nombre }} <span class="perfil">{{ usuario.perfil_nombre }}</span></a>
     <form method="post" action="{{ url_for('logout') }}">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
@@ -53,6 +62,7 @@
     </form>
   </div>
   {% include "_msc26_marca.html" %}
+  {% if dn %}<button type="button" class="dn-plegar" id="dn-plegar" title="Plegar o abrir el menú" aria-label="Plegar o abrir el menú">«</button>{% endif %}
 </header>
 {% endif %}
 <main class="contenido">
@@ -66,6 +76,12 @@
   // Cierra el menú de administración al hacer clic fuera
   document.addEventListener('click', e => document.querySelectorAll('details.menu[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; }));
 </script>
+{% if dn %}<script>
+  document.getElementById('dn-plegar').addEventListener('click', () => {
+    const p = document.documentElement.classList.toggle('plegado');
+    try { localStorage.setItem('dn-plegado', p ? '1' : '0'); } catch (e) { /* */ }
+  });
+</script>{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -128,7 +128,9 @@ def contexto():
     return {"usuario": u, "csrf_token": csrf_token, "centro": Config.CENTRO_NOMBRE, "n_dictados": n_dictados,
             "puede": lambda accion: puede(u, accion), "ESTADOS": ESTADOS, "TIPOS_ENTREGA": TIPOS_ENTREGA,
             "PACS_PUBLIC_URL": Config.PACS_PUBLIC_URL, "CATALOGO": CATALOGO, "logo_url": logo_url(),
-            "VERSION": Config.VERSION}
+            "VERSION": Config.VERSION,
+            # diseño nuevo en prueba: lo ve solo quien eligió esa paleta en Mi cuenta → Colores
+            "dn": bool(u and (u["paleta"] or "").startswith("nuevo"))}
 
 
 @app.after_request

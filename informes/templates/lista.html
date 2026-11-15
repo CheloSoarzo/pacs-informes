@@ -46,6 +46,7 @@
     {% for k, v in ESTADOS.items() if conteo[k] %}
       <a class="chip estado-{{ k }}" href="?{{ query_sin_estado }}{{ '&' if query_sin_estado }}estado={{ k }}">{{ v }} <b>{{ conteo[k] }}</b></a>
     {% endfor %}
+    {% if dn %}<span class="dn-orden" role="group" aria-label="Orden"><a href="?{{ query_sin_orden }}" class="{{ 'on' if f.orden != 'espera' }}">Fecha</a><a href="?{{ query_sin_orden }}{{ '&' if query_sin_orden }}orden=espera" class="{{ 'on' if f.orden == 'espera' }}" title="Sin validar primero, los que llevan más horas arriba">Espera</a></span>{% endif %}
     {% if f.q %}<span class="chip activo">Búsqueda en todas las fechas · <a href="{{ url_for('lista') }}">quitar</a></span>{% endif %}
   </div>
   <div class="herramientas">
@@ -103,7 +104,7 @@
   <thead><tr>
     {% if puede('asignar') or puede('firmar_lote') %}<th class="col-sel"><input type="checkbox" id="sel-todos" aria-label="Seleccionar todos"></th>{% endif %}
     <th>Fecha</th><th>Paciente</th><th class="ocultar-movil">RUT / ID</th><th>Mod.</th>
-    <th class="ocultar-movil">Examen</th><th class="ocultar-movil">Centro</th>
+    {% if dn %}<th class="ocultar-movil">Examen · imágenes · centro</th>{% else %}<th class="ocultar-movil">Examen</th><th class="ocultar-movil">Centro</th>{% endif %}
     <th>Estado</th><th class="ocultar-movil">Radiólogo</th><th class="ocultar-movil" title="Sin informar: desde la llegada o asignación. Validados: tiempo total hasta la validación.">Tiempo</th><th></th>
   </tr></thead>
   <tbody>
@@ -123,8 +124,9 @@
       </td>
       <td class="ocultar-movil mono peq">{{ e.paciente_id }}</td>
       <td>{% for m in e.modalidad.split('/') if m %}<span class="mod">{{ m }}</span> {% endfor %}</td>
-      <td class="ocultar-movil peq">{{ e.descripcion }}</td>
-      <td class="ocultar-movil peq suave">{{ e.institucion }}</td>
+      {% if dn %}<td class="ocultar-movil dn-examen"><span class="dn-ex" title="{{ e.descripcion }}">{{ e.descripcion }}</span><br><span class="dn-sub">{% if e.estable == false %}<span class="dn-img lleg" title="Las imágenes siguen llegando">{{ e.n_series }} serie{{ 's' if e.n_series != 1 }} · llegando…</span>{% else %}<span class="dn-img ok" title="Estudio completo">{{ e.n_series }} serie{{ 's' if e.n_series != 1 }}</span>{% endif %}{% if e.institucion %} · {{ e.institucion }}{% endif %}</span></td>
+      {% else %}<td class="ocultar-movil peq">{{ e.descripcion }}</td>
+      <td class="ocultar-movil peq suave">{{ e.institucion }}</td>{% endif %}
       <td><span class="badge {{ e.estado }}">{{ ESTADOS[e.estado] }}</span>
         {% if e.firmante %}<br><span class="suave peq">{{ e.firmante }}</span>{% endif %}</td>
       <td class="ocultar-movil peq">{{ e.radiologo or '—' }}</td>
@@ -144,7 +146,7 @@
           title="Borrar examen" aria-label="Borrar examen de {{ e.paciente_nombre }}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14M10 11v6M14 11v6"/></svg></button>{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="11" class="suave vacio-tabla">No hay estudios con estos filtros.</td></tr>
+    <tr><td colspan="{{ 10 if dn else 11 }}" class="suave vacio-tabla">No hay estudios con estos filtros.</td></tr>
   {% endfor %}
   </tbody>
 </table>

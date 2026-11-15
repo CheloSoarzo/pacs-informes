@@ -57,10 +57,13 @@ def logout():
 
 
 # Paletas de colores que puede elegir cada usuario (los colores están en static/app.css)
-PALETAS = {"azul": "Azul clínico", "rosa": "Rosa", "verde": "Verde agua", "violeta": "Lavanda", "cobre": "Cobre"}
+PALETAS = {"azul": "Azul clínico", "rosa": "Rosa", "verde": "Verde agua", "violeta": "Lavanda", "cobre": "Cobre",
+           # Diseño nuevo (en prueba): menú lateral, lista compacta y tema oscuro o claro
+           "nuevo-oscuro": "Diseño nuevo · oscuro", "nuevo-claro": "Diseño nuevo · claro"}
 MUESTRAS = {"azul": ("#13283F", "#1F5FA8", "#E7F0FA"), "rosa": ("#4A1230", "#C2185B", "#FCE4EE"),
             "verde": ("#0D3B36", "#0F766E", "#DDF2EE"), "violeta": ("#2B1F52", "#6D4BC4", "#ECE6FB"),
-            "cobre": ("#1B1512", "#A65A23", "#F5E6D9")}
+            "cobre": ("#1B1512", "#A65A23", "#F5E6D9"),
+            "nuevo-oscuro": ("#0B1016", "#2DD4BF", "#151E28"), "nuevo-claro": ("#FFFFFF", "#0E8F84", "#E6F2F1")}
 
 
 @app.route("/cuenta", methods=["GET", "POST"])
@@ -76,6 +79,9 @@ def cuenta():
             db.execute("UPDATE usuarios SET paleta=? WHERE id=?", ("" if paleta == "azul" else paleta, u["id"]))
             db.commit()
             flash(f"Colores cambiados a «{PALETAS[paleta]}».", "ok")
+        volver = request.form.get("volver", "")
+        if volver.startswith("/") and not volver.startswith("//"):      # botón de tema del menú lateral
+            return redirect(volver)
         return redirect(url_for("cuenta"))
     if request.method == "POST":
         actual, nueva = request.form.get("actual", ""), request.form.get("nueva", "")
@@ -131,6 +137,7 @@ def armar_lista(args):
         "estado": args.get("estado", ""),
         "asignado": args.get("asignado", ""),
         "prioridad": args.get("prioridad", ""),
+        "orden": args.get("orden", ""),          # "" = urgentes y fecha · "espera" = urgentes y más horas sin informe
     }
     # Si se busca un paciente, no limitar por fecha
     d = "" if f["q"] else f["desde"].replace("-", "")
@@ -230,6 +237,9 @@ def armar_lista(args):
     # Urgentes sin validar primero; luego por fecha (más reciente arriba)
     estudios.sort(key=lambda e: (not (e["urgente"] and e["estado"] != "firmado"),
                                  -(e["llegada"].timestamp() if e["llegada"] else 0)))
+    if f["orden"] == "espera":      # sin validar primero, los que llevan más horas arriba
+        estudios.sort(key=lambda e: (not (e["urgente"] and e["estado"] != "firmado"), e["estado"] == "firmado",
+                                     -(e["horas"] or 0)))
     return estudios, f
 
 
@@ -242,9 +252,10 @@ def lista():
     filtros = get_db().execute("SELECT * FROM filtros WHERE usuario_id=? ORDER BY nombre", (u["id"],)).fetchall()
     query_actual = urlencode({k: v for k, v in request.args.items() if v and k != "refresco"})
     query_sin_estado = urlencode({k: v for k, v in request.args.items() if v and k not in ("refresco", "estado")})
+    query_sin_orden = urlencode({k: v for k, v in request.args.items() if v and k not in ("refresco", "orden")})
     return render_template("lista.html", estudios=estudios, f=f, modalidades=MODALIDADES, conteo=conteo,
                            radiologos=radiologos(), filtros=filtros, query_actual=query_actual,
-                           query_sin_estado=query_sin_estado)
+                           query_sin_estado=query_sin_estado, query_sin_orden=query_sin_orden)
 
 
 @app.route("/estudios/acciones", methods=["POST"])
