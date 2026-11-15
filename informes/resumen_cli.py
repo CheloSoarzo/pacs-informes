@@ -174,6 +174,12 @@ def _caja(nom, c, avisos):
     if prev:
         out.append(f"{nom} · previsión: {prev} · bonificación {_pesos(c.get('bonificacion'))}"
                    + (f" · descuentos {_pesos(c.get('descuentos'))}" if c.get("descuentos") else ""))
+    ctr = c.get("contraste") or {}
+    if ctr.get("cantidad"):
+        out.append(f"{nom} · medio de contraste: {ctr['cantidad']} · {_pesos(ctr.get('monto'))} (incluido en lo recaudado)")
+    ctr = c.get("contraste") or {}
+    if ctr.get("cantidad"):
+        out.append(f"{nom} · medio de contraste: {ctr['cantidad']} · {_pesos(ctr.get('monto'))} (incluido en lo recaudado)")
     tj = c.get("tarjetas")
     if tj and tj.get("neto"):
         out.append(f"{nom} · {_texto_deposito(tj)}")
@@ -370,10 +376,12 @@ def pdf_caja(info):
         else:
             ultima = ["Efectivo contado", _pesos(ci["efectivo_contado"]) if ci else "caja sin cerrar",
                       "Diferencia", _pesos(ci["diferencia"]) if ci else "—"]
+        ctr = c.get("contraste") or {}
+        ctr = c.get("contraste") or {}
         res = [["Atenciones", c.get("atenciones", 0), "Valor total", _pesos(c.get("valor"))],
                ["Recaudado", _pesos(c.get("recaudado")), "Bonificación", _pesos(c.get("bonificacion"))],
                ["Efectivo esperado", _pesos(c.get("efectivo_esperado")), "Descuentos", _pesos(c.get("descuentos"))],
-               ultima]
+               ultima] + ([["Medio de contraste", f"{ctr['cantidad']} · {_pesos(ctr.get('monto'))}", "", ""]] if ctr.get("cantidad") else []) + ([["Medio de contraste", f"{ctr['cantidad']} · {_pesos(ctr.get('monto'))}", "", ""]] if ctr.get("cantidad") else [])
         flow.append(tabla(res, [38 * mm, 32 * mm, 30 * mm, 32 * mm], cab=False,
                           estilos=[("FONT", (0, 0), (0, -1), "Helvetica-Bold", 8.5), ("FONT", (2, 0), (2, -1), "Helvetica-Bold", 8.5),
                                    ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("ALIGN", (3, 0), (3, -1), "RIGHT")]))
@@ -434,7 +442,9 @@ def pdf_caja(info):
                               Paragraph(e(x.get("examen")), st["c"]), x.get("prevision", ""), Paragraph(e(x.get("medio")), st["c"]),
                               _pesos(x.get("valor")), _pesos(x.get("bonificacion")),
                               _pesos(x.get("descuento")) if x.get("descuento") else "", _pesos(x.get("copago")),
-                              Paragraph(e(" · ".join(v for v in (x.get("boleta"), x.get("folio_bono")) if v)
+                              Paragraph(e(" · ".join(v for v in (x.get("boleta"), x.get("folio_bono"),
+                                                         (f"contraste {_pesos(x['contraste'])}" + (f" bol. {x['boleta_contraste']}" if x.get("boleta_contraste") else ""))
+                                                         if x.get("contraste") else "") if v)
                                           + (f" ANULADO: {x.get('motivo_anulacion')}" if x.get("anulado") else "")), st["c"])])
                 if x.get("anulado"):
                     anul.append(("TEXTCOLOR", (0, i), (-1, i), colors.HexColor("#94A3B8")))
