@@ -16,6 +16,7 @@
     <h1>{{ est.paciente_nombre or '(sin nombre)' }}
       <span class="badge {{ estado }}">{{ ESTADOS[estado] }}</span>
       {% if meta.prioridad == 'urgente' and not firmado %}<span class="tag-urgente">URGENTE</span>{% endif %}
+      {% if dn and historial %}<a class="dn-chip-ant" href="#anteriores" title="Otros estudios de este paciente">{{ historial|length }} anterior{{ 'es' if historial|length != 1 }}</a>{% endif %}
     </h1>
   </div>
   <div class="acciones">
@@ -212,14 +213,16 @@
     {% endif %}
 
     {% if historial %}
-    <div class="panel">
-      <h2>Otros estudios del paciente</h2>
+    <div class="panel" id="anteriores">
+      <h2>{% if dn %}Anteriores <span class="contador">{{ historial|length }}</span>{% else %}Otros estudios del paciente{% endif %}</h2>
       <div class="tabla-wrap sin-borde">
       <table class="lista compacta">
         {% for h in historial %}
         <tr><td class="peq nowrap">{{ h.fecha }}</td><td>{% for m in h.modalidad.split('/') if m %}<span class="mod">{{ m }}</span> {% endfor %}</td>
           <td class="peq">{{ h.descripcion }}</td><td><span class="badge {{ h.estado }}">{{ ESTADOS[h.estado] }}</span></td>
-          <td><a href="{{ url_for('estudio', estudio_id=h.id) }}" target="_blank" rel="noopener">Abrir ↗</a></td></tr>
+          <td class="nowrap"><a href="{{ url_for('estudio', estudio_id=h.id) }}" target="_blank" rel="noopener">Abrir ↗</a>
+            {% if dn and puede('visor') and h.uid and est.uid %}<a class="dn-comparar" href="{{ visor_ohif }},{{ h.uid }}" target="_blank" rel="noopener"
+               title="Abre este estudio y el actual juntos en el visor diagnóstico">Comparar ↗</a>{% endif %}</td></tr>
         {% endfor %}
       </table></div>
     </div>
@@ -572,4 +575,44 @@
   })();
 </script>
 {% if puede('editar_paciente') %}{% include "_editar_paciente.html" %}{% endif %}
+{% if dn %}
+<script>
+/* Diseño nuevo: divisor arrastrable entre imágenes e informe (se recuerda en este equipo).
+   Doble clic en el divisor vuelve al ancho normal. «Agrandar visor» sigue funcionando igual. */
+(function () {
+  const est = document.querySelector('.estudio'); if (!est) return;
+  const izq = est.querySelector('.col-izq'), der = est.querySelector('.col-der'); if (!izq || !der) return;
+  const div = document.createElement('div');
+  div.className = 'dn-divisor'; div.setAttribute('role', 'separator'); div.setAttribute('aria-orientation', 'vertical');
+  div.tabIndex = 0; div.title = 'Arrastra para cambiar el ancho de las imágenes y del informe (doble clic: normal)';
+  est.insertBefore(div, der); est.classList.add('dn-con-divisor');
+  const amp = document.getElementById('visor-ampliar');
+  const leer = () => { try { return parseFloat(localStorage.getItem('dn-division')); } catch (e) { return NaN; } };
+  const guardar = v => { try { v ? localStorage.setItem('dn-division', v) : localStorage.removeItem('dn-division'); } catch (e) { /* */ } };
+  const poner = f => {
+    if (!f) { est.style.removeProperty('--izq'); est.style.removeProperty('--der'); return; }
+    f = Math.min(0.75, Math.max(0.3, f));
+    /* en «fr» × 100: con fracciones menores que 1 la grilla no ocupa todo el ancho */
+    est.style.setProperty('--izq', (f * 100).toFixed(1) + 'fr'); est.style.setProperty('--der', ((1 - f) * 100).toFixed(1) + 'fr');
+  };
+  const quitarAmpliado = () => { if (est.classList.contains('ampliado') && amp) amp.click(); };
+  const inicial = leer(); if (inicial && !est.classList.contains('ampliado')) poner(inicial);
+  if (amp) amp.addEventListener('click', () => { poner(null); guardar(null); });
+  div.addEventListener('pointerdown', ev => {
+    ev.preventDefault(); quitarAmpliado(); div.setPointerCapture(ev.pointerId); est.classList.add('dn-arrastrando');
+    const r = est.getBoundingClientRect();
+    const mover = e => poner((e.clientX - r.left) / r.width);
+    const soltar = e => { div.removeEventListener('pointermove', mover); est.classList.remove('dn-arrastrando');
+      guardar(((e.clientX - r.left) / r.width).toFixed(3)); };
+    div.addEventListener('pointermove', mover); div.addEventListener('pointerup', soltar, { once: true });
+  });
+  div.addEventListener('dblclick', () => { poner(null); guardar(null); });
+  div.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault(); quitarAmpliado();
+    const f = (leer() || 0.512) + (e.key === 'ArrowRight' ? 0.03 : -0.03); poner(f); guardar(Math.min(0.75, Math.max(0.3, f)).toFixed(3));
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

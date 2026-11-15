@@ -179,3 +179,44 @@
 :root.dn .btn-formato { color: var(--texto); background: transparent; }
 :root.dn .btn-formato:hover { background: var(--boton-h); }
 :root.dn .btn-formato.f-quitar { color: var(--suave); }
+
+/* ======================= Módulo 2: ficha del estudio ======================= */
+:root.dn .cabecera-estudio { align-items: flex-end; margin-bottom: 10px; gap: 10px 16px; }
+:root.dn .cabecera-estudio h1 { font-size: 21px; letter-spacing: -.01em; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 2px 0 0; }
+:root.dn .cabecera-estudio .acciones { gap: 6px; }
+:root.dn .cabecera-estudio .acciones .btn { padding: 6px 11px; font-size: 13px; }
+:root.dn .cabecera-estudio .btn-grupo .btn { padding: 6px 10px; }
+:root.dn .dn-chip-ant { font-size: 12px; font-weight: 500; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--borde); color: var(--suave); }
+:root.dn .dn-chip-ant:hover { color: var(--primario); border-color: var(--primario); text-decoration: none; }
+
+/* datos del examen: franja compacta */
+:root.dn .datos-panel { padding: 12px 16px; gap: 10px; margin-bottom: 12px; }
+:root.dn .datos { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 18px; font-size: 13.5px; }
+:root.dn .datos div span { font-size: 10.5px; letter-spacing: .06em; margin-bottom: 1px; }
+:root.dn .datos .corregir { align-items: center; }
+:root.dn .datos .corregir .btn { padding: 4px 9px; font-size: 12.5px; }
+:root.dn .asignacion, :root.dn .medicos-acceso { padding-top: 10px; gap: 8px 12px; }
+:root.dn .asignacion select, :root.dn .asignacion .btn, :root.dn .medicos-acceso select, :root.dn .medicos-acceso .btn { padding: 5px 9px; font-size: 13px; }
+
+/* columnas con divisor arrastrable */
+:root.dn .estudio { gap: 14px; }
+:root.dn .estudio.dn-con-divisor { grid-template-columns: minmax(0, var(--izq, 1.05fr)) 8px minmax(340px, var(--der, 1fr)); gap: 0 6px; }
+:root.dn .estudio.dn-con-divisor.ampliado { grid-template-columns: minmax(0, 1.9fr) 8px minmax(340px, 1fr); }
+:root.dn .dn-divisor { align-self: stretch; min-height: 60vh; cursor: col-resize; border-radius: 4px; position: relative; touch-action: none; }
+:root.dn .dn-divisor::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; border-radius: 2px; background: var(--borde); transition: background .12s; }
+:root.dn .dn-divisor:hover::after, :root.dn .dn-divisor:focus-visible::after, :root.dn .dn-arrastrando .dn-divisor::after { background: var(--primario); }
+:root.dn .dn-divisor:focus-visible { outline: none; }
+:root.dn .dn-arrastrando { user-select: none; cursor: col-resize; }
+:root.dn .dn-arrastrando iframe { pointer-events: none; }   /* que el visor no se trague el arrastre */
+@media (max-width: 1000px) {
+  :root.dn .estudio.dn-con-divisor, :root.dn .estudio.dn-con-divisor.ampliado { grid-template-columns: 1fr; gap: 14px; }
+  :root.dn .dn-divisor { display: none; }
+}
+
+/* paneles de la ficha más sobrios */
+:root.dn .col-izq, :root.dn .col-der { gap: 12px; }
+:root.dn .estudio .panel { padding: 14px 16px; }
+:root.dn .estudio .panel h2 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+:root.dn .visor-pestanas [role=tab], :root.dn .btn-visor { font-size: 12.5px; }
+:root.dn .dn-comparar { margin-left: 10px; font-weight: 500; }
+:root.dn #anteriores table.lista td { padding: 6px 8px; }

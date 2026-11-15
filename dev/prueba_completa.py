@@ -166,7 +166,7 @@ chk(S["trans"].get(B + "/admin/frases").status_code == 403 and S["rad"].get(B + 
 
 # --- historial
 t = S["rad"].get(B + "/estudio/est-ct").text
-chk("Otros estudios del paciente" in t and "est-ct-previo" in t, "historial del paciente")
+chk(("Otros estudios del paciente" in t or "id=\"anteriores\"" in t) and "est-ct-previo" in t, "historial del paciente")
 
 # --- perfiles editables
 t = adm.get(B + "/admin/perfiles").text
