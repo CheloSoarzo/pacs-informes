@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="es"{% if usuario and usuario.paleta %} data-paleta="{{ usuario.paleta }}"{% endif %}{% if dn %} class="dn"{% endif %}>
+<html lang="es"{% if paleta and paleta != 'azul' %} data-paleta="{{ paleta }}"{% endif %}{% if dn %} class="dn"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titulo %}Informes{% endblock %} · {{ centro }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
-  {% if dn %}<link rel="stylesheet" href="{{ url_for('static', filename='nuevo.css') }}">
-  <script>try{if(localStorage.getItem('dn-plegado')==='1')document.documentElement.classList.add('plegado')}catch(e){}</script>{% endif %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='nuevo.css') }}">{# todo va bajo :root.dn: sin esa clase no cambia nada #}
+  {% if dn %}<script>try{if(localStorage.getItem('dn-plegado')==='1')document.documentElement.classList.add('plegado')}catch(e){}</script>{% endif %}
   <script src="{{ url_for('static', filename='fecha-cl.js') }}"></script>
 <link rel="icon" href="{{ url_for('static', filename='msc26/favicon.svg') }}" type="image/svg+xml">
 <link rel="icon" href="{{ url_for('static', filename='msc26/favicon.ico') }}" sizes="any">
@@ -51,8 +51,8 @@
     {% if dn %}
     <form method="post" action="{{ url_for('cuenta') }}" class="dn-tema" role="group" aria-label="Tema">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="volver" value="{{ request.full_path.rstrip('?') }}">
-      <button type="submit" name="paleta" value="nuevo-oscuro" aria-pressed="{{ 'true' if usuario.paleta == 'nuevo-oscuro' else 'false' }}" title="Tema oscuro">🌙<span> Oscuro</span></button>
-      <button type="submit" name="paleta" value="nuevo-claro" aria-pressed="{{ 'true' if usuario.paleta == 'nuevo-claro' else 'false' }}" title="Tema claro">☀<span> Claro</span></button>
+      <button type="submit" name="paleta" value="nuevo-oscuro" aria-pressed="{{ 'true' if paleta == 'nuevo-oscuro' else 'false' }}" title="Tema oscuro">🌙<span> Oscuro</span></button>
+      <button type="submit" name="paleta" value="nuevo-claro" aria-pressed="{{ 'true' if paleta == 'nuevo-claro' else 'false' }}" title="Tema claro">☀<span> Claro</span></button>
     </form>
     {% endif %}
     <a href="{{ url_for('cuenta') }}">{{ usuario.nombre }} <span class="perfil">{{ usuario.perfil_nombre }}</span></a>

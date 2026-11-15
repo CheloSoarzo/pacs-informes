@@ -20,7 +20,7 @@
     <input type="hidden" name="csrf" value="{{ csrf_token() }}">
     <div class="paletas" role="radiogroup" aria-label="Paleta de colores">
       {% for k, nombre in paletas.items() %}
-      <label class="paleta"><input type="radio" name="paleta" value="{{ k }}" {{ 'checked' if (usuario.paleta or 'azul') == k }}>
+      <label class="paleta"><input type="radio" name="paleta" value="{{ k }}" {{ 'checked' if paleta == k }}>
         <span class="muestra" aria-hidden="true">{% for c in muestras[k] %}<span style="background:{{ c }}"></span>{% endfor %}</span>
         {{ nombre }}</label>
       {% endfor %}
@@ -32,6 +32,7 @@
 // Vista previa al elegir: la página toma los colores al tiro; «Guardar colores» los deja fijos
 document.querySelectorAll('#form-paleta input[name=paleta]').forEach(r => r.addEventListener('change', () => {
   document.documentElement.dataset.paleta = r.value === 'azul' ? '' : r.value;
+  document.documentElement.classList.toggle('dn', r.value.startsWith('nuevo'));
 }));
 </script>
 {% endblock %}

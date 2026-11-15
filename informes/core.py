@@ -116,9 +116,13 @@ def verificar_csrf():
             abort(400, "Token de seguridad inválido. Recarga la página.")
 
 
+PALETA_DEFECTO = "nuevo-claro"   # lo que ve quien no ha elegido colores en Mi cuenta
+
+
 @app.context_processor
 def contexto():
     u = usuario_actual()
+    paleta = ((u["paleta"] or PALETA_DEFECTO) if u else "")
 
     def n_dictados():
         if not u or not puede(u, "transcribir"):
@@ -129,8 +133,8 @@ def contexto():
             "puede": lambda accion: puede(u, accion), "ESTADOS": ESTADOS, "TIPOS_ENTREGA": TIPOS_ENTREGA,
             "PACS_PUBLIC_URL": Config.PACS_PUBLIC_URL, "CATALOGO": CATALOGO, "logo_url": logo_url(),
             "VERSION": Config.VERSION,
-            # diseño nuevo en prueba: lo ve solo quien eligió esa paleta en Mi cuenta → Colores
-            "dn": bool(u and (u["paleta"] or "").startswith("nuevo"))}
+            # paleta efectiva: quien nunca eligió colores ve el diseño nuevo (claro)
+            "paleta": paleta, "dn": paleta.startswith("nuevo")}
 
 
 @app.after_request
