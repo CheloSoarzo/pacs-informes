@@ -41,7 +41,7 @@
 :root.dn table.lista td { border-bottom-color: var(--borde); }
 :root.dn table.lista tr:hover td { background: var(--fila-h); }
 :root.dn .ayuda-dictado, :root.dn .panel-frases, :root.dn .dictado-item, :root.dn .btn-formato-barra { background: var(--panel); }
-:root.dn #cuerpo, :root.dn #cuerpo[readonly] { background: var(--campo); }
+:root.dn #cuerpo, :root.dn #cuerpo[readonly], :root.dn .editor-rico { background: var(--campo); color: var(--texto); }
 :root.dn .grabador-grande .rec-btn { background: var(--panel); }
 :root.dn .caja-link, :root.dn .confirmar, :root.dn .confirmar-lote { border-color: var(--borde); }
 :root.dn .nota { border-bottom-color: var(--borde); }
