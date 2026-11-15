@@ -33,7 +33,10 @@
 :root.dn .btn:hover { background: var(--boton-h); }
 :root.dn .btn.prim, :root.dn .rango[aria-pressed="true"], :root.dn .chip.activo, :root.dn .segmentos a.activo,
 :root.dn .visor-pestanas [role=tab][aria-selected=true] { background: var(--primario); border-color: var(--primario); color: var(--tinta-prim); }
-:root.dn .btn.ok { color: var(--tinta-prim); }
+:root.dn .btn.ok { background: var(--ok); border-color: var(--ok); color: var(--tinta-prim); }
+:root.dn .btn.ok:hover { background: color-mix(in srgb, var(--ok) 85%, #000); }
+:root.dn .btn.peligro { color: var(--error); }
+:root.dn .btn.grabando, :root.dn .btn.peligro-lleno { background: var(--error); border-color: var(--error); color: var(--tinta-prim); }
 :root.dn table.lista { background: transparent; }
 :root.dn table.lista td { border-bottom-color: var(--borde); }
 :root.dn table.lista tr:hover td { background: var(--fila-h); }
@@ -171,3 +174,8 @@
 :root.dn .fecha-cl-txt { padding-left: 8px; padding-right: 4px; font-family: var(--f-mono); font-size: 12px; }
 :root.dn .fecha-cl-btn { width: 30px; min-width: 30px; padding: 0; }
 :root.dn .filtros .f-q { grid-column: span 1; }
+/* barra de formato del editor (B / I / U) legible en ambos temas */
+:root.dn .barra-formato { background: var(--boton); }
+:root.dn .btn-formato { color: var(--texto); background: transparent; }
+:root.dn .btn-formato:hover { background: var(--boton-h); }
+:root.dn .btn-formato.f-quitar { color: var(--suave); }
