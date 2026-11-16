@@ -1,7 +1,7 @@
 {# Aviso «Instalar la app»: en Android usa el botón del navegador; en iPhone explica Compartir → Agregar a inicio.
    No aparece si ya está instalada o si el paciente lo cerró (se recuerda en el teléfono). #}
 <div class="pt-app" id="pt-app" hidden>
-  <img src="{{ url_for('static', filename='raxio/app-192.png') }}" alt="" width="44" height="44">
+  <img src="{{ app_icono_url('192') }}" alt="" width="44" height="44">
   <div class="pt-app-txt"><b class="t">Instala «Mis exámenes»</b><span id="pt-app-ayuda">Ábrelo como una app, desde la pantalla de inicio de tu teléfono.</span></div>
   <button type="button" class="btn prim" id="pt-app-instalar">Instalar</button>
   <button type="button" class="pt-app-cerrar" id="pt-app-cerrar" aria-label="No mostrar más">×</button>
