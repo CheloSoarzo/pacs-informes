@@ -1,0 +1,25 @@
+{# Aviso «Instalar la app»: en Android usa el botón del navegador; en iPhone explica Compartir → Agregar a inicio.
+   No aparece si ya está instalada o si el paciente lo cerró (se recuerda en el teléfono). #}
+<div class="pt-app" id="pt-app" hidden>
+  <img src="{{ url_for('static', filename='raxio/app-192.png') }}" alt="" width="44" height="44">
+  <div class="pt-app-txt"><b class="t">Instala «Mis exámenes»</b><span id="pt-app-ayuda">Ábrelo como una app, desde la pantalla de inicio de tu teléfono.</span></div>
+  <button type="button" class="btn prim" id="pt-app-instalar">Instalar</button>
+  <button type="button" class="pt-app-cerrar" id="pt-app-cerrar" aria-label="No mostrar más">×</button>
+</div>
+<script>
+(function(){
+  const caja=document.getElementById("pt-app"); if(!caja)return;
+  const instalada=matchMedia("(display-mode: standalone)").matches||navigator.standalone;
+  let cerrado=false; try{cerrado=localStorage.getItem("pt-app-cerrado")==="1"}catch(e){}
+  if(instalada||cerrado)return;
+  const ios=/iphone|ipad|ipod/i.test(navigator.userAgent)&&!/crios|fxios/i.test(navigator.userAgent);
+  const btn=document.getElementById("pt-app-instalar");
+  let aviso=null;
+  addEventListener("beforeinstallprompt",e=>{e.preventDefault();aviso=e;caja.hidden=false});
+  if(ios){caja.hidden=false;btn.textContent="Cómo";
+    btn.addEventListener("click",()=>{document.getElementById("pt-app-ayuda").innerHTML="En Safari toca <b>Compartir</b> <span aria-hidden=\"true\">⎋</span> y luego <b>Agregar a inicio</b>.";btn.hidden=true});}
+  else btn.addEventListener("click",async()=>{if(!aviso)return;aviso.prompt();const r=await aviso.userChoice;if(r.outcome==="accepted")caja.hidden=true;aviso=null});
+  addEventListener("appinstalled",()=>{caja.hidden=true});
+  document.getElementById("pt-app-cerrar").addEventListener("click",()=>{caja.hidden=true;try{localStorage.setItem("pt-app-cerrado","1")}catch(e){}});
+})();
+</script>

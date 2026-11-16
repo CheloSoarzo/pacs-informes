@@ -9,6 +9,7 @@
 <link rel="icon" href="{{ url_for('static', filename='raxio/favicon.svg') }}" type="image/svg+xml">
 <link rel="icon" href="{{ url_for('static', filename='raxio/favicon.ico') }}" sizes="any">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='raxio/apple-touch-icon.png') }}">
+{% include "_app_pacientes_head.html" %}
 </head>
 <body class="pt">
 {# Portal del paciente: ingreso con RUT y clave, y lista de sus exámenes. Solo cambia el diseño; los datos y permisos son los mismos. #}
@@ -45,6 +46,7 @@
       <p>La clave está en la hoja que le entregaron en recepción al pagar su examen. Si la perdió, pida una nueva en recepción presentando su carnet{% if c.telefono %} o llame al {{ c.telefono }}{% endif %}.</p>
     </div>
   </section>
+  {% include "_app_pacientes_instalar.html" %}
   <ul class="pt-ventajas" aria-label="Qué puedes hacer">
     <li><span aria-hidden="true">📄</span>Ver y descargar tu informe</li>
     <li><span aria-hidden="true">🩻</span>Mirar tus imágenes</li>
@@ -73,6 +75,8 @@
   </div>
   {% endif %}
 
+  {% include "_app_pacientes_instalar.html" %}
+  <div style="height:12px"></div>
   {% for e in examenes %}
   {% set paso = 3 if e.estado == 'listo' else (2 if e.estado == 'proceso' else 1) %}
   <article class="pt-examen e-{{ e.estado }}">

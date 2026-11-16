@@ -1,0 +1,8 @@
+{# Portal del paciente instalable como app (pwa.py) #}
+<link rel="manifest" href="{{ url_for('manifest_pacientes') }}">
+<meta name="theme-color" content="#0F2A3D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mis exámenes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("{{ url_for('sw_pacientes') }}",{scope:"/"}).catch(()=>{}));</script>

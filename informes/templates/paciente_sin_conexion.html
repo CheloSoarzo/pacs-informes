@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Sin conexión · {{ c.nombre }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/portal.css">
+  <link rel="icon" href="/static/raxio/favicon.svg" type="image/svg+xml">
+</head>
+<body class="pt">
+<header class="pt-banda"><div class="pt-banda-in"><div class="pt-centro">
+  <div class="pt-nombre">{{ c.nombre }}</div><div class="pt-sub">Mis exámenes en línea</div></div></div></header>
+<main class="portal">
+  <section class="pt-tarjeta pt-vacio">
+    <div class="pt-ico-grande" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 8.8a15 15 0 0 1 20 0M5 12.6a10 10 0 0 1 14 0M8.5 16.3a5 5 0 0 1 7 0"/><path d="M3 3l18 18"/></svg></div>
+    <h1 style="font-size:19px;margin:0 0 6px">Sin conexión a internet</h1>
+    <p style="margin:0 0 16px">Revise su conexión y vuelva a intentarlo. Por seguridad, sus exámenes no quedan guardados en el teléfono.</p>
+    <button class="btn prim pt-boton" type="button" onclick="location.href='/paciente'">Reintentar</button>
+  </section>
+</main>
+</body>
+</html>
