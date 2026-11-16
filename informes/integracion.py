@@ -143,7 +143,7 @@ def rut_con_guion(rut_norm):
 def rut_visible(rut_norm):
     """12345678K → 12.345.678-K · PAB123456 → Pasaporte AB123456"""
     if es_pasaporte(rut_norm):
-        return "Pasaporte " + rut_norm[1:]
+        return "Pasaporte " + re.sub(r"^PAS(?=\d)", "", rut_norm[1:])
     if len(rut_norm) < 2:
         return rut_norm
     cuerpo = rut_norm[:-1]
@@ -731,6 +731,13 @@ def portal_ingreso():
             flash("Demasiados intentos. Espera 15 minutos e inténtalo de nuevo.", "error")
             return render_template("paciente.html", modo="ingreso", c=centro_info()), 429
         p = db.execute("SELECT * FROM portal_pacientes WHERE rut_norm=?", (rut,)).fetchone() if rut else None
+        # Documento extranjero solo de números: en la agenda se guarda como «PAS 123456789», pero el paciente
+        # puede escribir solo los números
+        solo_num = re.sub(r"[\s.\-]", "", request.form.get("rut") or "")
+        if not p and re.fullmatch(r"\d{5,}", solo_num):
+            p = db.execute("SELECT * FROM portal_pacientes WHERE rut_norm=?", ("PPAS" + solo_num,)).fetchone()
+            if p:
+                rut = p["rut_norm"]
         if p and verificar_clave_agenda(clave, p["clave_hash"]):
             for k in [k for k in session if k.startswith("lk_")]:
                 session.pop(k, None)

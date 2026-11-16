@@ -86,4 +86,22 @@ adm = requests.Session()
 adm.post(P + "/login", data={"usuario": "admin", "clave": "clave-prueba-123"})
 r = adm.get(P + f"/agenda/{c1['accesion']}")
 chk("/ficha/AB123456" in r.url and "Ficha del paciente" in r.text, "«Ver en el PACS» abre la ficha por pasaporte")
+
+# --- v1.1.64: documento extranjero solo de números
+c6 = nueva("555666777", "12:00", "Doc Numerico")
+r6 = ag.post(A + f"/api/citas/{c6['id']}/pago", json={"medio": "Efectivo"}).json()
+chk(r6["portal"]["estado"] == "sin_rut", "documento solo de números: al pagar pide confirmar")
+h6 = ag.get(A + f"/api/citas/{c6['id']}/hoja").json()
+chk(h6.get("motivo") == "sin_rut", "la hoja avisa que falta el documento (no «se crea al pagar»)")
+x = ag.post(A + f"/api/citas/{c6['id']}/extranjero").json()
+clave6 = x.get("clave", "")
+chk(x.get("rut") == "PAS 555666777" and x.get("estado") == "nueva" and len(clave6) == 8, f"«Es pasaporte / documento extranjero» crea la clave ({clave6})")
+chk(ag.get(A + f"/api/citas/{c6['id']}/hoja").json().get("clave") == clave6, "la hoja sale con esa clave")
+chk(ag.post(A + f"/api/citas/{c5['id']}/extranjero").status_code == 400, "no se puede usar con un RUT válido")
+o = requests.Session()
+cs = re.search(r'name="csrf" value="([^"]+)"', o.get(P + "/paciente").text).group(1)
+chk(esperar(lambda: "RX DE TÓRAX" in o.post(P + "/paciente", data={"csrf": cs, "rut": "555.666.777", "clave": clave6}).text),
+    "el extranjero entra al portal escribiendo solo los números")
+t = o.get(P + "/paciente/examenes").text
+chk("Pasaporte 555666777" in t, "el portal muestra «Pasaporte 987654321»")
 print("\nTODO OK" if not fallas else f"\n{fallas} FALLA(S)")
