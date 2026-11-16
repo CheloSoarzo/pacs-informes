@@ -3,6 +3,7 @@
 {% block contenido %}
 <div class="login panel">
   {% if logo_url %}<div class="login-logo"><img src="{{ logo_url }}" alt="{{ centro }}"></div>{% endif %}
+  <div class="login-raxio">{% include "_raxio_logo.html" %}</div>
   <h1>{{ centro }}</h1>
   <form method="post">
     <div class="campo"><label for="usuario">Usuario</label>

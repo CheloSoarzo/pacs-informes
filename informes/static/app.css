@@ -611,3 +611,15 @@ a.btn.desactivado { pointer-events: none; opacity: .6; }
 .paginador .pg-botones { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .paginador .btn.peq { min-width: 34px; text-align: center; }
 .paginador .deshabilitado { opacity: .45; pointer-events: none; }
+
+/* ---------- RAXIO: marca del producto (arriba) · «by MSC26» al lado/abajo ---------- */
+.raxio-marca { display: flex; align-items: center; padding-left: 16px; border-left: 1px solid rgba(255,255,255,.18); color: #fff; text-decoration: none; }
+.raxio-marca:hover { text-decoration: none; opacity: .9; }
+.raxio-logo { display: block; height: 22px; width: auto; }
+.raxio-marca .raxio-iso { display: none; }
+.raxio-marca + .msc26-marca { border-left: 0; padding-left: 4px; }
+.pie-sistema .raxio-iso { width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px; color: currentColor; }
+@media print { .raxio-marca { display: none; } }
+@media (max-width: 640px) { .raxio-marca + .msc26-marca { display: none; } }
+.login-raxio { display: flex; justify-content: center; color: var(--texto); margin: 2px 0 10px; }
+.login-raxio .raxio-logo { height: 34px; }
