@@ -4,8 +4,9 @@
 - /sw-pacientes.js            service worker: guarda solo archivos fijos (estilos, íconos) y una página
                               «sin conexión». NUNCA guarda datos del paciente (exámenes, informes, imágenes).
 - /paciente/sin-conexion      página que se muestra si no hay internet
-- /app-icono/<tipo>.png       ícono de la app de ESTE centro: el que se sube en Ajustes → «Ícono de la app de
-                              pacientes» (cada centro tiene su app con su ícono); si no hay, la R de RAXIO
+- /app-icono/<tipo>.png       ícono de la app de ESTE centro (cada centro tiene su app con su ícono):
+                              el logo del centro centrado sobre blanco; si en Ajustes se subió un «Ícono de la app
+                              de pacientes», se usa ese; si no hay ninguno, la R de RAXIO
 - /admin/app-icono            subir o quitar ese ícono
 """
 import os
@@ -13,7 +14,7 @@ from io import BytesIO
 
 from flask import Response, abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 
-from core import Config, app, centro_info, login_requerido, registrar
+from core import Config, app, centro_info, login_requerido, logo_path, registrar
 
 ARCHIVOS_FIJOS = ["static/app.css", "static/portal.css", "static/raxio/favicon.svg", "static/raxio/app-192.png"]
 
@@ -57,14 +58,20 @@ def portal_sin_conexion():
 
 
 # ---------------------------------------------------------------- ícono de la app de cada centro
-TIPOS_ICONO = {"180": (180, 1.0), "192": (192, 1.0), "512": (512, 1.0), "mask": (512, 0.80)}  # tamaño, parte que ocupa
+# tamaño y parte del ícono que ocupa la imagen: (ícono subido, logo del centro). Android recorta en círculo («mask»).
+TIPOS_ICONO = {"180": (180, 1.0, 0.86), "192": (192, 1.0, 0.86), "512": (512, 1.0, 0.86), "mask": (512, 0.80, 0.66)}
 RAXIO_ICONO = {"180": "raxio/apple-touch-icon.png", "192": "raxio/app-192.png", "512": "raxio/app-512.png",
                "mask": "raxio/app-maskable-512.png"}
 
 
-def icono_path():
+def icono_subido():
     p = os.path.join(Config.DATA_DIR, "app-icono.png")
     return p if os.path.exists(p) else None
+
+
+def icono_path():
+    """Imagen de origen del ícono: el subido en Ajustes o, si no hay, el logo del centro."""
+    return icono_subido() or logo_path()
 
 
 def icono_url(tipo):
@@ -77,7 +84,7 @@ def icono_url(tipo):
 
 @app.context_processor
 def _icono_app():
-    return {"app_icono_url": icono_url}
+    return {"app_icono_url": icono_url, "app_icono_subido": bool(icono_subido())}
 
 
 @app.route("/app-icono/<tipo>.png")
@@ -87,9 +94,10 @@ def app_icono(tipo):
     p = icono_path()
     if not p:
         return send_file(os.path.join(app.static_folder, RAXIO_ICONO[tipo]), mimetype="image/png", max_age=86400)
-    lado, parte = TIPOS_ICONO[tipo]
+    subido = p == icono_subido()
+    lado, parte_subido, parte_logo = TIPOS_ICONO[tipo]
     carpeta = os.path.join(Config.DATA_DIR, "app-iconos")
-    destino = os.path.join(carpeta, f"{tipo}-{int(os.path.getmtime(p))}.png")
+    destino = os.path.join(carpeta, f"{tipo}-{'i' if subido else 'l'}{int(os.path.getmtime(p))}.png")
     if not os.path.exists(destino):
         from PIL import Image
         os.makedirs(carpeta, exist_ok=True)
@@ -100,10 +108,20 @@ def app_icono(tipo):
                 except OSError:
                     pass
         im = Image.open(p).convert("RGBA")
-        medida = int(lado * parte)
-        im = im.resize((medida, medida), Image.LANCZOS)
-        fondo = Image.new("RGBA", (lado, lado), (255, 255, 255, 255))   # Android recorta en círculo: margen blanco
-        fondo.alpha_composite(im, ((lado - medida) // 2, (lado - medida) // 2))
+        if subido:
+            medida = int(lado * parte_subido)
+            im = im.resize((medida, medida), Image.LANCZOS)
+        else:
+            # logo: se le quita el margen (transparente o blanco) y se ajusta al ancho/alto disponible
+            mascara = Image.eval(im.convert("L"), lambda v: 255 if v < 235 else 0)
+            mascara = Image.composite(mascara, Image.new("L", im.size, 0), im.getchannel("A"))
+            caja = mascara.getbbox()
+            if caja:
+                im = im.crop(caja)
+            medida = int(lado * parte_logo)
+            im.thumbnail((medida, medida), Image.LANCZOS)
+        fondo = Image.new("RGBA", (lado, lado), (255, 255, 255, 255))
+        fondo.alpha_composite(im, ((lado - im.width) // 2, (lado - im.height) // 2))
         tmp = destino + ".tmp"
         fondo.convert("RGB").save(tmp, "PNG", optimize=True)
         os.replace(tmp, destino)
@@ -122,7 +140,7 @@ def admin_app_icono():
         except OSError:
             pass
         registrar("app_icono_quitar")
-        flash("Ícono quitado: la app usa la R de RAXIO.", "ok")
+        flash("Ícono quitado: la app vuelve a usar el logo del centro.", "ok")
         return volver
     f = request.files.get("icono")
     if not f or not f.filename:

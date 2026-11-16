@@ -78,9 +78,9 @@
 
 <div class="panel" id="app-icono">
   <h2>Ícono de la app de pacientes</h2>
-  <p class="peq suave">Es el ícono que queda en el teléfono cuando el paciente instala «Mis exámenes». Usa una imagen
-    <b>cuadrada</b> con el símbolo del centro grande y sin letras chicas (PNG o JPG, ideal de 512 × 512 o más).
-    Si no subes ninguno, la app usa la R de RAXIO.</p>
+  <p class="peq suave">Es el ícono que queda en el teléfono cuando el paciente instala «Mis exámenes». Si no subes
+    ninguno, se arma solo con el <b>logo del centro</b> (sin logo, la R de RAXIO). Si prefieres otro, sube una imagen
+    <b>cuadrada</b> (PNG o JPG, ideal de 512 × 512 o más).</p>
   <div class="logo-fila">
     <div class="app-icono-muestra"><img src="{{ app_icono_url('192') }}" alt="Ícono actual" width="72" height="72"></div>
     <form method="post" action="{{ url_for('admin_app_icono') }}" enctype="multipart/form-data" class="fila">
@@ -88,7 +88,7 @@
       <input type="file" name="icono" accept="image/png,image/jpeg,image/webp" required aria-label="Imagen del ícono">
       <button class="btn prim" type="submit">Subir ícono</button>
     </form>
-    {% if app_icono_url('192').startswith('/app-icono') %}
+    {% if app_icono_subido %}
     <form method="post" action="{{ url_for('admin_app_icono') }}">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="quitar">
       <button class="btn" type="submit">Quitar</button>
