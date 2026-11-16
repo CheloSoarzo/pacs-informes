@@ -386,12 +386,18 @@ def cola_dictados():
         filas = db.execute(sql + "WHERE d.estado IN ('pendiente','tomado') "
                                  "ORDER BY (m.prioridad='urgente') DESC, d.id ASC").fetchall()
     ahora_dt = datetime.now()
+    h_alerta = float(ajuste("horas_alerta") or 24)            # mismos umbrales que la lista de estudios
+    h_urg = float(ajuste("horas_alerta_urgente") or 2)
     dictados = []
     for d in filas:
         if not ve_estudio(u, {"id": d["estudio_id"], "institucion": d["institucion"], "solicitante": d["solicitante"]}):
             continue
         x = dict(d)
-        x["espera"] = fmt_duracion((ahora_dt - datetime.strptime(d["creado"], "%Y-%m-%d %H:%M:%S")).total_seconds() / 3600)
+        horas = (ahora_dt - datetime.strptime(d["creado"], "%Y-%m-%d %H:%M:%S")).total_seconds() / 3600
+        x["espera"] = fmt_duracion(horas)
+        limite = h_urg if d["prioridad"] == "urgente" else h_alerta
+        x["alerta"] = ("rojo" if horas > limite else ("amarillo" if horas > limite / 2 else "")) \
+            if d["estado"] in ("pendiente", "tomado") else ""
         dictados.append(x)
     return render_template("dictados.html", dictados=dictados, ver=ver)
 

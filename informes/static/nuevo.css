@@ -220,3 +220,33 @@
 :root.dn .visor-pestanas [role=tab], :root.dn .btn-visor { font-size: 12.5px; }
 :root.dn .dn-comparar { margin-left: 10px; font-weight: 500; }
 :root.dn #anteriores table.lista td { padding: 6px 8px; }
+
+/* ======================= Módulo 3: dictados ======================= */
+/* cola de dictados */
+:root.dn .segmentos .contador { margin-left: 4px; }
+:root.dn .segmentos a.activo .contador { background: color-mix(in srgb, var(--tinta-prim) 25%, transparent); color: var(--tinta-prim); }
+:root.dn .dn-resumen { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 12px; }
+:root.dn .dn-resumen span { font-size: 13px; color: var(--suave); padding: 5px 11px; border: 1px solid var(--borde); border-radius: 999px; background: var(--panel); }
+:root.dn .dn-resumen b { color: var(--texto); font-variant-numeric: tabular-nums; margin-right: 2px; }
+:root.dn .dn-resumen .dn-r-urg { border-color: color-mix(in srgb, var(--error) 45%, transparent); }
+:root.dn .dn-resumen .dn-r-urg b { color: var(--error); }
+:root.dn .dn-resumen .dn-r-ia b { color: var(--ok); }
+:root.dn table.dn-dictados td.peq br { display: none; }
+:root.dn table.dn-dictados .paciente { white-space: nowrap; }
+:root.dn table.dn-dictados td .mono.peq.suave { font-size: 11px; }
+:root.dn table.dn-dictados td { white-space: nowrap; }
+:root.dn table.dn-dictados td:nth-child(5) { white-space: normal; min-width: 110px; }
+:root.dn table.dn-dictados td.dn-examen { max-width: 240px; }
+:root.dn table.dn-dictados tr.fila-urgente td:first-child { box-shadow: inset 3px 0 0 var(--error); }
+:root.dn table.dn-dictados .btn { padding: 5px 11px; font-size: 13px; }
+
+/* reproductor del dictado en la ficha */
+:root.dn .dictado-item { border: 1px solid var(--borde); border-radius: 10px; padding: 10px 12px; }
+:root.dn .dictado-item.activo { border-color: color-mix(in srgb, var(--primario) 45%, var(--borde)); }
+:root.dn .reproductor button, :root.dn .reproductor select { background: var(--boton); color: var(--texto); border-color: var(--borde); }
+
+/* pantalla de dictado del radiólogo (dictar.html) */
+:root.dn body.modo-dictado { background: var(--bg); color: var(--texto); padding-left: 0; }   /* esta pantalla no tiene menú lateral */
+:root.dn .dict-barra { background: var(--panel); border-bottom: 1px solid var(--borde); color: var(--texto); }
+:root.dn .dict-barra .dict-volver { color: var(--primario); }
+:root.dn .dict-visor-pestanas [role=tab][aria-selected=true] { color: var(--tinta-prim); }
