@@ -35,71 +35,59 @@ def nueva(rut, hora, nombre="John Smith"):
                                            "prevision": "Particular", "examenes": [{"nombre": "RX de tórax", "valor": 20000}]}).json()
 
 
-c1 = nueva("AB-123456", "09:00")
+for malo in ("AB-123456", "12.345.678-0", "87654321"):
+    r = ag.post(A + "/api/citas", json={"fecha": hoy, "hora": "08:00", "equipo": "rx", "paciente": "X", "rut": malo,
+                                        "prevision": "Particular", "examenes": [{"nombre": "RX", "valor": 1}]})
+    chk(r.status_code == 400 and "no es válido" in r.json().get("error", ""), f"RUT no válido ({malo}): no deja guardar")
+r = ag.post(A + "/api/citas", json={"fecha": hoy, "hora": "08:00", "equipo": "rx", "paciente": "X", "rut": "PAS 12",
+                                    "prevision": "Particular", "examenes": [{"nombre": "RX", "valor": 1}]})
+chk(r.status_code == 400, "extranjero con documento muy corto: no deja guardar")
+sin = nueva("", "08:30", "Sin Documento")
+r = ag.post(A + f"/api/citas/{sin['id']}/pago", json={"medio": "Efectivo"})
+chk(r.status_code == 400 and "Falta el RUT" in r.json().get("error", ""), "sin RUT no deja cobrar")
+
+c1 = nueva("PAS ab-123456", "09:00")
+chk(c1.get("rut") == "PAS AB-123456", "extranjero: se guarda «PAS AB-123456»")
 r = ag.post(A + f"/api/citas/{c1['id']}/pago", json={"medio": "Efectivo"}).json()
 clave = (r.get("portal") or {}).get("clave", "")
-chk(r["portal"]["estado"] == "nueva" and len(clave) == 8, f"pasaporte AB-123456: clave nueva al pagar ({clave})")
-h = ag.get(A + f"/api/citas/{c1['id']}/hoja").json()
-chk(h.get("clave") == clave, "la hoja de retiro se puede imprimir/reimprimir con la clave")
-
-c2 = nueva("ab123456", "09:30")
+chk(r["portal"]["estado"] == "nueva" and len(clave) == 8, f"extranjero: clave nueva al pagar ({clave})")
+chk(ag.get(A + f"/api/citas/{c1['id']}/hoja").json().get("clave") == clave, "la hoja sale con la clave")
+c2 = nueva("PAS AB123456", "09:30")
 r2 = ag.post(A + f"/api/citas/{c2['id']}/pago", json={"medio": "Efectivo"}).json()
-chk(r2["portal"]["estado"] == "existente", "mismo pasaporte escrito distinto: usa la misma clave")
-
-c3 = nueva("PAS 987654321", "10:00", "Ana Gómez")
-r3 = ag.post(A + f"/api/citas/{c3['id']}/pago", json={"medio": "Efectivo"}).json()
-chk(r3["portal"]["estado"] == "nueva", "pasaporte solo de números con PAS adelante: clave nueva")
-
-c4 = nueva("12.345.678-0", "10:30", "Rut Malo")
-r4 = ag.post(A + f"/api/citas/{c4['id']}/pago", json={"medio": "Efectivo"}).json()
-chk(r4["portal"]["estado"] == "nueva", "lo que no es un RUT válido es documento extranjero: clave nueva")
-
+chk(r2["portal"]["estado"] == "existente", "mismo pasaporte escrito distinto: misma clave")
 c5 = nueva("11.111.111-1", "11:00", "Rut Chileno")
 r5 = ag.post(A + f"/api/citas/{c5['id']}/pago", json={"medio": "Efectivo"}).json()
 clave5 = r5["portal"].get("clave", "")
-chk(r5["portal"]["estado"] == "nueva", "RUT chileno: igual que antes")
+chk(r5["portal"]["estado"] == "nueva", "RUT chileno válido: igual que antes")
+c6 = nueva("PAS 555666777", "12:00", "Doc Numerico")
+r6 = ag.post(A + f"/api/citas/{c6['id']}/pago", json={"medio": "Efectivo"}).json()
+clave6 = r6["portal"].get("clave", "")
+chk(r6["portal"]["estado"] == "nueva", "extranjero con documento de solo números: clave nueva")
 
-pac = requests.Session()
-csrf = re.search(r'name="csrf" value="([^"]+)"', pac.get(P + "/paciente").text).group(1)
-chk(esperar(lambda: "RX DE TÓRAX" in pac.post(P + "/paciente", data={"csrf": csrf, "rut": "AB123456", "clave": clave}).text),
-    "el paciente entra al portal con su pasaporte y la clave")
+
+def entrar(doc, cl):
+    o = requests.Session()
+    cs = re.search(r'name="csrf" value="([^"]+)"', o.get(P + "/paciente").text).group(1)
+    ok = esperar(lambda: "RX DE TÓRAX" in o.post(P + "/paciente", data={"csrf": cs, "rut": doc, "clave": cl}).text)
+    return ok, o
+
+
+ok, pac = entrar("AB123456", clave)
+chk(ok, "el extranjero entra al portal con su pasaporte (sin PAS)")
 t = pac.get(P + "/paciente/examenes").text
-chk(t.count('class="pt-examen ') == 2, "ve sus 2 exámenes")
-chk("Pasaporte AB123456" in t and "RUT Pasaporte" not in t, "el portal muestra «Pasaporte AB123456»")
-
+chk(t.count('class="pt-examen ') == 2 and "Pasaporte AB123456" in t, "ve sus 2 exámenes y «Pasaporte AB123456»")
+chk(entrar("555.666.777", clave6)[0], "documento de solo números: entra con el número")
+chk(entrar("11.111.111-1", clave5)[0], "el paciente con RUT sigue entrando igual")
 o = requests.Session()
 cs = re.search(r'name="csrf" value="([^"]+)"', o.get(P + "/paciente").text).group(1)
-chk("incorrectos" in o.post(P + "/paciente", data={"csrf": cs, "rut": "123456", "clave": clave}).text,
-    "solo los números del pasaporte no entran")
-o = requests.Session()
-cs = re.search(r'name="csrf" value="([^"]+)"', o.get(P + "/paciente").text).group(1)
-chk("RX DE TÓRAX" in o.post(P + "/paciente", data={"csrf": cs, "rut": "11.111.111-1", "clave": clave5}).text,
-    "el paciente con RUT sigue entrando igual")
+chk("incorrectos" in o.post(P + "/paciente", data={"csrf": cs, "rut": "123456", "clave": clave}).text, "otro número no entra")
 
-# Llegan las imágenes con el pasaporte como PatientID (como lo manda la worklist): se une solo
-requests.post("http://localhost:8042/dev/llega", json={"AccessionNumber": c1["accesion"], "PatientID": "AB123456",
+requests.post("http://localhost:8042/dev/llega", json={"AccessionNumber": c1["accesion"], "PatientID": "PASAB-123456",
                                                        "PatientName": "SMITH^JOHN"})
-ok = esperar(lambda: any(c["id"] == c1["id"] and c["pacs_estado"] == "imagenes"
-                         for c in ag.get(A + f"/api/citas?fecha={hoy}").json()), 30)
-chk(ok, "la agenda ve las imágenes del pasaporte")
+chk(esperar(lambda: any(c["id"] == c1["id"] and c["pacs_estado"] == "imagenes"
+                        for c in ag.get(A + f"/api/citas?fecha={hoy}").json()), 30), "la agenda ve las imágenes del extranjero")
 adm = requests.Session()
 adm.post(P + "/login", data={"usuario": "admin", "clave": "clave-prueba-123"})
 r = adm.get(P + f"/agenda/{c1['accesion']}")
-chk("/ficha/AB123456" in r.url and "Ficha del paciente" in r.text, "«Ver en el PACS» abre la ficha por pasaporte")
-
-# --- v1.1.65: documento solo de números = extranjero, sin pasos extra
-c6 = nueva("555666777", "12:00", "Doc Numerico")
-r6 = ag.post(A + f"/api/citas/{c6['id']}/pago", json={"medio": "Efectivo"}).json()
-clave6 = r6["portal"].get("clave", "")
-chk(r6["portal"]["estado"] == "nueva" and len(clave6) == 8, f"documento solo de números: clave al pagar ({clave6})")
-chk(ag.get(A + f"/api/citas/{c6['id']}/hoja").json().get("clave") == clave6, "la hoja sale con esa clave")
-c7 = nueva("123", "12:30", "Muy Corto")
-r7 = ag.post(A + f"/api/citas/{c7['id']}/pago", json={"medio": "Efectivo"}).json()
-chk(r7["portal"]["estado"] == "sin_rut", "sin documento (o muy corto) no hay clave")
-o = requests.Session()
-cs = re.search(r'name="csrf" value="([^"]+)"', o.get(P + "/paciente").text).group(1)
-chk(esperar(lambda: "RX DE TÓRAX" in o.post(P + "/paciente", data={"csrf": cs, "rut": "555.666.777", "clave": clave6}).text),
-    "el extranjero entra al portal con su número")
-t = o.get(P + "/paciente/examenes").text
-chk("Pasaporte 555666777" in t, "el portal muestra «Pasaporte 555666777»")
+chk("Ficha del paciente" in r.text, "«Ver en el PACS» abre la ficha del extranjero")
 print("\nTODO OK" if not fallas else f"\n{fallas} FALLA(S)")

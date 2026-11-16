@@ -70,11 +70,13 @@ c2 = ag.post(A + "/api/citas", json={"fecha": hoy, "hora": "11:00", "equipo": "r
 r2 = ag.post(A + f"/api/citas/{c2['id']}/pago", json={"medio": "Débito"}).json()
 chk(r2["portal"]["estado"] == "existente", "segundo examen usa la clave que ya tenía")
 
-# Sin RUT válido: no hay clave
+# RUT no válido: no deja guardar; sin RUT: no deja cobrar (v1.1.66)
+r3 = ag.post(A + "/api/citas", json={"fecha": hoy, "hora": "12:00", "equipo": "eco", "paciente": "Sin Rut",
+                                     "rut": "123", "prevision": "Particular", "examenes": [{"nombre": "Eco", "valor": 10000}]})
+chk(r3.status_code == 400, "RUT no válido: no deja guardar la cita")
 c3 = ag.post(A + "/api/citas", json={"fecha": hoy, "hora": "12:00", "equipo": "eco", "paciente": "Sin Rut",
-                                     "rut": "123", "prevision": "Particular", "examenes": [{"nombre": "Eco", "valor": 10000}]}).json()
-r3 = ag.post(A + f"/api/citas/{c3['id']}/pago", json={"medio": "Efectivo"}).json()
-chk(r3["portal"]["estado"] == "sin_rut", "sin RUT válido no se crea clave")
+                                     "rut": "", "prevision": "Particular", "examenes": [{"nombre": "Eco", "valor": 10000}]}).json()
+chk(ag.post(A + f"/api/citas/{c3['id']}/pago", json={"medio": "Efectivo"}).status_code == 400, "sin RUT no deja cobrar")
 
 # --- el paciente entra antes de que lleguen las imágenes
 r = pac.get(P + "/paciente")
@@ -164,22 +166,22 @@ def cita_de(id_):
     return next((c for c in ag.get(A + f"/api/citas?fecha={hoy}").json() if c["id"] == id_), {})
 
 c5 = ag.post(A + "/api/citas", json={"fecha": hoy, "hora": "16:00", "equipo": "tc", "paciente": "Pedro Sin Worklist",
-                                     "rut": "15.555.555-5", "prevision": "Particular", "examenes": [{"nombre": "TC abdomen", "valor": 1000}]}).json()
+                                     "rut": "15.555.555-6", "prevision": "Particular", "examenes": [{"nombre": "TC abdomen", "valor": 1000}]}).json()
 ag.post(A + f"/api/citas/{c5['id']}/pago", json={"medio": "Efectivo"})
 time.sleep(1.5)
-requests.post("http://localhost:8042/dev/llega", json={"AccessionNumber": "MANUAL77", "PatientID": "15555555-5",
+requests.post("http://localhost:8042/dev/llega", json={"AccessionNumber": "MANUAL77", "PatientID": "15555555-6",
                                                        "PatientName": "SIN WORKLIST^PEDRO"})
 chk(esperar(lambda: cita_de(c5["id"]).get("pacs_estado") == "imagenes", 30), "sin worklist: se une sola por RUT + fecha + equipo")
 t = adm.get(P + "/estudio/est-manual77").text
 chk("Orden de agenda" in t and c5["accesion"] in t, "el estudio unido por RUT muestra su cita")
 
 # Dos ecografías del mismo paciente el mismo día: no se adivina
-e1 = ag.post(A + "/api/citas", json={"fecha": hoy, "hora": "17:00", "equipo": "eco", "paciente": "Ana Doble", "rut": "16.666.666-6",
+e1 = ag.post(A + "/api/citas", json={"fecha": hoy, "hora": "17:00", "equipo": "eco", "paciente": "Ana Doble", "rut": "16.666.666-K",
                                      "prevision": "Particular", "examenes": [{"nombre": "Eco abdominal", "valor": 1000}]}).json()
-e2 = ag.post(A + "/api/citas", json={"fecha": hoy, "hora": "17:20", "equipo": "eco", "paciente": "Ana Doble", "rut": "16.666.666-6",
+e2 = ag.post(A + "/api/citas", json={"fecha": hoy, "hora": "17:20", "equipo": "eco", "paciente": "Ana Doble", "rut": "16.666.666-K",
                                      "prevision": "Particular", "examenes": [{"nombre": "Eco renal", "valor": 1000}]}).json()
 time.sleep(1.5)
-r = requests.post("http://localhost:8042/dev/llega", json={"AccessionNumber": "DOBLE1", "PatientID": "16666666-6",
+r = requests.post("http://localhost:8042/dev/llega", json={"AccessionNumber": "DOBLE1", "PatientID": "16666666-K",
                                                            "PatientName": "DOBLE^ANA", "StudyDescription": "ECO RENAL", "Modality": "US"})
 time.sleep(8)
 chk(not cita_de(e1["id"]).get("pacs_estado") and not cita_de(e2["id"]).get("pacs_estado"), "dos exámenes iguales el mismo día: no se une solo")
@@ -211,12 +213,12 @@ time.sleep(61)  # la agenda guarda la lista de médicos 1 minuto
 meds = ag.get(A + "/api/medicos").json()
 chk(any(m["nombre"] == "Dra. Paula Méndez" for m in meds), "la agenda trae la lista de médicos del centro desde el PACS")
 mid = next(m["id"] for m in meds if m["nombre"] == "Dra. Paula Méndez")
-cm = ag.post(A + "/api/citas", json={"fecha": hoy, "hora": "16:00", "equipo": "tc", "paciente": "Medico Prueba", "rut": "17.777.777-7",
+cm = ag.post(A + "/api/citas", json={"fecha": hoy, "hora": "16:00", "equipo": "tc", "paciente": "Medico Prueba", "rut": "17.777.777-3",
                                      "prevision": "Particular", "medico": "Dra. Paula Méndez", "medico_id": mid,
                                      "examenes": [{"nombre": "TC de cerebro", "valor": 1000}]}).json()
 chk(cm["medico_id"] == mid and cm["medico"] == "DRA. PAULA MÉNDEZ", "la cita guarda el médico elegido de la lista")
 time.sleep(1.5)
-requests.post("http://localhost:8042/dev/llega", json={"AccessionNumber": cm["accesion"], "PatientID": "17777777-7",
+requests.post("http://localhost:8042/dev/llega", json={"AccessionNumber": cm["accesion"], "PatientID": "17777777-3",
                                                        "PatientName": "PRUEBA^MEDICO", "Modality": "CT"})
 eidm = "est-" + cm["accesion"].lower()
 chk(esperar(lambda: cita_de(cm["id"]).get("pacs_estado") == "imagenes", 30), "llegan las imágenes y se une a la cita")
