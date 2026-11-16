@@ -744,7 +744,7 @@ def _examenes_de(rut):
                         "estado": "listo" if listo else "proceso",
                         "estado_txt": "Informe disponible" if listo else "Examen realizado · informe en proceso",
                         "informe_id": inf["id"] if listo else None, "firmado_en": inf["firmado_en"] if inf else "",
-                        "estudio_id": eid})
+                        "estudio_id": eid, "equipo": o["equipo"] or ""})
         if eids:
             continue
         if o["pagado"] or o["estado_agenda"] in ("llego", "atendido"):
@@ -754,7 +754,7 @@ def _examenes_de(rut):
         else:
             continue
         out.append({"fecha": o["fecha"], "hora": o["hora"], "examen": o["examen"] or "Examen", "estado": estado,
-                    "estado_txt": txt, "informe_id": None, "firmado_en": "", "estudio_id": ""})
+                    "estado_txt": txt, "informe_id": None, "firmado_en": "", "estudio_id": "", "equipo": o["equipo"] or ""})
     # Informes validados del mismo RUT que no vinieron de la agenda (ej: exámenes anteriores)
     for inf in db.execute("""SELECT id, estudio_id, fecha_estudio, descripcion, firmado_en FROM informes WHERE estado='firmado'
             AND UPPER(REPLACE(REPLACE(REPLACE(paciente_id,'.',''),'-',''),' ',''))=? ORDER BY fecha_estudio DESC LIMIT 60""",
