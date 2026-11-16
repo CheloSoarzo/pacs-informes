@@ -32,6 +32,13 @@
     </div>
     <h1>Ingresa a tus exámenes</h1>
     <p class="pt-lead">Revisa tus informes y mira tus imágenes desde el celular o el computador.</p>
+    <div class="pt-bio-ingreso" id="bio-ingreso" hidden>
+      <button type="button" class="btn prim pt-boton" id="bio-entrar">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 11v3M8.5 8.5a5 5 0 0 1 8.4 3.5v1.5M7 12v1a5 5 0 0 0 1.2 3.3M12 18c1.6 0 3-.8 3.9-2M4.6 9A8 8 0 0 1 20 12v.5M4 13v-1"/></svg>
+        Entrar con huella o cara</button>
+      <p class="pt-bio-msg" id="bio-msg" hidden></p>
+      <div class="pt-o"><span>o con tu RUT y clave</span></div>
+    </div>
     <form method="post" autocomplete="off">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
       <div class="campo"><label for="rut">RUT</label>
@@ -75,6 +82,19 @@
   {% endif %}
 
   {% include "_app_pacientes_instalar.html" %}
+  <div class="pt-bio" id="bio-activar" data-rut="{{ rut }}" hidden>
+    <div class="pt-bio-off">
+      <span class="pt-bio-ico" aria-hidden="true">🔐</span>
+      <div class="pt-bio-txt"><b>Entra con tu huella o tu cara</b>La próxima vez no necesitarás la clave en este teléfono.</div>
+      <button type="button" class="btn prim" id="bio-si">Activar</button>
+    </div>
+    <div class="pt-bio-on" hidden>
+      <span class="pt-bio-ico" aria-hidden="true">✅</span>
+      <div class="pt-bio-txt"><b>Ingreso con huella o cara activado</b>en este teléfono.</div>
+      <button type="button" class="btn" id="bio-no">Desactivar</button>
+    </div>
+    <p class="pt-bio-msg" hidden></p>
+  </div>
   <div style="height:12px"></div>
   {% for e in examenes %}
   {% set paso = 3 if e.estado == 'listo' else (2 if e.estado == 'proceso' else 1) %}
@@ -110,5 +130,6 @@
   {% endif %}
 </main>
 {% include "_pie.html" %}
+<script src="{{ url_for('static', filename='biometria.js') }}"></script>
 </body>
 </html>

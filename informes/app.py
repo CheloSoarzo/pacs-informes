@@ -15,6 +15,7 @@ Módulos:
   rutas_equipos.py  equipos autorizados a enviar por internet (lista blanca DICOM)
   transcripcion_auto.py  cola de transcripción automática de dictados (Whisper)
   pwa.py            portal del paciente como app instalable (manifest y service worker)
+  biometria.py      portal del paciente: entrar con huella o cara (WebAuthn, solo llaves públicas)
 """
 import os
 
@@ -30,6 +31,7 @@ import cd_paciente  # noqa: F401,E402  (CD/DVD del paciente con visor)
 import medicos_solicitantes  # noqa: F401,E402  (acceso de médicos solicitantes a sus exámenes)
 import horos  # noqa: F401,E402  (nodos DICOM y «Abrir en Horos / OsiriX»)
 import pwa  # noqa: F401,E402  (portal del paciente instalable como app)
+import biometria  # noqa: F401,E402  (portal del paciente: entrar con huella o cara)
 import transcripcion_auto  # noqa: E402  (borrador automático de los dictados con Whisper)
 
 transcripcion_auto.iniciar()  # retoma los dictados que quedaron por transcribir

@@ -112,3 +112,19 @@ body.pt {
 .pt-app .btn { margin-right: 14px; }
 /* abierta como app: espacio para la barra de estado del iPhone */
 @media (display-mode: standalone) { .pt-banda { padding-top: max(26px, env(safe-area-inset-top)); } }
+
+/* ingreso con huella o cara */
+.pt-bio-ingreso { margin-bottom: 4px; }
+.pt-bio-ingreso .pt-boton { display: flex; gap: 10px; align-items: center; }
+.pt-o { display: flex; align-items: center; gap: 10px; margin: 16px 0 14px; color: var(--pt-suave); font-size: 12.5px; }
+.pt-o::before, .pt-o::after { content: ""; flex: 1; height: 1px; background: var(--pt-borde); }
+.pt-bio-msg { font-size: 13px; color: var(--pt-acento); margin: 8px 0 0; }
+.pt-bio-msg.error { color: #B42318; }
+.pt-bio { background: #fff; border: 1px solid var(--pt-borde); border-radius: 16px; padding: 12px 14px; margin-top: 12px;
+  box-shadow: 0 2px 10px rgba(15,42,61,.05); }
+.pt-bio[hidden], .pt-bio-off[hidden], .pt-bio-on[hidden] { display: none; }
+.pt-bio-off, .pt-bio-on { display: flex; align-items: center; gap: 12px; }
+.pt-bio-ico { flex: none; font-size: 24px; }
+.pt-bio-txt { flex: 1; min-width: 0; font-size: 13px; color: var(--pt-suave); line-height: 1.35; }
+.pt-bio-txt b { display: block; color: var(--pt-texto); font-size: 14.5px; }
+.pt-bio .btn { flex: none; border-radius: 10px; padding: 9px 14px; font-weight: 700; }
