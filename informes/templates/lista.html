@@ -47,6 +47,14 @@
       <a class="chip estado-{{ k }}" href="?{{ query_sin_estado }}{{ '&' if query_sin_estado }}estado={{ k }}">{{ v }} <b>{{ conteo[k] }}</b></a>
     {% endfor %}
     {% if dn %}<span class="dn-orden" role="group" aria-label="Orden"><a href="?{{ query_sin_orden }}" class="{{ 'on' if f.orden != 'espera' }}">Fecha</a><a href="?{{ query_sin_orden }}{{ '&' if query_sin_orden }}orden=espera" class="{{ 'on' if f.orden == 'espera' }}" title="Sin validar primero, los que llevan más horas arriba">Espera</a></span>{% endif %}
+    {% if dn %}<span class="dn-orden dn-densidad" role="group" aria-label="Filas">
+      <button type="button" data-d="comoda" title="Filas con edad, sexo, series y centro">Cómodas</button><button type="button" data-d="compacta" title="Una línea por estudio: caben más en la pantalla">Compactas</button></span>
+    <script>(function(){const g=document.currentScript.previousElementSibling;
+      const pintar=()=>{const c=document.documentElement.classList.contains('dn-compacto');
+        g.querySelectorAll('button').forEach(b=>{b.classList.toggle('on',(b.dataset.d==='compacta')===c);b.setAttribute('aria-pressed',String((b.dataset.d==='compacta')===c))})};
+      g.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+        document.documentElement.classList.toggle('dn-compacto',b.dataset.d==='compacta');
+        try{localStorage.setItem('dn-densidad',b.dataset.d)}catch(x){}pintar()});pintar()})();</script>{% endif %}
     {% if f.q %}<span class="chip activo">Búsqueda en todas las fechas · <a href="{{ url_for('lista') }}">quitar</a></span>{% endif %}
   </div>
   <div class="herramientas">

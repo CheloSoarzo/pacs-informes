@@ -587,6 +587,26 @@ def tomar_dictado(did):
     return redirect(url_for("estudio", estudio_id=d["estudio_id"]) + "#informe")
 
 
+@app.route("/dictados/<int:did>/devolver", methods=["POST"])
+@login_requerido()
+def devolver_dictado(did):
+    """Suelta un dictado tomado para que otra persona lo pueda transcribir.
+    Lo puede hacer quien lo tomó o quien puede anular dictados. El borrador del informe no se toca."""
+    d = _dictado_visible(did)
+    u = usuario_actual()
+    if not (d["transcriptor_id"] == u["id"] or puede(u, "dictados_anular")):
+        abort(403)
+    if d["estado"] == "tomado":
+        db = get_db()
+        db.execute("UPDATE dictados SET estado='pendiente', transcriptor_id=NULL, tomado_en=NULL WHERE id=?", (did,))
+        db.commit()
+        registrar("devolver_dictado", str(did))
+        flash("Dictado devuelto a la cola: otra persona lo puede tomar.", "ok")
+    if request.form.get("volver") == "cola":
+        return redirect(url_for("cola_dictados"))
+    return _volver(d["estudio_id"])
+
+
 @app.route("/dictados/<int:did>/anular", methods=["POST"])
 @login_requerido()
 def anular_dictado(did):

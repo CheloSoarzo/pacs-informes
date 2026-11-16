@@ -250,3 +250,32 @@
 :root.dn .dict-barra { background: var(--panel); border-bottom: 1px solid var(--borde); color: var(--texto); }
 :root.dn .dict-barra .dict-volver { color: var(--primario); }
 :root.dn .dict-visor-pestanas [role=tab][aria-selected=true] { color: var(--tinta-prim); }
+
+/* densidad de la lista: «Compactas» = una línea por estudio (se recuerda en este equipo) */
+:root.dn .dn-densidad button { border: 0; background: transparent; color: var(--suave); font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer; }
+:root.dn .dn-densidad button.on { background: var(--sel); color: var(--texto); }
+:root.dn.dn-compacto table.lista td { padding-top: 3px; padding-bottom: 3px; }
+:root.dn.dn-compacto table.lista td br,
+:root.dn.dn-compacto table.lista td .paciente ~ .suave.peq,
+:root.dn.dn-compacto table.lista td.dn-examen .dn-sub { display: none; }
+:root.dn.dn-compacto table.lista td.dn-examen .dn-ex { max-width: 100%; }
+:root.dn.dn-compacto table.lista .btn { padding-top: 3px; padding-bottom: 3px; }
+:root.dn.dn-compacto table.lista td:has(> .paciente) { white-space: nowrap; }
+:root.dn.dn-compacto table.lista .tag-urgente { margin-right: 6px; }
+:root.dn .celda-acciones .btn-vista { margin-left: 2px; width: 26px; }
+:root.dn table.lista td.celda-acciones { padding-right: 4px; }
+:root.dn.dn-compacto table.lista .paciente { display: inline-block; max-width: 185px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+:root.dn.dn-compacto table.lista td.dn-examen { max-width: 170px; }
+/* que la fila entera quepa también con «Transcribir» */
+:root.dn .celda-acciones .ico-cd, :root.dn .celda-acciones .ico-borrar { width: 26px; height: 26px; margin-left: 2px; }
+:root.dn .celda-acciones .ico-cd svg, :root.dn .celda-acciones .ico-borrar svg { width: 16px; height: 16px; }
+:root.dn table.lista td.celda-acciones > .btn:first-child { padding-left: 10px; padding-right: 10px; }
+:root.dn td.dn-examen { max-width: 185px; }
+:root.dn table.lista td, :root.dn table.lista th { padding-left: 7px; padding-right: 7px; }
+:root.dn table.lista td.mono { font-size: 11.5px; }
+:root.dn.dn-compacto table.lista .tag-urgente { font-size: 9.5px; padding: 0 4px; margin-right: 4px; }
+:root.dn.dn-compacto table.lista .paciente { max-width: 170px; }
+:root.dn.dn-compacto table.lista .paciente { max-width: 150px; }
+:root.dn.dn-compacto table.lista td.dn-examen { max-width: 165px; }
+/* en filas compactas «URGENTE» pasa a un punto rojo (la fila ya va teñida de rojo) */
+:root.dn.dn-compacto table.lista .tag-urgente { font-size: 0; width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: var(--error); display: inline-block; vertical-align: middle; margin-right: 6px; }

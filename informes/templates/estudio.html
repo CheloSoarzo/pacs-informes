@@ -252,6 +252,12 @@
                    data-auto-estado="{{ d.auto_estado or '' }}"
                    data-reintentar="{{ url_for('reintentar_texto_auto', did=d.id) }}"></div>
             {% endif %}
+            {% if d.estado == 'tomado' and (d.transcriptor_id == usuario.id or puede('dictados_anular')) %}
+            <form method="post" action="{{ url_for('devolver_dictado', did=d.id) }}" class="inline"
+                  data-confirmar="¿Devolver este dictado a la cola? Otra persona lo podrá tomar; lo escrito en el informe se mantiene.">
+              <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+              <button class="enlace peq" type="submit" title="Soltar el dictado para que otra persona lo transcriba">↩ Devolver a la cola</button>
+            </form>{% endif %}
             {% if d.estado == 'pendiente' and (puede('dictados_anular') or d.creado_por == usuario.id) %}
             <form method="post" action="{{ url_for('anular_dictado', did=d.id) }}" class="inline" data-confirmar="¿Anular este dictado?">
               <input type="hidden" name="csrf" value="{{ csrf_token() }}">
