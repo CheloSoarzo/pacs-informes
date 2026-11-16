@@ -112,4 +112,31 @@ t = S["trans"].get(B + "/estudio/est-ct").text
 chk('id="cuerpo"' in t and "Subir informe firmado" in t, "tras rectificar se puede volver a subir o escribir")
 r = subir(S["trans"], "est-ct", "nuevo.pdf", PDF)
 chk("quedó validado" in r.text, "se sube la versión corregida")
+# v1.1.67: varios archivos (ej. eco de axilas, un informe por lado) → un solo PDF en el orden enviado
+S["rad"].post(B + "/estudio/est-ct/reabrir", data={"csrf": S["rad"].csrf, "motivo": "dos informes"})
+
+
+def pdf_txt(t):
+    b = io.BytesIO()
+    c = canvas.Canvas(b)
+    c.drawString(100, 750, t)
+    c.save()
+    return b.getvalue()
+
+
+r = S["trans"].post(B + "/estudio/est-ct/subir-informe-firmado", data={"csrf": S["trans"].csrf, "firmante_id": rid},
+                    files=[("archivo", ("axila-der.pdf", pdf_txt("AXILA DERECHA"))),
+                           ("archivo", ("axila-izq.jpg", b2.getvalue())),
+                           ("archivo", ("axila-izq.pdf", pdf_txt("AXILA IZQUIERDA")))])
+chk("3 archivos juntos en un PDF" in r.text and "quedó validado" in r.text, "varios archivos: se suben y el estudio queda validado")
+inf4 = re.search(r'/informe/(\d+)\.pdf', adm.get(B + "/estudio/est-ct").text).group(1)
+pg = paginas(adm.get(B + f"/informe/{inf4}.pdf").content)
+chk(len(pg) == 4 and "AXILA DERECHA" in pg[0] and "AXILA IZQUIERDA" in pg[2] and "ACCESO EN L" in pg[3],
+    "un solo PDF: derecha, foto, izquierda (en ese orden) + página con QR")
+S["rad"].post(B + "/estudio/est-ct/reabrir", data={"csrf": S["rad"].csrf, "motivo": "word"})
+r = S["trans"].post(B + "/estudio/est-ct/subir-informe-firmado", data={"csrf": S["trans"].csrf, "firmante_id": rid},
+                    files=[("archivo", ("a.pdf", PDF)), ("archivo", ("b.docx", b"PK\x03\x04xx"))])
+chk("b.docx" in r.text and "Guardar como → PDF" in r.text, "si uno es Word se rechaza todo con instrucciones")
+t = S["trans"].get(B + "/estudio/est-ct").text
+chk('id="sf-archivo" name="archivo" accept=".pdf,.jpg,.jpeg,.png" multiple' in t and "sf-lista" in t, "el formulario acepta varios archivos")
 print("\nFALLAS:", fallas)

@@ -281,13 +281,17 @@
           <input type="hidden" name="csrf" value="{{ csrf_token() }}">
           <div class="grid2">
             <div><label for="sf-archivo">Informe firmado (PDF, JPG o PNG)</label>
-              <input type="file" id="sf-archivo" name="archivo" accept=".pdf,.jpg,.jpeg,.png" required></div>
+              <input type="file" id="sf-archivo" name="archivo" accept=".pdf,.jpg,.jpeg,.png" multiple required></div>
             <div><label for="sf-firmante">Médico que firmó</label>
               <select id="sf-firmante" name="firmante_id" required>
                 <option value="">Elige…</option>
                 {% for r in radiologos %}<option value="{{ r.id }}" {{ 'selected' if meta.radiologo_id == r.id }}>{{ r.nombre }}</option>{% endfor %}
               </select></div>
           </div>
+          <p class="peq suave sf-ayuda">Puedes subir más de uno (ej. eco de axilas: un informe por cada lado).
+            Se juntan en un solo PDF, en el orden de la lista.</p>
+          <ol class="sf-lista" id="sf-lista" hidden></ol>
+          <button class="enlace peq" type="button" id="sf-otro" hidden>+ Agregar otro archivo</button>
           <div class="fila"><button class="btn ok" type="submit">Subir y dejar validado</button></div>
         </form>
       </div>
@@ -577,6 +581,44 @@
     b.addEventListener('click', () => {
       box.hidden = !box.hidden; b.setAttribute('aria-expanded', String(!box.hidden));
       if (!box.hidden) { box.scrollIntoView({ block: 'nearest' }); document.getElementById('sf-archivo').focus(); }
+    });
+  })();
+  // Varios archivos en el informe firmado: lista ordenable; se envían en ese orden y el servidor los junta en un PDF
+  (function () {
+    const inp = document.getElementById('sf-archivo'), lista = document.getElementById('sf-lista'),
+          otro = document.getElementById('sf-otro');
+    if (!inp || !lista || typeof DataTransfer === 'undefined') return;
+    let archivos = [];
+    const MAX = 6;
+    function aplicar() {
+      const dt = new DataTransfer(); archivos.forEach(f => dt.items.add(f)); inp.files = dt.files;
+      lista.hidden = archivos.length === 0; otro.hidden = archivos.length === 0 || archivos.length >= MAX;
+      lista.innerHTML = '';
+      archivos.forEach((f, i) => {
+        const li = document.createElement('li');
+        const n = document.createElement('span'); n.className = 'sf-nombre'; n.textContent = f.name; n.title = f.name;
+        li.appendChild(n);
+        const bt = (txt, tit, fn, dis) => { const x = document.createElement('button'); x.type = 'button';
+          x.className = 'enlace peq'; x.textContent = txt; x.title = tit; x.disabled = !!dis; x.onclick = fn; li.appendChild(x); };
+        bt('↑', 'Subir en el orden', () => { [archivos[i - 1], archivos[i]] = [archivos[i], archivos[i - 1]]; aplicar(); }, i === 0);
+        bt('↓', 'Bajar en el orden', () => { [archivos[i + 1], archivos[i]] = [archivos[i], archivos[i + 1]]; aplicar(); }, i === archivos.length - 1);
+        bt('✕', 'Quitar', () => { archivos.splice(i, 1); aplicar(); });
+        lista.appendChild(li);
+      });
+    }
+    inp.addEventListener('change', () => {
+      const nuevos = Array.from(inp.files).filter(f => !archivos.some(a => a.name === f.name && a.size === f.size));
+      archivos = archivos.concat(nuevos).slice(0, MAX);
+      aplicar();
+    });
+    // «Agregar otro»: un selector aparte, para que lo elegido antes no se pierda
+    otro.addEventListener('click', () => {
+      const x = document.createElement('input'); x.type = 'file'; x.multiple = true; x.accept = inp.accept;
+      x.addEventListener('change', () => {
+        const nuevos = Array.from(x.files).filter(f => !archivos.some(a => a.name === f.name && a.size === f.size));
+        archivos = archivos.concat(nuevos).slice(0, MAX); aplicar();
+      }, { once: true });
+      x.click();
     });
   })();
 </script>

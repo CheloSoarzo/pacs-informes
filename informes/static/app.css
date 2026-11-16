@@ -621,3 +621,12 @@ a.btn.desactivado { pointer-events: none; opacity: .6; }
 .pie-raxio .raxio-iso { margin: 0 3px 0 2px; }
 a.raxio-en-marca:hover { opacity: .85; }
 .app-icono-muestra img { display: block; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+
+/* v1.1.67: varios archivos en «Subir informe firmado» */
+.sf-ayuda{margin:6px 0 0}
+.sf-lista{margin:8px 0 4px;padding-left:22px}
+.sf-lista li{padding:3px 0}
+.sf-lista li button{margin-left:6px}
+.sf-lista .sf-nombre{display:inline-block;max-width:calc(100% - 80px);vertical-align:bottom;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.sf-lista li::marker{font-weight:700}
+.sf-lista button:disabled{opacity:.35;cursor:default}

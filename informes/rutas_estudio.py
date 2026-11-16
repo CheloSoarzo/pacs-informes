@@ -896,6 +896,7 @@ def importar_informe(estudio_id):
 
 
 MAX_SUBIDA = 15 * 1024 * 1024
+MAX_ARCHIVOS_FIRMADO = 6
 
 
 @app.route("/estudio/<estudio_id>/subir-informe-firmado", methods=["POST"])
@@ -911,7 +912,8 @@ def subir_informe_firmado(estudio_id):
     if inf and inf["estado"] == "firmado":
         flash("El informe ya está validado. Para reemplazarlo, primero usa «Rectificar informe».", "error")
         return _volver(estudio_id, "informe")
-    f = request.files.get("archivo")
+    # Uno o varios archivos (ej. eco de axilas: un informe por cada lado): se juntan en un solo PDF, en el orden elegido
+    archivos = [f for f in request.files.getlist("archivo") if f and f.filename][:MAX_ARCHIVOS_FIRMADO]
     try:
         firmante_id = int(request.form.get("firmante_id") or 0)
     except ValueError:
@@ -920,33 +922,51 @@ def subir_informe_firmado(estudio_id):
     if not firmante or not firmante["activo"] or not puede(firmante, "firmar"):
         flash("Elige el médico radiólogo que firmó el informe.", "error")
         return _volver(estudio_id, "informe")
-    if not f or not f.filename:
+    if not archivos:
         flash("Elige el archivo del informe firmado.", "error")
         return _volver(estudio_id, "informe")
-    datos = f.read(MAX_SUBIDA + 1)
-    if len(datos) > MAX_SUBIDA:
-        flash("El archivo supera los 15 MB.", "error")
-        return _volver(estudio_id, "informe")
-    ext = os.path.splitext(f.filename.lower())[1]
-    if datos[:4] == b"%PDF":
-        pdf = datos
-    elif ext in (".jpg", ".jpeg", ".png") or datos[:3] == b"\xff\xd8\xff" or datos[:8] == b"\x89PNG\r\n\x1a\n":
-        try:   # foto o escaneo del informe firmado → PDF
-            from PIL import Image
-            im = Image.open(BytesIO(datos))
-            im.load()
-            buf = BytesIO()
-            im.convert("RGB").save(buf, "PDF", resolution=150.0)
-            pdf = buf.getvalue()
-        except Exception:  # noqa: BLE001
-            flash("No se pudo leer la imagen. Sube el informe en PDF, JPG o PNG.", "error")
+    pdfs = []
+    for f in archivos:
+        datos = f.read(MAX_SUBIDA + 1)
+        if len(datos) > MAX_SUBIDA:
+            flash(f"El archivo «{f.filename}» supera los 15 MB.", "error")
             return _volver(estudio_id, "informe")
-    elif ext in (".doc", ".docx", ".odt"):
-        flash("Sube el informe firmado en PDF: en Word usa «Archivo → Guardar como → PDF».", "error")
-        return _volver(estudio_id, "informe")
+        ext = os.path.splitext(f.filename.lower())[1]
+        if datos[:4] == b"%PDF":
+            pdfs.append(datos)
+        elif ext in (".jpg", ".jpeg", ".png") or datos[:3] == b"\xff\xd8\xff" or datos[:8] == b"\x89PNG\r\n\x1a\n":
+            try:   # foto o escaneo del informe firmado → PDF
+                from PIL import Image
+                im = Image.open(BytesIO(datos))
+                im.load()
+                buf = BytesIO()
+                im.convert("RGB").save(buf, "PDF", resolution=150.0)
+                pdfs.append(buf.getvalue())
+            except Exception:  # noqa: BLE001
+                flash(f"No se pudo leer la imagen «{f.filename}». Sube el informe en PDF, JPG o PNG.", "error")
+                return _volver(estudio_id, "informe")
+        elif ext in (".doc", ".docx", ".odt"):
+            flash(f"«{f.filename}» es Word: súbelo en PDF (en Word usa «Archivo → Guardar como → PDF»).", "error")
+            return _volver(estudio_id, "informe")
+        else:
+            flash(f"Formato no permitido en «{f.filename}». Sube el informe firmado en PDF, JPG o PNG.", "error")
+            return _volver(estudio_id, "informe")
+    if len(pdfs) == 1:
+        pdf = pdfs[0]
     else:
-        flash("Formato no permitido. Sube el informe firmado en PDF, JPG o PNG.", "error")
-        return _volver(estudio_id, "informe")
+        try:
+            from pypdf import PdfReader, PdfWriter
+            w = PdfWriter()
+            for d in pdfs:
+                for pag in PdfReader(BytesIO(d)).pages:
+                    w.add_page(pag)
+            buf = BytesIO()
+            w.write(buf)
+            pdf = buf.getvalue()
+        except Exception:  # noqa: BLE001  (PDF protegido o dañado)
+            flash("No se pudieron juntar los archivos (¿algún PDF está protegido con clave?). Revísalos e inténtalo de nuevo.",
+                  "error")
+            return _volver(estudio_id, "informe")
     # Texto del PDF para búsquedas y vista rápida (si el PDF es un escaneo, puede venir vacío)
     try:
         texto = extraer_texto("informe.pdf", pdf).strip()
@@ -967,8 +987,10 @@ def subir_informe_firmado(estudio_id):
     db.commit()
     inf = informe_por_estudio(estudio_id)
     inf, aviso = validar_informe(inf, firmante_id=firmante["id"])
+    nombres = ", ".join(f.filename[:60] for f in archivos)
     registrar("subir_informe_firmado", f"informe {inf['id']} {inf['paciente_id']} firmado por {firmante['nombre']} "
-                                       f"| {f.filename[:80]}")
-    flash(f"Informe firmado por {firmante['nombre']} subido: el estudio quedó validado." + (f" {aviso}" if aviso else ""),
+                                       f"| {nombres[:300]}")
+    cuantos = f"Informe ({len(archivos)} archivos juntos en un PDF)" if len(archivos) > 1 else "Informe"
+    flash(f"{cuantos} firmado por {firmante['nombre']} subido: el estudio quedó validado." + (f" {aviso}" if aviso else ""),
           "ok")
     return _volver(estudio_id, "informe")
