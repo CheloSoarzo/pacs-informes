@@ -280,15 +280,5 @@
 /* en filas compactas «URGENTE» pasa a un punto rojo (la fila ya va teñida de rojo) */
 :root.dn.dn-compacto table.lista .tag-urgente { font-size: 0; width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: var(--error); display: inline-block; vertical-align: middle; margin-right: 6px; }
 
-/* RAXIO arriba del menú lateral; «by MSC26» queda abajo */
-:root.dn .raxio-marca { order: -1; border-left: 0; padding: 4px 10px 16px; color: var(--texto); }
-:root.dn .raxio-marca .raxio-logo { height: 28px; }
-:root.dn .raxio-marca .raxio-iso { width: 30px; height: 30px; }
-:root.dn.plegado .raxio-marca { justify-content: center; padding: 4px 0 14px; }
-:root.dn.plegado .raxio-marca .raxio-logo { display: none; }
-:root.dn.plegado .raxio-marca .raxio-iso { display: block; }
-@media (max-width: 900px) {
-  :root.dn .raxio-marca { justify-content: center; padding: 4px 0 14px; }
-  :root.dn .raxio-marca .raxio-logo { display: none; }
-  :root.dn .raxio-marca .raxio-iso { display: block; }
-}
+:root.dn .msc26-marca { flex-wrap: nowrap; gap: 6px; }
+:root.dn .msc26-marca .raxio-logo, :root.dn .msc26-marca .msc26-logo { height: 18px; }
