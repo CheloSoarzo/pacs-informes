@@ -42,7 +42,7 @@
 
 <div class="barra-lista">
   <div class="chips">
-    <span class="chip"><b>{{ estudios|length }}</b> estudios</span>
+    <span class="chip"><b>{{ total }}</b> estudios</span>
     {% for k, v in ESTADOS.items() if conteo[k] %}
       <a class="chip estado-{{ k }}" href="?{{ query_sin_estado }}{{ '&' if query_sin_estado }}estado={{ k }}">{{ v }} <b>{{ conteo[k] }}</b></a>
     {% endfor %}
@@ -152,6 +152,23 @@
 </table>
 </div>
 </form>
+{% if total %}
+{% set base = '?' ~ query_sin_pag ~ ('&' if query_sin_pag else '') ~ 'pag=' %}
+<nav class="paginador" aria-label="Páginas de la lista">
+  <span class="suave peq">{{ (pag - 1) * por_pagina + 1 }}–{{ [pag * por_pagina, total]|min }} de {{ total }} estudio{{ 's' if total != 1 }}</span>
+  {% if paginas > 1 %}
+  <span class="pg-botones">
+    {% if pag > 1 %}<a class="btn peq" href="{{ base }}{{ pag - 1 }}" rel="prev">‹ Anterior</a>{% else %}<span class="btn peq deshabilitado" aria-disabled="true">‹ Anterior</span>{% endif %}
+    {% for n in range(1, paginas + 1) %}
+      {% if n == 1 or n == paginas or (n >= pag - 2 and n <= pag + 2) %}
+        {% if n == pag %}<span class="btn peq prim" aria-current="page">{{ n }}</span>{% else %}<a class="btn peq" href="{{ base }}{{ n }}">{{ n }}</a>{% endif %}
+      {% elif n == pag - 3 or n == pag + 3 %}<span class="suave">…</span>{% endif %}
+    {% endfor %}
+    {% if pag < paginas %}<a class="btn peq" href="{{ base }}{{ pag + 1 }}" rel="next">Siguiente ›</a>{% else %}<span class="btn peq deshabilitado" aria-disabled="true">Siguiente ›</span>{% endif %}
+  </span>
+  {% endif %}
+</nav>
+{% endif %}
 
 {# Panel inferior: se abre con un clic en un paciente (static/panel_lista.js) #}
 <section id="panel-estudio" class="panel-lista" hidden aria-label="Vista rápida del estudio">

@@ -605,3 +605,9 @@ a.btn.desactivado { pointer-events: none; opacity: .6; }
 @media (max-width: 1360px) { .msc26-marca .msc26-txt { display: none; } }
 @media (max-width: 900px) { .msc26-marca { padding-left: 10px; } }
 @media print { .msc26-marca { display: none; } }
+
+/* paginador de la lista de estudios (25 por página) */
+.paginador { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 12px 0 4px; }
+.paginador .pg-botones { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.paginador .btn.peq { min-width: 34px; text-align: center; }
+.paginador .deshabilitado { opacity: .45; pointer-events: none; }

@@ -243,6 +243,9 @@ def armar_lista(args):
     return estudios, f
 
 
+POR_PAGINA = 25      # estudios por página en la lista
+
+
 @app.route("/")
 @login_requerido()
 def lista():
@@ -251,11 +254,23 @@ def lista():
     conteo = {k: sum(1 for e in estudios if e["estado"] == k) for k in ESTADOS}
     filtros = get_db().execute("SELECT * FROM filtros WHERE usuario_id=? ORDER BY nombre", (u["id"],)).fetchall()
     query_actual = urlencode({k: v for k, v in request.args.items() if v and k != "refresco"})
-    query_sin_estado = urlencode({k: v for k, v in request.args.items() if v and k not in ("refresco", "estado")})
-    query_sin_orden = urlencode({k: v for k, v in request.args.items() if v and k not in ("refresco", "orden")})
+    # al cambiar estado u orden se vuelve a la página 1
+    query_sin_estado = urlencode({k: v for k, v in request.args.items() if v and k not in ("refresco", "estado", "pag")})
+    query_sin_orden = urlencode({k: v for k, v in request.args.items() if v and k not in ("refresco", "orden", "pag")})
+    query_sin_pag = urlencode({k: v for k, v in request.args.items() if v and k not in ("refresco", "pag")})
+    # páginas de POR_PAGINA estudios (los conteos de arriba siguen siendo del total)
+    total = len(estudios)
+    paginas = max(1, -(-total // POR_PAGINA))
+    try:
+        pag = min(max(1, int(request.args.get("pag", 1))), paginas)
+    except ValueError:
+        pag = 1
+    estudios = estudios[(pag - 1) * POR_PAGINA: pag * POR_PAGINA]
     return render_template("lista.html", estudios=estudios, f=f, modalidades=MODALIDADES, conteo=conteo,
                            radiologos=radiologos(), filtros=filtros, query_actual=query_actual,
-                           query_sin_estado=query_sin_estado, query_sin_orden=query_sin_orden)
+                           query_sin_estado=query_sin_estado, query_sin_orden=query_sin_orden,
+                           query_sin_pag=query_sin_pag, pag=pag, paginas=paginas, total=total,
+                           por_pagina=POR_PAGINA)
 
 
 @app.route("/estudios/acciones", methods=["POST"])
