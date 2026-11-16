@@ -620,3 +620,4 @@ a.btn.desactivado { pointer-events: none; opacity: .6; }
 .pie-raxio:hover { text-decoration: underline; }
 .pie-raxio .raxio-iso { margin: 0 3px 0 2px; }
 a.raxio-en-marca:hover { opacity: .85; }
+.app-icono-muestra img { display: block; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
