@@ -187,41 +187,52 @@ logo_de() {  # dirección del logo de un PACS en el portal (vacía si no tiene)
   [ -f "$f" ] && echo "/logos/$1.png?v=$(stat -c %Y "$f")" || true
 }
 
-# Página del portal común: un botón por centro para pacientes y otro para el personal
+# Página del portal común (ej: examenes.inq.cl): un botón por centro para pacientes y otro para el personal.
+# Mismo estilo que «Mis exámenes» del PACS (franja azul-turquesa y tarjetas). Pie: «Raxio by MSC26».
 generar_portal() {
-  mkdir -p "$INST/caddy/portal/panel" "$INST/caddy/portal/msc26"
+  mkdir -p "$INST/caddy/portal/panel" "$INST/caddy/portal/msc26" "$INST/caddy/portal/raxio"
   cp "$CODIGO/servidor/panel.html" "$INST/caddy/portal/panel/index.html" 2>/dev/null || true
-  cp "$CODIGO"/servidor/marca/* "$INST/caddy/portal/msc26/" 2>/dev/null || true   # logo MSC26 (favicon, firma)
+  cp "$CODIGO"/servidor/marca/* "$INST/caddy/portal/msc26/" 2>/dev/null || true   # logo MSC26 (firma)
+  cp "$CODIGO"/servidor/raxio/* "$INST/caddy/portal/raxio/" 2>/dev/null || true   # RAXIO: favicon y logo del panel
   copiar_logos
   local f="$INST/caddy/portal/index.html" n botones_p="" botones_s=""
   for n in $(instancias); do
     [ "$(leer "$INST/$n/.env" ACTIVO)" = "false" ] && continue
     local c d a l img=""; c="$(leer "$INST/$n/.env" CENTRO_NOMBRE | sed 's/[<>&"]//g')"; d="$(leer "$INST/$n/.env" DOMINIO)"; a="$(leer "$INST/$n/.env" AGENDA_DOMINIO)"
-    l="$(logo_de "$n")"; [ -n "$l" ] && img="<img src=\"$l\" alt=\"\">"
-    [ -n "$a" ] && botones_p="$botones_p<a class=\"b p centro\" href=\"https://$d/paciente\">$img<span>$c</span></a>"
+    l="$(logo_de "$n")"; [ -n "$l" ] && img="<span class=\"lg\"><img src=\"$l\" alt=\"\"></span>"
+    [ -n "$a" ] && botones_p="$botones_p<a class=\"centro\" href=\"https://$d/paciente\">$img<span class=\"nm\">$c<small>Ver mis exámenes</small></span><span class=\"fl\" aria-hidden=\"true\">›</span></a>"
     botones_s="$botones_s<div class=\"fila\"><b>$img$c</b><a class=\"b\" href=\"https://$d/\">PACS e informes</a>"
     [ -n "$a" ] && botones_s="$botones_s<a class=\"b\" href=\"https://$a/\">Agenda</a>"
     botones_s="$botones_s</div>"
   done
   cat > "$f" <<EOF
 <!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Exámenes en línea</title><link rel="icon" href="/msc26/favicon.svg" type="image/svg+xml"><link rel="icon" href="/msc26/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/msc26/apple-touch-icon.png"><style>
-:root{--bg:#f4f6f8;--p:#fff;--t:#18212b;--s:#5b6573;--b:#dce2e8;--a:#1f5fa8}
-@media (prefers-color-scheme:dark){:root{--bg:#0f151b;--p:#16202a;--t:#e6edf3;--s:#93a3b2;--b:#2a3846;--a:#6fb1e0}}
-body{margin:0;background:var(--bg);color:var(--t);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
-main{max-width:520px;margin:0 auto;padding:40px 16px}h1{font-size:24px;margin:0 0 6px;text-align:center}
-p{color:var(--s);text-align:center;margin:0 0 24px}section{background:var(--p);border:1px solid var(--b);border-radius:14px;padding:20px;margin-bottom:16px}
-h2{font-size:16px;margin:0 0 12px}.b{display:block;text-align:center;padding:14px;border-radius:10px;border:1px solid var(--b);color:var(--t);text-decoration:none;font-weight:600;margin-top:8px}
-.b.p{background:var(--a);border-color:var(--a);color:#fff}.fila{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
-.fila b{flex:1 1 100%;display:flex;align-items:center;gap:10px}.fila .b{flex:1;margin:0}small{display:block;color:var(--s);margin-top:12px;font-size:13px}
-img{background:#fff;border-radius:8px;object-fit:contain}.fila b img{height:34px;max-width:90px;padding:3px 5px;border:1px solid var(--b)}
-.b.centro{display:flex;align-items:center;justify-content:center;gap:14px;background:var(--p);color:var(--t);border:2px solid var(--a);padding:12px}
-.b.centro img{height:56px;max-width:150px;padding:4px 6px}.b.centro span{font-size:17px}
-footer{text-align:center;color:var(--s);font-size:12px;margin-top:22px}.msc26-iso{vertical-align:-2px;margin-right:6px}
-</style></head><body><main><h1>Exámenes en línea</h1><p>Elija dónde se realizó su examen</p>
-<section><h2>Pacientes</h2>$botones_p<small>Ingrese con su RUT y la clave de la hoja que recibió en recepción.</small></section>
-<section><h2>Personal</h2>$botones_s<a class="b" href="/panel/">Panel de servidores</a></section>
-<footer><svg class="msc26-iso" width="14" height="14" viewBox="0 0 160 160" aria-hidden="true"><path d="M54.6 134.4 A60 60 0 1 1 105.4 134.4" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round"/><circle cx="80" cy="82" r="18" fill="currentColor"/><rect x="6" y="104" width="148" height="16" rx="8" fill="#14B8A6"/></svg>$(leer "$INST/servidor.env" PORTAL_DOMINIO || true) · Versión $(version_sistema) · © 2026 MSC26</footer></main></body></html>
+<title>Exámenes en línea</title><link rel="icon" href="/raxio/favicon.svg" type="image/svg+xml"><link rel="icon" href="/raxio/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/raxio/apple-touch-icon.png"><style>
+:root{--bg:#F2F6F8;--p:#fff;--t:#10202C;--s:#5B6B78;--b:#DFE7EC;--a:#0F766E;--a2:#14B8A6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.banda{background:radial-gradient(1200px 300px at 80% -40%,rgba(20,184,166,.35),transparent 60%),linear-gradient(135deg,#0F2A3D 0%,#133C52 60%,#0F5E5A 100%);color:#fff;padding:34px 16px 84px;text-align:center}
+.banda h1{font-size:25px;margin:0 0 6px;letter-spacing:-.01em}.banda p{margin:0;opacity:.82;font-size:15px}
+main{max-width:540px;margin:-58px auto 0;padding:0 16px 36px;position:relative}
+section{background:var(--p);border:1px solid var(--b);border-radius:18px;padding:20px;margin-bottom:16px;box-shadow:0 10px 30px rgba(15,42,61,.10),0 1px 3px rgba(15,42,61,.06)}
+h2{font-size:13px;margin:0 0 12px;text-transform:uppercase;letter-spacing:.06em;color:var(--s)}
+.centro{display:flex;align-items:center;gap:14px;padding:12px 14px;margin-top:10px;border:1.5px solid var(--b);border-radius:14px;color:var(--t);text-decoration:none;transition:border-color .15s,box-shadow .15s,transform .15s}
+.centro:hover,.centro:focus-visible{border-color:var(--a2);box-shadow:0 0 0 4px rgba(20,184,166,.15);outline:none}
+.centro .lg{flex:none;display:flex;align-items:center;justify-content:center;width:84px;height:56px;border-radius:10px;background:#fff;border:1px solid var(--b)}
+.centro .lg img{max-width:74px;max-height:46px;object-fit:contain}
+.centro .nm{flex:1;font-weight:700;font-size:16.5px;line-height:1.25}.centro .nm small{display:block;font-weight:500;font-size:13px;color:var(--a);margin-top:2px}
+.centro .fl{font-size:26px;color:var(--a2);line-height:1}
+.ayuda{display:flex;gap:10px;margin-top:14px;padding:12px 14px;border-radius:12px;background:#F4F8F9;border:1px dashed var(--b);font-size:13px;color:var(--s);line-height:1.5}
+.b{display:block;text-align:center;padding:11px;border-radius:10px;border:1px solid var(--b);color:var(--t);text-decoration:none;font-weight:600;font-size:14px;background:#fff}
+.b:hover{border-color:var(--a2)}.fila{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+.fila b{flex:1 1 100%;display:flex;align-items:center;gap:10px;font-size:14.5px}.fila .lg{display:inline-flex;width:56px;height:34px;align-items:center;justify-content:center;border:1px solid var(--b);border-radius:8px;background:#fff}
+.fila .lg img{max-width:48px;max-height:26px;object-fit:contain}.fila .b{flex:1;margin:0}.panel-srv{margin-top:12px}
+.personal{box-shadow:none;background:rgba(255,255,255,.6)}
+footer{text-align:center;color:var(--s);font-size:12px;margin-top:20px}footer a{color:inherit;text-decoration:none;white-space:nowrap}footer a:hover{text-decoration:underline}
+footer .rx{vertical-align:-2px;margin:0 3px 0 2px}
+</style></head><body><header class="banda"><h1>Exámenes en línea</h1><p>Elija dónde se realizó su examen</p></header><main>
+<section><h2>Pacientes</h2>$botones_p<div class="ayuda"><span aria-hidden="true">🔑</span><span>Ingrese con su RUT y la clave de la hoja que recibió en recepción.</span></div></section>
+<section class="personal"><h2>Personal</h2>$botones_s<a class="b panel-srv" href="/panel/">Panel de servidores</a></section>
+<footer>$(leer "$INST/servidor.env" PORTAL_DOMINIO || true) · Versión $(version_sistema) · © 2026 <a href="https://www.raxio.cl" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" class="rx" width="14" height="14" viewBox="-8 -8 263 256" aria-hidden="true"><path fill="currentColor" d="M0 0H138C200 0 232 30 232 86C232 130 207 157 159 165L107 116H134C156 116 168 107 168 88C168 69 156 61 134 61H0V0ZM0 61L61 122V240H0Z"/><path fill="#14B8A6" d="M25 77L147 240H247Z"/></svg>Raxio</a> by MSC26</footer></main></body></html>
 EOF
 }
 

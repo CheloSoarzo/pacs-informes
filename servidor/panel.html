@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Servidores PACS</title>
-<link rel="icon" href="/msc26/favicon.svg" type="image/svg+xml">
-<link rel="icon" href="/msc26/favicon.ico" sizes="any">
-<link rel="apple-touch-icon" href="/msc26/apple-touch-icon.png">
+<link rel="icon" href="/raxio/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/raxio/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/raxio/apple-touch-icon.png">
 <style>
 :root{
   --bg:#eef2f5; --panel:#ffffff; --sunk:#f4f7f9; --line:#d9e1e7; --fg:#17232e; --muted:#5b6b78;
@@ -90,7 +90,7 @@ footer{max-width:1240px;margin:0 auto;padding:0 16px 24px;color:var(--muted);fon
 </head>
 <body>
 <header>
-  <img class="marca" src="/msc26/msc26-logo-horizontal-negativo.svg" alt="MSC26" width="114" height="30">
+  <a href="https://www.raxio.cl" target="_blank" rel="noopener" title="www.raxio.cl"><img class="marca" src="/raxio/raxio-by-msc26-negativo.svg" alt="RAXIO by MSC26" width="102" height="30"></a>
   <div class="sep" aria-hidden="true"></div>
   <div><h1>Servidores PACS</h1><div class="sub">Centros de imágenes</div></div>
   <span class="esp"></span>
@@ -133,7 +133,7 @@ function pintar(){
   const lista=(d.pacs||[]).filter(p=>(inact||p.activo)&&(!q||[p.nombre,p.centro,p.dominio].join(" ").toLowerCase().includes(q)));
   $("#cuantos span").textContent=`${(d.pacs||[]).filter(p=>p.activo).length} PACS activos`;
   $("#generado").textContent=d.generado?`Datos del ${fecha(d.generado)}`:"";
-  $("#firma").innerHTML='<svg class="msc26-iso" width="14" height="14" viewBox="0 0 160 160" aria-hidden="true"><path d="M54.6 134.4 A60 60 0 1 1 105.4 134.4" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round"/><circle cx="80" cy="82" r="18" fill="currentColor"/><rect x="6" y="104" width="148" height="16" rx="8" fill="#14B8A6"/></svg>'; $("#firma").append(`${location.host} · Versión ${d.version||""} · © 2026 MSC26`);
+  $("#firma").textContent=`${location.host} · Versión ${d.version||""} · © 2026 `; {const a=document.createElement("a");a.href="https://www.raxio.cl";a.target="_blank";a.rel="noopener";a.style.color="inherit";a.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" class="rx" width="14" height="14" style="vertical-align:-2px;margin:0 3px 0 2px" viewBox="-8 -8 263 256" aria-hidden="true"><path fill="currentColor" d="M0 0H138C200 0 232 30 232 86C232 130 207 157 159 165L107 116H134C156 116 168 107 168 88C168 69 156 61 134 61H0V0ZM0 61L61 122V240H0Z"/><path fill="#14B8A6" d="M25 77L147 240H247Z"/></svg>';a.append("Raxio");$("#firma").append(a," by MSC26")}
   if(!lista.length){$("#lista").innerHTML=`<div class="vacio">${q?"Ningún PACS coincide con la búsqueda.":"No hay PACS para mostrar."}</div>`;return}
   $("#lista").innerHTML=lista.map((p,i)=>{
     const x=p.datos||{}, total=p.cuota_gb?p.cuota_gb*1e9:(s.disco_total||0), pct=total?Math.min(100,Math.round(p.usado*100/total)):0;
