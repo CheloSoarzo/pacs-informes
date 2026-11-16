@@ -121,13 +121,26 @@ def es_pasaporte(clave):
     return bool(re.fullmatch(r"P[0-9A-Z]{5,}", clave or ""))
 
 
+def rut_valido(r):
+    r = norm_rut(r)
+    if not (7 <= len(r) <= 9) or not r[:-1].isdigit():
+        return False
+    suma, mul = 0, 2
+    for d in reversed(r[:-1]):
+        suma += int(d) * mul
+        mul = 2 if mul == 7 else mul + 1
+    res = 11 - suma % 11
+    return r[-1] == ("0" if res == 11 else "K" if res == 10 else str(res))
+
+
 def doc_norm(valor):
-    """Clave del paciente: su RUT (como siempre) o, si escribieron un pasaporte (con letras), «P» + el pasaporte.
-    Debe ser igual a docNorm() de la agenda. Para cualquier RUT da lo mismo que norm_rut()."""
+    """Clave del paciente: su RUT si es válido; si no, es extranjero y la clave es «P» + el número tal como se escribió
+    (solo letras y números). Debe ser igual a docNorm() de la agenda."""
+    r = norm_rut(valor)
+    if rut_valido(r):
+        return r
     s = re.sub(r"[^0-9A-Z]", "", str(valor or "").upper())
-    if re.fullmatch(r"\d*K?", s) or len(s) < 5:
-        return norm_rut(valor)
-    return "P" + s
+    return "P" + s if len(s) >= 5 else r
 
 
 def doc_ok(clave):
