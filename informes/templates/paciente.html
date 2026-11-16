@@ -37,12 +37,12 @@
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 11v3M8.5 8.5a5 5 0 0 1 8.4 3.5v1.5M7 12v1a5 5 0 0 0 1.2 3.3M12 18c1.6 0 3-.8 3.9-2M4.6 9A8 8 0 0 1 20 12v.5M4 13v-1"/></svg>
         Entrar con huella o cara</button>
       <p class="pt-bio-msg" id="bio-msg" hidden></p>
-      <div class="pt-o"><span>o con tu RUT y clave</span></div>
+      <div class="pt-o"><span>o con tu RUT (o pasaporte) y clave</span></div>
     </div>
     <form method="post" autocomplete="off">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-      <div class="campo"><label for="rut">RUT</label>
-        <input type="text" id="rut" name="rut" inputmode="text" placeholder="12.345.678-9" autofocus required></div>
+      <div class="campo"><label for="rut">RUT o pasaporte</label>
+        <input type="text" id="rut" name="rut" inputmode="text" autocapitalize="characters" spellcheck="false" placeholder="12.345.678-9" autofocus required></div>
       <div class="campo"><label for="clave">Clave</label>
         <input type="text" id="clave" name="clave" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" maxlength="12" required></div>
       <button class="btn prim pt-boton" type="submit">Ver mis exámenes</button>
@@ -66,7 +66,7 @@
   <section class="pt-saludo">
     <div>
       <div class="pt-hola">Hola{% if nombre %}, {{ nombre.split()[0]|capitalize }}{% endif %}</div>
-      <div class="pt-quien">{{ nombre or 'Paciente' }} · RUT {{ rut }}</div>
+      <div class="pt-quien">{{ nombre or 'Paciente' }} · {% if rut.startswith('Pasaporte') %}{{ rut }}{% else %}RUT {{ rut }}{% endif %}</div>
     </div>
     <form method="post" action="{{ url_for('portal_salir') }}">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
@@ -124,7 +124,7 @@
   {% else %}
   <div class="pt-tarjeta pt-vacio">
     <div class="pt-ico-grande" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M3 9h18M8 2v4M16 2v4"/></svg></div>
-    Aún no hay exámenes asociados a su RUT.
+    Aún no hay exámenes asociados a su RUT o pasaporte.
   </div>
   {% endfor %}
   {% endif %}

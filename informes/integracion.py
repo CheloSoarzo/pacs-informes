@@ -116,12 +116,34 @@ def norm_rut(rut):
     return re.sub(r"[^0-9kK]", "", str(rut or "")).upper()
 
 
+def es_pasaporte(clave):
+    """Las claves de pacientes extranjeros sin RUT son «P» + el pasaporte (un RUT nunca lleva letras salvo la K final)."""
+    return bool(re.fullmatch(r"P[0-9A-Z]{5,}", clave or ""))
+
+
+def doc_norm(valor):
+    """Clave del paciente: su RUT (como siempre) o, si escribieron un pasaporte (con letras), «P» + el pasaporte.
+    Debe ser igual a docNorm() de la agenda. Para cualquier RUT da lo mismo que norm_rut()."""
+    s = re.sub(r"[^0-9A-Z]", "", str(valor or "").upper())
+    if re.fullmatch(r"\d*K?", s) or len(s) < 5:
+        return norm_rut(valor)
+    return "P" + s
+
+
+def doc_ok(clave):
+    return len(clave or "") >= 7 or es_pasaporte(clave)
+
+
 def rut_con_guion(rut_norm):
+    if es_pasaporte(rut_norm):
+        return rut_norm[1:]
     return f"{rut_norm[:-1]}-{rut_norm[-1]}" if len(rut_norm) >= 2 else rut_norm
 
 
 def rut_visible(rut_norm):
-    """12345678K → 12.345.678-K"""
+    """12345678K → 12.345.678-K · PAB123456 → Pasaporte AB123456"""
+    if es_pasaporte(rut_norm):
+        return "Pasaporte " + rut_norm[1:]
     if len(rut_norm) < 2:
         return rut_norm
     cuerpo = rut_norm[:-1]
@@ -178,7 +200,8 @@ def recibir_ordenes():
         acc = _txt(o.get("accesion"), 16)
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,16}", acc):
             continue
-        rut_n = norm_rut(o.get("rut_norm") or o.get("rut"))
+        rn_ag = str(o.get("rut_norm") or "")
+        rut_n = rn_ag if re.fullmatch(r"P[0-9A-Z]{5,}|[0-9]*K?", rn_ag) and rn_ag else doc_norm(o.get("rut"))
         examenes = o.get("examenes") if isinstance(o.get("examenes"), list) else []
         fila = {
             "accesion": acc, "cita_id": int(o.get("cita_id") or 0) or None,
@@ -324,15 +347,15 @@ def separar_estudio(db, estudio_id):
 
 def _estudios_del_dia(fecha, rut_norm):
     """Estudios de Orthanc de esa fecha cuyo PatientID es ese RUT (con o sin puntos y guion)."""
-    if len(rut_norm) < 7:
+    if not doc_ok(rut_norm):
         return []
     res = pacs.post_json("/tools/find", {
         "Level": "Study", "Expand": True, "CaseSensitive": False, "Limit": 20,
-        "Query": {"StudyDate": re.sub(r"\D", "", fecha), "PatientID": "*" + "*".join(rut_norm) + "*"},
+        "Query": {"StudyDate": re.sub(r"\D", "", fecha), "PatientID": "*" + "*".join(rut_con_guion(rut_norm).replace("-", "")) + "*"},
         "RequestedTags": ["ModalitiesInStudy"]}) or []
     out = []
     for e in res:
-        if norm_rut(e.get("PatientMainDicomTags", {}).get("PatientID", "")) != rut_norm:
+        if doc_norm(e.get("PatientMainDicomTags", {}).get("PatientID", "")) != rut_norm:
             continue
         mods = (e.get("RequestedTags", {}).get("ModalitiesInStudy") or e.get("MainDicomTags", {}).get("ModalitiesInStudy") or "")
         out.append({"id": e["ID"], "mods": {m for m in mods.split("\\") if m and m not in ("SR", "PR", "KO")}})
@@ -490,7 +513,7 @@ def candidatas(est):
     if len(f) < 8:
         return []
     d = date(int(f[:4]), int(f[4:6]), int(f[6:8]))
-    rut = norm_rut(est.get("paciente_id"))
+    rut = doc_norm(est.get("paciente_id"))
     db = get_db()
     # Citas sin imágenes, y también las ya unidas del mismo paciente (una cita con varios exámenes puede tener
     # varios estudios: este se suma a la misma cita)
@@ -512,7 +535,7 @@ def desde_agenda(accesion):
     if o and not o["estudio_id"]:
         unir_estudios()
         o = db.execute("SELECT rut_norm, estudio_id FROM ordenes WHERE accesion=? AND eliminada=0", (accesion,)).fetchone()
-    if o and len(o["rut_norm"] or "") >= 7:
+    if o and doc_ok(o["rut_norm"]):
         return redirect(url_for("ficha_paciente", rut=rut_con_guion(o["rut_norm"]), acc=accesion))
     if o and o["estudio_id"]:
         return redirect(url_for("estudio", estudio_id=o["estudio_id"]))
@@ -527,12 +550,12 @@ def ficha_paciente(rut):
     unidos por el RUT. Cada usuario ve solo los exámenes que su perfil le permite."""
     from permisos import restringido
     from rutas_trabajo import armar_lista
-    rn = norm_rut(rut)
-    if len(rn) < 7:
+    rn = doc_norm(rut)
+    if not doc_ok(rn):
         abort(404)
     u = usuario_actual()
     estudios, _ = armar_lista({"q": rut_con_guion(rn)})
-    estudios = [e for e in estudios if norm_rut(e["paciente_id"]) == rn]
+    estudios = [e for e in estudios if doc_norm(e["paciente_id"]) == rn]
     estudios.sort(key=lambda e: -(e["llegada"].timestamp() if e["llegada"] else 0))
     db = get_db()
     ordenes = db.execute("SELECT * FROM ordenes WHERE rut_norm=? AND eliminada=0 ORDER BY fecha DESC, hora DESC",
@@ -697,7 +720,7 @@ def portal_ingreso():
     if request.method == "GET" and _rut_paciente():
         return redirect(url_for("portal_examenes"))
     if request.method == "POST":
-        rut = norm_rut(request.form.get("rut"))
+        rut = doc_norm(request.form.get("rut"))
         clave = re.sub(r"\s", "", request.form.get("clave", "")).upper()
         db = get_db()
         ipx = request.remote_addr or ""
@@ -716,7 +739,7 @@ def portal_ingreso():
             auditar(rut, "portal_ingreso", "", ipx)
             return redirect(url_for("portal_examenes"))
         auditar(rut or "?", "portal_fallido", "", ipx)
-        flash("RUT o clave incorrectos. Revisa la hoja que te entregaron en recepción.", "error")
+        flash("RUT/pasaporte o clave incorrectos. Revisa la hoja que te entregaron en recepción.", "error")
     return render_template("paciente.html", modo="ingreso", c=centro_info())
 
 
