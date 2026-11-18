@@ -957,8 +957,10 @@ respaldo_remoto() {
   rclone sync "$INST" "${REMOTO}configuracion" --include "*/.env" --include "/servidor.env" "${opciones[@]}" 2>&1 | tail -3 \
     || fallas=$((fallas+1))
   for n in $(instancias); do
-    # Imágenes: los archivos que guarda Orthanc (el índice va en las bases)
-    [ -d "$INST/$n/data/orthanc" ] && { rclone sync "$INST/$n/data/orthanc" "${REMOTO}$n/imagenes" "${opciones[@]}" 2>&1 \
+    # Imágenes: los archivos que guarda Orthanc (el índice va en las bases).
+    # Solo las que llevan al menos 3 horas guardadas: la compresión de las 02:00 toma estudios con 2 horas sin cambios,
+    # así un estudio que llega de madrugada no se sube sin comprimir; se sube la noche siguiente, ya comprimido.
+    [ -d "$INST/$n/data/orthanc" ] && { rclone sync "$INST/$n/data/orthanc" "${REMOTO}$n/imagenes" --min-age 3h "${opciones[@]}" 2>&1 \
       | tail -3 || fallas=$((fallas+1)); }
     # Informes: audios de los dictados, logos, firmas (la base va aparte, copiada sin cortes)
     [ -d "$INST/$n/data/informes" ] && { rclone sync "$INST/$n/data/informes" "${REMOTO}$n/informes" \
