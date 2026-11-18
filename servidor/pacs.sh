@@ -443,7 +443,7 @@ cmd_portal() {
   [ -f "$INST/servidor.env" ] || cmd_base
   poner "$INST/servidor.env" PORTAL_DOMINIO "$d"
   local n
-  for n in $(instancias); do   # la hoja de retiro imprime la dirección corta: examenes.inq.cl/rancagua
+  for n in $(instancias); do   # la hoja de acceso en línea imprime la dirección corta: examenes.inq.cl/rancagua
     [ -n "$(leer "$INST/$n/.env" AGENDA_DOMINIO)" ] && poner "$INST/$n/.env" PORTAL_URL "https://$d/$n" && dc "$n" up -d agenda
   done
   recargar_caddy
