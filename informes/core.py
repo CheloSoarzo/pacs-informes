@@ -42,6 +42,7 @@ ESTADOS = {
     "pendiente": "Pendiente",
     "dictado": "Por transcribir",
     "borrador": "Borrador",
+    "consulta": "Pendiente de consulta",   # listo, pero hay que aclarar algo con el radiólogo
     "por_validar": "Por validar",
     "firmado": "Validado",
 }

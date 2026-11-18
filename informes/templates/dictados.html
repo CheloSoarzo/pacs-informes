@@ -37,8 +37,11 @@
       <td class="peq">{{ d.dictado_por }}</td>
       <td class="peq mono">{{ d.duracion|mmss }}{% if d.auto_estado == 'listo' %} <span class="badge firmado" title="La IA ya transcribió este audio: la transcripcionista solo corrige">Texto IA</span>{% elif d.auto_estado in ('pendiente','procesando') %} <span class="badge dictado" title="La IA está transcribiendo este audio">IA…</span>{% endif %}</td>
       <td class="peq{% if ver == 'pendientes' %} nowrap tiempo {{ d.alerta }}{% endif %}">{% if ver == 'pendientes' %}{{ d.espera }}{% else %}
+        {% if d.estado in ('pendiente','tomado') and d.estado_informe == 'consulta' %}
+        <span class="badge consulta">Pendiente de consulta</span>
+        {% else %}
         <span class="badge {{ 'dictado' if d.estado in ('pendiente','tomado') else ('firmado' if d.estado_informe == 'firmado' else 'por_validar') }}">
-          {{ {'pendiente':'Por transcribir','tomado':'En transcripción','transcrito':('Validado' if d.estado_informe == 'firmado' else 'Por validar')}[d.estado] }}</span>{% endif %}</td>
+          {{ {'pendiente':'Por transcribir','tomado':'En transcripción','transcrito':('Validado' if d.estado_informe == 'firmado' else 'Por validar')}[d.estado] }}</span>{% endif %}{% endif %}</td>
       <td class="ocultar-movil peq">{{ d.transcriptor or '—' }}</td>
       <td class="nowrap">
         {% if ver == 'pendientes' and puede('transcribir') and not d.transcriptor_id %}

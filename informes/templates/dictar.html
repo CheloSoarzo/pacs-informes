@@ -1,7 +1,7 @@
 {# Pantalla de dictado del radiólogo: datos y grabadora a la izquierda, imágenes en el resto de la pantalla. #}
 {% set firmado = inf and inf.estado == 'firmado' %}
 {% set dict_activos = dictados|selectattr('estado','in',['pendiente','tomado'])|list %}
-{% if inf and inf.estado in ('por_validar','firmado') %}{% set estado = inf.estado %}
+{% if inf and inf.estado in ('por_validar','firmado','consulta') %}{% set estado = inf.estado %}
 {% elif dict_activos %}{% set estado = 'dictado' %}
 {% elif inf %}{% set estado = 'borrador' %}
 {% else %}{% set estado = 'pendiente' %}{% endif %}

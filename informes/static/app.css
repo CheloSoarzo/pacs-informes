@@ -630,3 +630,12 @@ a.raxio-en-marca:hover { opacity: .85; }
 .sf-lista .sf-nombre{display:inline-block;max-width:calc(100% - 80px);vertical-align:bottom;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .sf-lista li::marker{font-weight:700}
 .sf-lista button:disabled{opacity:.35;cursor:default}
+
+/* v1.1.70: informe «Pendiente de consulta» (listo, falta aclarar algo con el radiólogo) */
+.badge.consulta { background: var(--error-bg); color: var(--error); }
+.chip.estado-consulta b { margin-left: 2px; }
+/* v1.1.70: deshacer / rehacer en el editor */
+.btn-formato.f-deshacer, .btn-formato.f-rehacer { font-size: 13.5px; }
+.btn-formato.f-deshacer span, .btn-formato.f-rehacer span { font-size: 16px; }
+.btn-formato:disabled { opacity: .4; cursor: default; background: transparent; }
+.sep-formato { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--borde); }

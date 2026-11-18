@@ -4,7 +4,7 @@
 {% set firmado = inf and inf.estado == 'firmado' %}
 {% set puede_editar = puede('redactar') and not firmado %}
 {% set dict_activos = dictados|selectattr('estado','in',['pendiente','tomado'])|list %}
-{% if inf and inf.estado in ('por_validar','firmado') %}{% set estado = inf.estado %}
+{% if inf and inf.estado in ('por_validar','firmado','consulta') %}{% set estado = inf.estado %}
 {% elif dict_activos %}{% set estado = 'dictado' %}
 {% elif inf %}{% set estado = 'borrador' %}
 {% else %}{% set estado = 'pendiente' %}{% endif %}
@@ -327,6 +327,8 @@
           <button class="btn" id="btn-previa" type="button">Vista previa PDF</button>
           <span class="espacio"></span>
           {% if puede('transcribir') or not puede('firmar') %}
+            <button class="btn" id="btn-pendiente" type="button"
+                    title="El informe está listo, pero hay que aclarar algo con el radiólogo">Guardar como pendiente</button>
             {% if dictante and dictante.id != usuario.id %}
             <button class="btn ok" id="btn-enviar-validacion" type="button" data-firmante="{{ dictante.nombre }}">✓ Terminar y validar ({{ dictante.nombre }})</button>
             {% else %}
@@ -562,6 +564,7 @@
     urls: {
       guardar: {{ url_for('guardar', estudio_id=est.id)|tojson }},
       enviarValidacion: {{ url_for('enviar_validacion', estudio_id=est.id)|tojson }},
+      pendiente: {{ url_for('guardar_pendiente', estudio_id=est.id)|tojson }},
       firmar: {{ url_for('firmar', estudio_id=est.id)|tojson }},
       transcribir: {{ url_for('transcribir')|tojson }},
       subirDictado: {{ url_for('subir_dictado', estudio_id=est.id)|tojson }},

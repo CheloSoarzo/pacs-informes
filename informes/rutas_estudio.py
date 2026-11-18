@@ -189,6 +189,25 @@ def guardar(estudio_id):
     return jsonify(ok=True, guardado=datetime.now().strftime("%H:%M:%S"), estado=inf["estado"])
 
 
+@app.route("/estudio/<estudio_id>/pendiente", methods=["POST"])
+@login_requerido("redactar")
+def guardar_pendiente(estudio_id):
+    """Informe listo, pero hay que aclarar algo con el radiólogo: queda «Pendiente de consulta» (no va a validación).
+    Después la transcriptora lo corrige y lo termina como siempre."""
+    data = request.get_json(silent=True) or {}
+    cuerpo = data.get("cuerpo", "")
+    if len(cuerpo.strip()) < 10:
+        return jsonify(error="El informe está vacío."), 400
+    inf, err = _crear_o_actualizar(estudio_id, cuerpo, data.get("solicitante"))
+    if err:
+        return jsonify(error=err), 409
+    db = get_db()
+    db.execute("UPDATE informes SET estado='consulta' WHERE id=? AND estado != 'firmado'", (inf["id"],))
+    db.commit()
+    registrar("pendiente_consulta", f"informe {inf['id']} {inf['paciente_id']}")
+    return jsonify(ok=True)
+
+
 @app.route("/estudio/<estudio_id>/enviar-validacion", methods=["POST"])
 @login_requerido("redactar")
 def enviar_validacion(estudio_id):

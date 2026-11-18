@@ -274,6 +274,11 @@
                 () => post(cfg.urls.enviarValidacion, datos()))
     : confirmar('El informe pasará a «Por validar» y lo revisará el radiólogo.', 'Enviar a validación', 'prim',
                 () => post(cfg.urls.enviarValidacion, datos())));
+  const pe = $('#btn-pendiente');
+  pe && pe.addEventListener('click', () => confirmar(
+    'El informe quedará <b>«Pendiente de consulta»</b>: se guarda, pero no pasa a validación. ' +
+    'Cuando aclares la duda con el radiólogo, ábrelo, corrígelo si hace falta y termínalo como siempre.',
+    'Sí, dejar pendiente', 'prim', () => post(cfg.urls.pendiente, datos())));
   const fi = $('#btn-firmar');
   fi && fi.addEventListener('click', () => confirmar(
     'Al validar, el informe queda firmado con tu nombre, se bloquea y queda disponible para el paciente.', '✓ Sí, validar y firmar', 'ok',

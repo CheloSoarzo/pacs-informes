@@ -111,7 +111,7 @@ def _en_lotes(ids, sql, extra=()):
 
 
 def estado_de(inf, dictados_pend, u):
-    if inf and inf["estado"] in ("por_validar", "firmado"):
+    if inf and inf["estado"] in ("por_validar", "firmado", "consulta"):
         estado = inf["estado"]
     elif dictados_pend:
         estado = "dictado"

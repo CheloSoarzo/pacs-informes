@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS informes (
     fecha_estudio TEXT, modalidad TEXT, descripcion TEXT, accession TEXT,
     institucion TEXT, solicitante TEXT,
     cuerpo TEXT NOT NULL DEFAULT '',
-    estado TEXT NOT NULL DEFAULT 'borrador',     -- borrador | por_validar | firmado
+    estado TEXT NOT NULL DEFAULT 'borrador',     -- borrador | consulta | por_validar | firmado
     hora_estudio TEXT DEFAULT '',
     transcrito_por INTEGER, transcrito_en TEXT,
     version INTEGER NOT NULL DEFAULT 1,

@@ -124,6 +124,16 @@
       b.innerHTML = `<${e}>${letra}</${e}>`;
       barra.appendChild(b);
     }
+    // Deshacer / Rehacer: historial propio (el del navegador se pierde al insertar plantillas, frases o archivos)
+    const deshacer = document.createElement('button'), rehacer = document.createElement('button');
+    deshacer.type = rehacer.type = 'button';
+    deshacer.className = 'btn-formato f-deshacer'; rehacer.className = 'btn-formato f-rehacer';
+    deshacer.dataset.accion = 'deshacer'; rehacer.dataset.accion = 'rehacer';
+    deshacer.title = 'Deshacer (Ctrl+Z)'; rehacer.title = 'Rehacer (Ctrl+Y)';
+    deshacer.setAttribute('aria-label', 'Deshacer'); rehacer.setAttribute('aria-label', 'Rehacer');
+    deshacer.innerHTML = '<span aria-hidden="true">↶</span> Deshacer'; rehacer.innerHTML = '<span aria-hidden="true">↷</span>';
+    barra.appendChild(deshacer); barra.appendChild(rehacer);
+    const sep = document.createElement('span'); sep.className = 'sep-formato'; barra.appendChild(sep);
     const quitar = document.createElement('button');
     quitar.type = 'button'; quitar.className = 'btn-formato f-quitar'; quitar.dataset.cmd = 'removeFormat';
     quitar.title = 'Quitar formato del texto seleccionado'; quitar.textContent = 'Quitar formato';
@@ -138,7 +148,7 @@
       div, textarea,
       valor: () => valor(div),
       plano: () => plano(div),
-      poner(v) { poner(div, v); sincronizar(); vacio(); },
+      poner(v) { anotar(); poner(div, v); sincronizar(); vacio(); anotar(); },
       focus() { div.focus(); },
       enfocado: () => document.activeElement === div,
       sel() {
@@ -174,8 +184,41 @@
 
     poner(div, textarea.value);
     vacio();
+
+    // ---------- historial para deshacer / rehacer ----------
+    let hist = [valor(div)], pos = 0, tAnotar = null, aplicando = false;
+    function botonesHist() { deshacer.disabled = pos <= 0 && !tAnotar; rehacer.disabled = pos >= hist.length - 1; }
+    function anotar() {                       // guarda el estado actual si cambió
+      clearTimeout(tAnotar); tAnotar = null;
+      const v = valor(div);
+      if (v !== hist[pos]) {
+        hist = hist.slice(0, pos + 1); hist.push(v);
+        if (hist.length > 300) hist.shift();
+        pos = hist.length - 1;
+      }
+      botonesHist();
+    }
+    function irA(nuevo) {
+      anotar();
+      if (nuevo < 0 || nuevo >= hist.length || nuevo === pos) return;
+      const antes = plano(div);
+      pos = nuevo; aplicando = true;
+      poner(div, hist[pos]); sincronizar(); vacio();
+      // el cursor queda donde estuvo el cambio
+      const ahora = plano(div); let i = 0;
+      while (i < antes.length && i < ahora.length && antes[i] === ahora[i]) i++;
+      let fa = antes.length, fb = ahora.length;
+      while (fa > i && fb > i && antes[fa - 1] === ahora[fb - 1]) { fa--; fb--; }
+      div.focus(); ed.seleccionar(fb);
+      div.dispatchEvent(new Event('input', { bubbles: true }));     // guardado automático
+      aplicando = false; botonesHist();
+    }
+    botonesHist();
+
     barra.addEventListener('mousedown', e => e.preventDefault());       // no quitar el cursor del texto
     barra.addEventListener('click', e => {
+      const h = e.target.closest('[data-accion]');
+      if (h) { irA(h.dataset.accion === 'deshacer' ? pos - 1 : pos + 1); return; }
       const b = e.target.closest('.btn-formato'); if (!b) return;
       if (!ed.enfocado()) div.focus();
       document.execCommand(b.dataset.cmd);
@@ -205,9 +248,18 @@
         if (s) ed.seleccionar(s.ini, s.fin);
       }
       sincronizar(); vacio();
+      if (!aplicando) {        // anota al dejar de escribir (cada pausa es un paso del deshacer)
+        clearTimeout(tAnotar); tAnotar = setTimeout(anotar, 700); botonesHist();
+      }
     });
     document.addEventListener('selectionchange', () => { if (ed.enfocado()) estados(); });
     div.addEventListener('keydown', e => {
+      const k = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 'z' || k === 'y')) {
+        e.preventDefault();
+        irA(k === 'y' || e.shiftKey ? pos + 1 : pos - 1);
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && ['b', 'i', 'u'].includes(e.key.toLowerCase())) setTimeout(estados);
     });
     return ed;
