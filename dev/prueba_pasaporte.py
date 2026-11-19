@@ -90,4 +90,16 @@ adm = requests.Session()
 adm.post(P + "/login", data={"usuario": "admin", "clave": "clave-prueba-123"})
 r = adm.get(P + f"/agenda/{c1['accesion']}")
 chk("Ficha del paciente" in r.text, "«Ver en el PACS» abre la ficha del extranjero")
+# v1.1.72: extranjero registrado con la casilla (PAS), examen en un equipo sin worklist: el tecnólogo escribe solo
+# el pasaporte y otro número de acceso. Igual se une solo a su cita (RUT/documento + fecha + equipo)
+c8 = ag.post(A + "/api/citas", json={"fecha": hoy, "hora": "13:00", "equipo": "eco", "paciente": "Eva Muestra",
+                                     "rut": "PAS XY778899", "prevision": "Particular",
+                                     "examenes": [{"nombre": "ECO TIROIDES", "valor": 1}]}).json()
+ag.post(A + f"/api/citas/{c8['id']}/pago", json={"medio": "Efectivo"})
+requests.post("http://localhost:8042/dev/llega", json={"AccessionNumber": "SINWL1", "id": "est-sinwl1",
+                                                       "PatientID": "XY-778899", "PatientName": "MUESTRA^EVA",
+                                                       "Modality": "US", "StudyDescription": "ECO TIROIDES"})
+chk(esperar(lambda: any(c["id"] == c8["id"] and c["pacs_estado"] == "imagenes"
+                        for c in ag.get(A + f"/api/citas?fecha={hoy}").json()), 40),
+    "extranjero (PAS) sin worklist: el estudio se une solo a su cita")
 print("\nTODO OK" if not fallas else f"\n{fallas} FALLA(S)")

@@ -143,6 +143,25 @@ def doc_norm(valor):
     return "P" + s if len(s) >= 5 else r
 
 
+def doc_base(clave):
+    """Extranjero registrado con la casilla «Paciente extranjero» (la agenda guarda «PAS AB123»: clave PPASAB123),
+    pero en un equipo sin worklist el tecnólogo escribe solo AB123 (clave PAB123): es el mismo documento."""
+    clave = clave or ""
+    return "P" + clave[4:] if clave.startswith("PPAS") and len(clave) >= 9 else clave
+
+
+def doc_claves(clave):
+    """Las claves con que puede estar guardado el mismo documento (con y sin «PAS»)."""
+    if not es_pasaporte(clave):
+        return [clave]
+    b = doc_base(clave)
+    return list(dict.fromkeys([clave, b, "PPAS" + b[1:]]))
+
+
+def mismo_doc(a, b):
+    return bool(a) and doc_base(a) == doc_base(b)
+
+
 def doc_ok(clave):
     return len(clave or "") >= 7 or es_pasaporte(clave)
 
@@ -364,11 +383,11 @@ def _estudios_del_dia(fecha, rut_norm):
         return []
     res = pacs.post_json("/tools/find", {
         "Level": "Study", "Expand": True, "CaseSensitive": False, "Limit": 20,
-        "Query": {"StudyDate": re.sub(r"\D", "", fecha), "PatientID": "*" + "*".join(rut_con_guion(rut_norm).replace("-", "")) + "*"},
+        "Query": {"StudyDate": re.sub(r"\D", "", fecha), "PatientID": "*" + "*".join(rut_con_guion(doc_base(rut_norm)).replace("-", "")) + "*"},
         "RequestedTags": ["ModalitiesInStudy"]}) or []
     out = []
     for e in res:
-        if doc_norm(e.get("PatientMainDicomTags", {}).get("PatientID", "")) != rut_norm:
+        if not mismo_doc(doc_norm(e.get("PatientMainDicomTags", {}).get("PatientID", "")), rut_norm):
             continue
         mods = (e.get("RequestedTags", {}).get("ModalitiesInStudy") or e.get("MainDicomTags", {}).get("ModalitiesInStudy") or "")
         out.append({"id": e["ID"], "mods": {m for m in mods.split("\\") if m and m not in ("SR", "PR", "KO")}})
@@ -527,15 +546,17 @@ def candidatas(est):
         return []
     d = date(int(f[:4]), int(f[4:6]), int(f[6:8]))
     rut = doc_norm(est.get("paciente_id"))
+    claves = doc_claves(rut) if rut else [""]
+    en = ",".join("?" * len(claves))
     db = get_db()
     # Citas sin imágenes, y también las ya unidas del mismo paciente (una cita con varios exámenes puede tener
     # varios estudios: este se suma a la misma cita)
     filas = db.execute("""SELECT * FROM ordenes WHERE eliminada=0 AND fecha BETWEEN ? AND ?
-        AND estado_agenda NOT IN ('cancelado') AND (estudio_id='' OR (rut_norm=? AND rut_norm!='') OR fecha=?)
-        ORDER BY (rut_norm=?) DESC, ABS(julianday(fecha)-julianday(?)), hora LIMIT 15""",
-                       ((d - timedelta(days=3)).isoformat(), (d + timedelta(days=3)).isoformat(), rut, d.isoformat(), rut,
-                        d.isoformat())).fetchall()
-    return [dict(o, mismo_rut=(o["rut_norm"] == rut and bool(rut)), n_estudios=len(estudios_de_orden(db, o["accesion"])))
+        AND estado_agenda NOT IN ('cancelado') AND (estudio_id='' OR (rut_norm IN (%s) AND rut_norm!='') OR fecha=?)
+        ORDER BY (rut_norm IN (%s)) DESC, ABS(julianday(fecha)-julianday(?)), hora LIMIT 15""" % (en, en),
+                       ((d - timedelta(days=3)).isoformat(), (d + timedelta(days=3)).isoformat(), *claves, d.isoformat(),
+                        *claves, d.isoformat())).fetchall()
+    return [dict(o, mismo_rut=mismo_doc(o["rut_norm"], rut), n_estudios=len(estudios_de_orden(db, o["accesion"])))
             for o in filas]
 
 
@@ -567,12 +588,13 @@ def ficha_paciente(rut):
     if not doc_ok(rn):
         abort(404)
     u = usuario_actual()
-    estudios, _ = armar_lista({"q": rut_con_guion(rn)})
-    estudios = [e for e in estudios if doc_norm(e["paciente_id"]) == rn]
+    estudios, _ = armar_lista({"q": rut_con_guion(doc_base(rn))})
+    estudios = [e for e in estudios if mismo_doc(doc_norm(e["paciente_id"]), rn)]
     estudios.sort(key=lambda e: -(e["llegada"].timestamp() if e["llegada"] else 0))
     db = get_db()
-    ordenes = db.execute("SELECT * FROM ordenes WHERE rut_norm=? AND eliminada=0 ORDER BY fecha DESC, hora DESC",
-                         (rn,)).fetchall()
+    claves = doc_claves(rn)
+    ordenes = db.execute("SELECT * FROM ordenes WHERE rut_norm IN (%s) AND eliminada=0 ORDER BY fecha DESC, hora DESC"
+                         % ",".join("?" * len(claves)), claves).fetchall()
     por_estudio = {eid: o for o in ordenes for eid in estudios_de_orden(db, o["accesion"])}
     for e in estudios:
         o = por_estudio.get(e["id"])
@@ -774,8 +796,10 @@ def _examenes_de(rut):
     db = get_db()
     hoy = date.today().isoformat()
     out, vistos = [], set()
-    for o in db.execute("""SELECT * FROM ordenes WHERE rut_norm=? AND eliminada=0 AND estado_agenda NOT IN ('cancelado','ausente')
-            ORDER BY fecha DESC, hora DESC LIMIT 60""", (rut,)).fetchall():
+    claves = doc_claves(rut)
+    for o in db.execute("""SELECT * FROM ordenes WHERE rut_norm IN (%s) AND eliminada=0
+            AND estado_agenda NOT IN ('cancelado','ausente') ORDER BY fecha DESC, hora DESC LIMIT 60"""
+                        % ",".join("?" * len(claves)), claves).fetchall():
         eids = estudios_de_orden(db, o["accesion"]) if o["estudio_id"] else []
         # Cita con varios estudios: un informe por estudio (ej. columna, pelvis y rodilla)
         for eid in eids:
@@ -801,12 +825,13 @@ def _examenes_de(rut):
     # Informes validados del mismo paciente que no quedaron unidos a una cita (ej: exámenes anteriores, o la cita no se
     # unió sola con su estudio). Pasaporte / documento extranjero: la clave es «P» + el número, y en las imágenes viene
     # sin la «P»; se busca por el número y se confirma con doc_norm() (así un RUT con los mismos dígitos no calza).
-    numero = rut[1:] if es_pasaporte(rut) else rut
+    numeros = [c[1:] if es_pasaporte(c) else c for c in claves]
     for inf in db.execute("""SELECT id, estudio_id, fecha_estudio, descripcion, firmado_en, paciente_id FROM informes
-            WHERE estado='firmado' AND UPPER(REPLACE(REPLACE(REPLACE(paciente_id,'.',''),'-',''),' ',''))=?
-            ORDER BY fecha_estudio DESC LIMIT 60""", (numero,)).fetchall():
-        if inf["estudio_id"] in vistos or doc_norm(inf["paciente_id"]) != rut:
+            WHERE estado='firmado' AND UPPER(REPLACE(REPLACE(REPLACE(paciente_id,'.',''),'-',''),' ','')) IN (%s)
+            ORDER BY fecha_estudio DESC LIMIT 60""" % ",".join("?" * len(numeros)), numeros).fetchall():
+        if inf["estudio_id"] in vistos or not mismo_doc(doc_norm(inf["paciente_id"]), rut):
             continue
+        vistos.add(inf["estudio_id"])
         f = inf["fecha_estudio"] or ""
         out.append({"fecha": f"{f[:4]}-{f[4:6]}-{f[6:8]}" if len(f) == 8 else f, "hora": "",
                     "examen": inf["descripcion"] or "Examen", "estado": "listo", "estado_txt": "Informe disponible",

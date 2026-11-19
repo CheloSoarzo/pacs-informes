@@ -37,4 +37,15 @@ with app.app_context():
     chk(v("PPASAB123456") == {"RX TORAX"}, "extranjero registrado con PAS ve su informe")
     chk(v(ig.doc_norm("12.345.678-5")) == {"TC CEREBRO"}, "paciente con RUT válido: solo el suyo")
     chk(v(ig.doc_norm("12.345.678-0")) == {"ECO ABDOMINAL"}, "RUT mal escrito (documento): solo el suyo, no el del RUT parecido")
+    # v1.1.72: extranjero registrado con «PAS» (botón de la v1.1.64 o casilla «Paciente extranjero»): la clave es
+    # PPAS…, pero en un equipo sin worklist el tecnólogo escribe solo el número
+    db.execute("""INSERT INTO informes (estudio_id, estudio_uid, paciente_id, fecha_estudio, descripcion, estado, firmado_en)
+                  VALUES ('e5','1.2.5','AB-987654','20261117','ECO TIROIDES','firmado','2026-11-18 12:05')""")
+    db.commit()
+    chk(v("PPAS1111783147") == {"ECO MAMARIA BILATERAL"}, "clave PPAS + número: ve el informe cuyas imágenes traen solo el número")
+    chk(v("PPASAB987654") == {"ECO TIROIDES"}, "clave PPAS + pasaporte con letras: ve su informe")
+    chk(ig.mismo_doc(ig.doc_norm("AB-987654"), "PPASAB987654") and not ig.mismo_doc("P123456780", "123456785"),
+        "mismo documento con y sin PAS; un RUT válido nunca se confunde")
+    chk(ig.doc_claves("PPASAB987654") == ["PPASAB987654", "PAB987654"] and ig.doc_claves("123456785") == ["123456785"],
+        "claves equivalentes del documento")
 print("\nFALLAS:", fallas)
