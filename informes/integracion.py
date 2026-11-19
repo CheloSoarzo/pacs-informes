@@ -798,11 +798,14 @@ def _examenes_de(rut):
             continue
         out.append({"fecha": o["fecha"], "hora": o["hora"], "examen": o["examen"] or "Examen", "estado": estado,
                     "estado_txt": txt, "informe_id": None, "firmado_en": "", "estudio_id": "", "equipo": o["equipo"] or ""})
-    # Informes validados del mismo RUT que no vinieron de la agenda (ej: exámenes anteriores)
-    for inf in db.execute("""SELECT id, estudio_id, fecha_estudio, descripcion, firmado_en FROM informes WHERE estado='firmado'
-            AND UPPER(REPLACE(REPLACE(REPLACE(paciente_id,'.',''),'-',''),' ',''))=? ORDER BY fecha_estudio DESC LIMIT 60""",
-                          (rut,)).fetchall():
-        if inf["estudio_id"] in vistos:
+    # Informes validados del mismo paciente que no quedaron unidos a una cita (ej: exámenes anteriores, o la cita no se
+    # unió sola con su estudio). Pasaporte / documento extranjero: la clave es «P» + el número, y en las imágenes viene
+    # sin la «P»; se busca por el número y se confirma con doc_norm() (así un RUT con los mismos dígitos no calza).
+    numero = rut[1:] if es_pasaporte(rut) else rut
+    for inf in db.execute("""SELECT id, estudio_id, fecha_estudio, descripcion, firmado_en, paciente_id FROM informes
+            WHERE estado='firmado' AND UPPER(REPLACE(REPLACE(REPLACE(paciente_id,'.',''),'-',''),' ',''))=?
+            ORDER BY fecha_estudio DESC LIMIT 60""", (numero,)).fetchall():
+        if inf["estudio_id"] in vistos or doc_norm(inf["paciente_id"]) != rut:
             continue
         f = inf["fecha_estudio"] or ""
         out.append({"fecha": f"{f[:4]}-{f[4:6]}-{f[6:8]}" if len(f) == 8 else f, "hora": "",
