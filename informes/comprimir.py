@@ -32,9 +32,12 @@ DESTINO = os.environ.get("COMPRESION_SINTAXIS", "1.2.840.10008.1.2.4.80")   # JP
 SIN_COMPRIMIR = {"1.2.840.10008.1.2", "1.2.840.10008.1.2.1", "1.2.840.10008.1.2.2", "1.2.840.10008.1.2.1.99"}
 SIN_PERDIDA = {"1.2.840.10008.1.2.4.80", "1.2.840.10008.1.2.4.70", "1.2.840.10008.1.2.4.57", "1.2.840.10008.1.2.4.90"}
 SIN_COMPRIMIR_DESTINO = "1.2.840.10008.1.2.1"      # Explicit VR Little Endian (sin comprimir)
-# Equipos que NO se comprimen (fabricante, separados por coma). Los CR Fujifilm declaran menos bits de los que
-# usan: el visor diagnóstico no los lee bien comprimidos.
-EXCLUIR = [x.strip().upper() for x in os.environ.get("COMPRESION_EXCLUIR", "FUJI").split(",") if x.strip()]
+# Equipos que NO se comprimen (fabricante, separados por coma; por defecto ninguno). Hasta la v1.1.73 se excluía el
+# CR Fujifilm: el problema era la compresión al llegar sin verificar. En la prueba del 20/11/2026 (pacs comprimir
+# rancagua --probar-fuji) sus imágenes comprimidas con verificación se vieron bien en el visor diagnóstico.
+EXCLUIR = [x.strip().upper() for x in os.environ.get("COMPRESION_EXCLUIR", "").split(",") if x.strip()]
+# Equipos cuyas imágenes se arreglan para el visor diagnóstico (campos con formato incorrecto, ej. TargetExposureIndex)
+REPARAR_VISOR = [x.strip().upper() for x in os.environ.get("VISOR_REPARAR", "FUJI").split(",") if x.strip()]
 MAX_BYTES = 400 * 1024 * 1024        # imágenes más grandes se dejan como están (memoria del servidor)
 AHORRO_MINIMO = 0.05                 # si comprimida no ahorra al menos 5 %, no vale la pena
 
@@ -161,8 +164,9 @@ def arreglar_instancia(iid):
 def arreglar_serie(serie_id):
     """Arregla las imágenes de la serie que lo necesiten y renueva su caché. Devuelve cuántas arregló."""
     serie = _get(f"/series/{serie_id}", timeout=60).json()
-    if not excluido(serie.get("MainDicomTags", {}).get("Manufacturer")):
-        return 0                           # solo los equipos con este problema (COMPRESION_EXCLUIR, ej. Fujifilm)
+    fab = (serie.get("MainDicomTags", {}).get("Manufacturer") or "").upper()
+    if not any(x in fab for x in REPARAR_VISOR):
+        return 0                           # solo los equipos con este problema (VISOR_REPARAR, ej. Fujifilm)
     n = 0
     for iid in serie.get("Instances", []):
         try:
@@ -223,7 +227,7 @@ def reparar_visor():
     candado = _candado_reparar(esperar=True)  # noqa: F841 - se suelta al terminar
     n = 0
     for se in _get("/series", params={"expand": "true"}, timeout=300).json():
-        if excluido(se.get("MainDicomTags", {}).get("Manufacturer")):
+        if any(x in (se.get("MainDicomTags", {}).get("Manufacturer") or "").upper() for x in REPARAR_VISOR):
             try:
                 k = arreglar_serie(se["ID"])
                 if k:

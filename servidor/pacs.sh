@@ -39,7 +39,7 @@
 #                              (todos los PACS si no se indica uno). Lo nuevo ya llega comprimido; cron repasa cada noche
 #   pacs comprimir <nombre> --probar   solo el primer estudio pendiente, para ver cuánto ahorra
 #   pacs comprimir --reparar-visor  repara el caché del visor diagnóstico (error «Something went wrong»)
-#   pacs comprimir --descomprimir-fuji devuelve a sin comprimir las imágenes de CR Fujifilm (no se comprimen)
+#   pacs comprimir --descomprimir-fuji devuelve a sin comprimir las imágenes de CR Fujifilm (si hubiera que volver atrás)
 #   pacs comprimir <nombre> --probar-fuji  prueba: comprime (verificado) un solo estudio de CR Fujifilm para revisarlo
 #   pacs auto-actualizar si|no|estado   el servidor revisa GitHub cada 5 minutos y, si hay una versión nueva
 #                              del PACS o de la agenda, se actualiza solo (viene activado)
@@ -732,13 +732,13 @@ cmd_firewall() {
 }
 
 cmd_comprimir() {
-  local objetivo="" extra="" n hubo=""
+  local objetivo="" extra="" entorno="" n hubo=""
   for a in "$@"; do
     case "$a" in
       --probar) extra="--estudios 1";;
       --noche) extra="--desde-horas 2";;    # tarea nocturna: solo exámenes que ya terminaron de llegar
-      --descomprimir-fuji) extra="--descomprimir-excluidos";;   # devuelve a sin comprimir los CR Fujifilm
-      --probar-fuji) extra="--solo-excluidos --estudios 1";;    # prueba: comprime (verificado) un solo estudio CR Fujifilm
+      --descomprimir-fuji) extra="--descomprimir-excluidos"; entorno="-e COMPRESION_EXCLUIR=FUJI";;   # vuelve a sin comprimir los CR Fujifilm
+      --probar-fuji) extra="--solo-excluidos --estudios 1"; entorno="-e COMPRESION_EXCLUIR=FUJI";;   # prueba: un solo estudio CR Fujifilm
       --reparar-visor) extra="--reparar-visor";;   # borra el caché dañado del visor diagnóstico (error al abrir)
       todos) ;;
       *) objetivo="$a";;
@@ -752,7 +752,7 @@ cmd_comprimir() {
     hubo=1
     echo "== $n · $(date '+%d/%m/%Y %H:%M')"
     # shellcheck disable=SC2086
-    docker exec "pacs-$n-informes-1" python comprimir.py $extra || echo "[$n] la compresión no terminó bien"
+    docker exec $entorno "pacs-$n-informes-1" python comprimir.py $extra || echo "[$n] la compresión no terminó bien"
   done
   [ -n "$hubo" ] || error "no existe el PACS «$objetivo» (mira: pacs lista)"
 }

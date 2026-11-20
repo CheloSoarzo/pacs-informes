@@ -294,8 +294,9 @@ ecografías en JPEG) no se tocan.
 - `pacs comprimir` comprime todo lo pendiente de todos los PACS (se puede repetir: lo ya comprimido se salta).
 - No se comprime al llegar (`IngestTranscoding` de Orthanc no verifica y con CR Fujifilm alteraba la imagen):
   la compresión se hace solo con verificación, cada noche.
-- Los equipos de `COMPRESION_EXCLUIR` (por defecto `FUJI`) no se comprimen. `pacs comprimir --descomprimir-fuji`
-  devuelve a sin comprimir (verificado) las imágenes de esos equipos.
+- Desde la v1.1.74 también se comprimen las CR Fujifilm (probadas el 20/11/2026 en el visor diagnóstico). Si se
+  necesitara excluir un equipo, se pone su fabricante en `COMPRESION_EXCLUIR` (ej. `FUJI`); con
+  `pacs comprimir --descomprimir-fuji` las imágenes de esos equipos vuelven a sin comprimir (verificado).
 - Cada noche (01:15) cron repasa con verificación lo que haya quedado sin comprimir. Registro en
   `/var/log/pacs-comprimir.log`.
 
