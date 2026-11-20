@@ -23,6 +23,7 @@ import re
 import secrets
 import sqlite3
 import threading
+import unicodedata
 import uuid
 from datetime import date, datetime, timedelta
 
@@ -300,6 +301,17 @@ def estados_para_agenda():
 FAMILIA = {"tc": {"CT"}, "rx": {"CR", "DX", "DR", "RF", "OT"}, "eco": {"US"}}
 
 
+# Citas que no son un examen sino un complemento del examen de esa visita (se agendan aparte para cobrarlos):
+# «Contraste», «Medio de contraste», «Sedación», «Anestesia», «Insumo». No cuentan al unir la cita con su estudio
+# y en el portal se muestran junto al examen («TC de tórax + Contraste»).
+_COMPLEMENTO = re.compile(r"^((MEDIO|MATERIAL|DOSIS)( DE)? )?CONTRASTE\b|^(SEDACION|ANESTESIA|INSUMOS?)\b")
+
+
+def es_complemento(examen):
+    t = unicodedata.normalize("NFKD", str(examen or "")).encode("ascii", "ignore").decode().upper().strip()
+    return bool(t) and bool(_COMPLEMENTO.match(t))
+
+
 def estudios_de_orden(db, accesion):
     """Todos los estudios unidos a una orden (el primero que llegó va primero)."""
     return [r[0] for r in db.execute("SELECT estudio_id FROM orden_estudios WHERE accesion=? ORDER BY unido_en, rowid",
@@ -433,16 +445,25 @@ def unir_estudios():
                 AND estado_agenda NOT IN ('cancelado','ausente') AND rut_norm!=''""", (hace, hoy.isoformat())).fetchall():
             grupos.setdefault((o["rut_norm"], o["fecha"], o["equipo"]), []).append(o)
         for (rut, fecha, equipo), ordenes in grupos.items():
-            if len(ordenes) != 1:
+            # Las citas de complemento (ej. «Contraste») no cuentan: son parte del examen de esa visita
+            reales = [x for x in ordenes if not es_complemento(x["examen"])]
+            extras = [x for x in ordenes if es_complemento(x["examen"])]
+            if len(reales) != 1:
                 continue        # dos citas del mismo equipo el mismo día: no se adivina, se une a mano
-            o = ordenes[0]
-            if o["estudio_id"] and fecha < reciente:
-                continue
-            fam = FAMILIA.get(equipo, set())
-            for e in _estudios_del_dia(fecha, rut):
-                if e["id"] not in usados and (e["mods"] & fam or not e["mods"]):
-                    _unir(db, o, e["id"], "RUT y fecha")
-                    usados.add(e["id"])
+            o = reales[0]
+            if not (o["estudio_id"] and fecha < reciente):
+                fam = FAMILIA.get(equipo, set())
+                for e in _estudios_del_dia(fecha, rut):
+                    if e["id"] not in usados and (e["mods"] & fam or not e["mods"]):
+                        _unir(db, o, e["id"], "RUT y fecha")
+                        usados.add(e["id"])
+            # el complemento muestra en la agenda el mismo estado que su examen (con imágenes, informe listo)
+            principal = db.execute("SELECT estudio_id FROM ordenes WHERE accesion=?", (o["accesion"],)).fetchone()
+            if principal and principal["estudio_id"]:
+                for x in extras:
+                    if not x["estudio_id"]:
+                        db.execute("UPDATE ordenes SET estudio_id=? WHERE accesion=? AND estudio_id=''",
+                                   (principal["estudio_id"], x["accesion"]))
     except Exception as e:  # noqa: BLE001  (si el PACS no responde, se reintenta en la próxima consulta)
         app.logger.warning("No se pudieron unir estudios con la agenda: %s", e)
     db.commit()
@@ -797,9 +818,13 @@ def _examenes_de(rut):
     hoy = date.today().isoformat()
     out, vistos = [], set()
     claves = doc_claves(rut)
+    complementos = []
     for o in db.execute("""SELECT * FROM ordenes WHERE rut_norm IN (%s) AND eliminada=0
             AND estado_agenda NOT IN ('cancelado','ausente') ORDER BY fecha DESC, hora DESC LIMIT 60"""
                         % ",".join("?" * len(claves)), claves).fetchall():
+        if es_complemento(o["examen"]):
+            complementos.append(o)        # se muestran junto a su examen (ver más abajo)
+            continue
         eids = estudios_de_orden(db, o["accesion"]) if o["estudio_id"] else []
         # Cita con varios estudios: un informe por estudio (ej. columna, pelvis y rodilla)
         for eid in eids:
@@ -813,6 +838,22 @@ def _examenes_de(rut):
                         "informe_id": inf["id"] if listo else None, "firmado_en": inf["firmado_en"] if inf else "",
                         "estudio_id": eid, "equipo": o["equipo"] or ""})
         if eids:
+            continue
+        if o["pagado"] or o["estado_agenda"] in ("llego", "atendido"):
+            estado, txt = "proceso", "Examen realizado · informe en proceso"
+        elif o["fecha"] >= hoy:
+            estado, txt = "agendado", "Agendado"
+        else:
+            continue
+        out.append({"fecha": o["fecha"], "hora": o["hora"], "examen": o["examen"] or "Examen", "estado": estado,
+                    "estado_txt": txt, "informe_id": None, "firmado_en": "", "estudio_id": "", "equipo": o["equipo"] or ""})
+    # Complemento (ej. «Contraste»): junto al examen de ese día y equipo; si no hay examen, como cita propia
+    for o in complementos:
+        nombre = (o["examen"] or "").strip().capitalize()
+        examen = next((e for e in out if e["fecha"] == o["fecha"] and e.get("equipo") == (o["equipo"] or "")), None)
+        if examen:
+            if nombre.lower() not in examen["examen"].lower():
+                examen["examen"] += f" + {nombre}"
             continue
         if o["pagado"] or o["estado_agenda"] in ("llego", "atendido"):
             estado, txt = "proceso", "Examen realizado · informe en proceso"
