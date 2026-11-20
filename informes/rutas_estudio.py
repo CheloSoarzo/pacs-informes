@@ -854,8 +854,9 @@ def datos_paciente(estudio_id):
     nuevo_id = pacs.modificar_estudio(estudio_id, tags, cambios_ids)
     db = get_db()
     for viejo, nuevo in cambios_ids.items():
-        # El PACS le dio otro ID interno (cambió el RUT): se mueve todo lo asociado a cada estudio
-        for tabla in TABLAS_CON_ESTUDIO:
+        # El PACS le dio otro ID interno (cambió el RUT): se mueve todo lo asociado a cada estudio,
+        # también su unión con la cita de la agenda y los accesos de médicos
+        for tabla in TABLAS_CON_ESTUDIO + ("estudio_accesos", "orden_estudios", "ordenes"):
             db.execute(f"UPDATE {tabla} SET estudio_id=? WHERE estudio_id=?", (nuevo, viejo))
     # Los otros exámenes del mismo paciente también cambiaron sus datos: se actualizan sus informes y dictados
     for viejo in otros:

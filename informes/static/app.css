@@ -639,3 +639,6 @@ a.raxio-en-marca:hover { opacity: .85; }
 .btn-formato.f-deshacer span, .btn-formato.f-rehacer span { font-size: 16px; }
 .btn-formato:disabled { opacity: .4; cursor: default; background: transparent; }
 .sep-formato { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--borde); }
+
+/* v1.1.76: aviso de RUT distinto entre las imágenes y la cita */
+.orden-agenda .aviso-rut { color: var(--error); font-weight: 600; }

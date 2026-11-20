@@ -409,6 +409,42 @@ def _estudios_del_dia(fecha, rut_norm):
 _repaso_hecho = False
 
 
+def _palabras(nombre):
+    """Palabras de un nombre sin tildes ni mayúsculas (DICOM «ILLANES LASTRA^IGNACIO» o agenda «Ignacio Illanes Lastra»)."""
+    t = unicodedata.normalize("NFKD", str(nombre or "")).encode("ascii", "ignore").decode().upper()
+    return {w for w in re.split(r"[^A-Z]+", t) if len(w) >= 2}
+
+
+def _unir_por_nombre(db, ordenes, usados):
+    """Estudios con el RUT mal escrito en el equipo (RUT no válido): se unen por nombre + fecha + tipo de equipo,
+    solo si hay una única cita posible sin estudio y todas las palabras del nombre del estudio están en la cita."""
+    por_fecha = {}
+    for o in ordenes:
+        if not o["estudio_id"] and not es_complemento(o["examen"]):
+            por_fecha.setdefault(o["fecha"], []).append(o)
+    for fecha, citas in por_fecha.items():
+        res = pacs.post_json("/tools/find", {"Level": "Study", "Expand": True, "Limit": 200,
+                                             "Query": {"StudyDate": re.sub(r"\D", "", fecha)},
+                                             "RequestedTags": ["ModalitiesInStudy"]}) or []
+        for e in res:
+            if e["ID"] in usados:
+                continue
+            pt = e.get("PatientMainDicomTags", {})
+            pid = pt.get("PatientID", "")
+            if rut_valido(norm_rut(pid)) or not re.fullmatch(r"[\d.\-\s]*\d[\d.\-\s]*[kK]?", pid or ""):
+                continue        # solo RUT mal escritos (números que no son un RUT válido)
+            nombre = _palabras(pt.get("PatientName", ""))
+            if len(nombre) < 2:
+                continue
+            mods = e.get("RequestedTags", {}).get("ModalitiesInStudy") or e.get("MainDicomTags", {}).get("ModalitiesInStudy") or ""
+            mods = {m for m in mods.split("\\") if m and m not in ("SR", "PR", "KO")}
+            posibles = [o for o in citas if not o["estudio_id"] and (mods & FAMILIA.get(o["equipo"], set()) or not mods)
+                        and nombre <= _palabras(o["paciente"])]
+            if len(posibles) == 1:
+                _unir(db, posibles[0], e["ID"], "nombre (el RUT del estudio no es válido)")
+                usados.add(e["ID"])
+
+
 def unir_estudios():
     """Une las órdenes recientes con su estudio en Orthanc.
 
@@ -430,6 +466,17 @@ def unir_estudios():
                          (hace, hoy.isoformat(), reciente)).fetchall()
     usados = _usados(db)
     try:
+        # 0) Al actualizar: citas unidas a un estudio que ya no existe en el PACS (ej. se le corrigió el RUT con una
+        #    versión anterior y el PACS le dio otro ID): se sueltan, y abajo se vuelven a unir con el estudio actual
+        if dias == 30:
+            for x in db.execute("""SELECT x.estudio_id FROM orden_estudios x JOIN ordenes o ON o.accesion=x.accesion
+                    WHERE o.fecha>=?""", (hace,)).fetchall():
+                if pacs.get_json(f"/studies/{x['estudio_id']}") is None:
+                    separar_estudio(db, x["estudio_id"])
+                    usados.discard(x["estudio_id"])
+            revisar = db.execute("""SELECT * FROM ordenes WHERE eliminada=0 AND fecha>=? AND fecha<=?
+                AND estado_agenda NOT IN ('cancelado','ausente') AND (estudio_id='' OR fecha>=?)""",
+                                 (hace, hoy.isoformat(), reciente)).fetchall()
         # 1) Por número de acceso: todos los estudios con ese número quedan unidos a la cita
         for o in revisar[:400]:
             res = pacs.post_json("/tools/find", {"Level": "Study", "Query": {"AccessionNumber": o["accesion"]}, "Limit": 12}) or []
@@ -464,6 +511,9 @@ def unir_estudios():
                     if not x["estudio_id"]:
                         db.execute("UPDATE ordenes SET estudio_id=? WHERE accesion=? AND estudio_id=''",
                                    (principal["estudio_id"], x["accesion"]))
+        # 3) RUT mal escrito en el equipo: por nombre + fecha + equipo (solo con una única cita posible)
+        _unir_por_nombre(db, db.execute("""SELECT * FROM ordenes WHERE eliminada=0 AND fecha>=? AND fecha<=?
+            AND estado_agenda NOT IN ('cancelado','ausente') AND estudio_id=''""", (hace, hoy.isoformat())).fetchall(), usados)
     except Exception as e:  # noqa: BLE001  (si el PACS no responde, se reintenta en la próxima consulta)
         app.logger.warning("No se pudieron unir estudios con la agenda: %s", e)
     db.commit()
@@ -672,6 +722,9 @@ def unir_orden(estudio_id):
 
 
 app.jinja_env.globals["orden_agenda"] = lambda est: orden_de_estudio(est["id"], est.get("accession", "")) if est else None
+# RUT del estudio distinto al de la cita unida (ej. mal escrito en el equipo): el estudio lo avisa para corregirlo
+app.jinja_env.globals["rut_distinto"] = lambda est, o: bool(o and o["rut_norm"] and est and
+                                                           not mismo_doc(doc_norm(est.get("paciente_id", "")), o["rut_norm"]))
 app.jinja_env.globals["citas_candidatas"] = lambda est: candidatas(est) if est and TOKEN else []
 
 

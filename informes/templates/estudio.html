@@ -50,6 +50,10 @@
       <b>{{ orden.examen or '—' }}</b>
       <span class="suave peq">{{ orden.fecha }} {{ orden.hora }}{% if orden.medico %} · Solicita: {{ orden.medico }}{% endif %}{% if orden.prevision %} · {{ orden.prevision }}{% endif %}{% if orden.pagado %} · pagado{% endif %}</span>
       {% if orden.notas %}<span class="peq">Notas de recepción: {{ orden.notas }}</span>{% endif %}
+      {% if rut_distinto(est, orden) %}
+      <span class="peq aviso-rut">⚠ El RUT de las imágenes ({{ est.paciente_id }}) no coincide con el de la cita ({{ orden.rut }}).
+        Corrígelo con «Corregir datos» para que el informe y la ficha queden con el RUT correcto.</span>
+      {% endif %}
       {% if puede('editar_paciente') %}
       <form method="post" action="{{ url_for('unir_orden', estudio_id=est.id) }}" class="fila" style="margin-top:4px">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="quitar">
