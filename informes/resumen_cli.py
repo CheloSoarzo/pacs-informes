@@ -110,6 +110,18 @@ def datos(fecha):
                              "AND estado_agenda NOT IN ('cancelado','ausente')", fecha)
     except Exception as e:  # noqa: BLE001
         out["error_db"] = str(e)[:200]
+    # Compresión de la noche (la escribe comprimir.py) y espacio que ocupan las imágenes
+    try:
+        with open(os.path.join(Config.DATA_DIR, "compresion-ultima.json")) as f:
+            out["compresion"] = json.load(f)
+    except (OSError, ValueError):
+        pass
+    try:
+        st = _get("/statistics")
+        out["imagenes_mb"] = st.get("TotalDiskSizeMB")
+        out["imagenes_n"] = st.get("CountInstances")
+    except Exception:  # noqa: BLE001
+        pass
     return out
 
 
@@ -120,6 +132,42 @@ def _fecha_cl(f):
 
 def _gb(b):
     return f"{(b or 0) / 1e9:,.1f} GB".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _mb(m):
+    """MB → texto corto: 950 MB, 5,2 GB"""
+    m = float(m or 0)
+    t = f"{m / 1024:,.1f} GB" if m >= 1024 else f"{m:,.0f} MB"
+    return t.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _linea_compresion(nom, p, fecha, avisos, lineas):
+    c = p.get("compresion")
+    total = f"imágenes guardadas: {_mb(p['imagenes_mb'])}" if p.get("imagenes_mb") is not None else ""
+    if not c:
+        if total:
+            lineas.append(f"{nom}: {total} · compresión: sin datos todavía")
+        return
+    hecha = (c.get("fecha") or "")[:10]
+    vieja = hecha < date.today().isoformat()      # la compresión corre a las 02:00, antes del correo de las 08:00
+    if c.get("imagenes"):
+        a, d = (c.get("antes") or 0) / 1048576, (c.get("despues") or 0) / 1048576
+        ahorro = round(100 * (1 - d / a)) if a else 0
+        txt = f"compresión de la noche: {c['imagenes']} imágenes de {c.get('estudios', 0)} estudios, " \
+              f"{_mb(a)} → {_mb(d)} (−{ahorro} %)"
+    else:
+        txt = "compresión de la noche: no había imágenes nuevas por comprimir"
+    partes = [txt]
+    if c.get("excluidas"):
+        partes.append(f"sin comprimir a propósito ({', '.join('CR Fujifilm' if x == 'FUJI' else x.title() for x in c.get('excluir') or [])}): "
+                      f"{_mb((c.get('excluidas_bytes') or 0) / 1048576)}")
+    if total:
+        partes.append(total)
+    if c.get("avisos"):
+        partes.append(f"{c['avisos']} imágenes con aviso")
+    if vieja:
+        partes[0] = f"la compresión no corrió anoche (la última fue el {_fecha_cl(hecha)})"
+    (avisos if vieja else lineas).append(f"{nom}: " + " · ".join(partes))
 
 
 def _pesos(n):
@@ -243,6 +291,7 @@ def armar(info):
         if pend:
             lineas.append(f"{nom}: {p.get('dictados_pendientes', 0)} dictados por transcribir · "
                           f"{p.get('por_validar', 0)} informes por validar")
+        _linea_compresion(nom, p, fecha, avisos, lineas)
         if p.get("visor_falla"):
             avisos.append(f"{nom}: {len(p['visor_falla'])} estudios del día que el visor diagnóstico no abre")
         hoy = datetime.strptime(fecha, "%Y-%m-%d").date()

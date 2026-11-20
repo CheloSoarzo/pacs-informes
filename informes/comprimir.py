@@ -19,6 +19,7 @@ Uso (dentro del contenedor de la app de informes; en el servidor: `pacs comprimi
 import argparse
 import fcntl
 import hashlib
+import json
 import os
 import sys
 import time
@@ -305,6 +306,8 @@ def main():
     ap.add_argument("--desde-horas", type=float, default=0, help="solo estudios sin cambios hace al menos N horas")
     ap.add_argument("--descomprimir-excluidos", action="store_true",
                     help="devuelve a sin comprimir las imágenes de los equipos excluidos (ej. Fujifilm)")
+    ap.add_argument("--solo-excluidos", action="store_true",
+                    help="prueba: comprime (verificado) solo imágenes de los equipos excluidos (ej. Fujifilm)")
     ap.add_argument("--reparar-visor", action="store_true",
                     help="solo revisa y repara las imágenes y el caché del visor diagnóstico (no comprime nada)")
     ap.add_argument("--reparar-nuevos", action="store_true",
@@ -334,6 +337,7 @@ def main():
         print(f"No se pudo conectar con el PACS: {e}")
         return 1
     total_antes = total_despues = n_ok = n_ya = n_err = n_est = 0
+    n_excl = bytes_excl = 0       # imágenes de equipos excluidos (ej. CR Fujifilm): se dejan sin comprimir a propósito
     for e in estudios_pendientes(a.desde_horas):
         if a.estudios and n_est >= a.estudios:
             break
@@ -343,8 +347,17 @@ def main():
         instancias = []
         for se in _get(f"/studies/{e['ID']}/series", params={"expand": "true"}, timeout=300).json():
             fuera = excluido(se.get("MainDicomTags", {}).get("Manufacturer"))
-            if a.descomprimir_excluidos == fuera:      # comprimir: los no excluidos; descomprimir: solo los excluidos
+            if a.solo_excluidos:
+                if fuera:
+                    instancias += [{"ID": i, "serie": se["ID"]} for i in se.get("Instances", [])]
+            elif a.descomprimir_excluidos == fuera:      # comprimir: los no excluidos; descomprimir: solo los excluidos
                 instancias += [{"ID": i, "serie": se["ID"]} for i in se.get("Instances", [])]
+            elif fuera:
+                n_excl += len(se.get("Instances", []))
+                try:
+                    bytes_excl += int(_get(f"/series/{se['ID']}/statistics").json().get("DiskSize") or 0)
+                except (requests.RequestException, ValueError):
+                    pass
         series_tocadas = set()
         for inst in instancias:
             try:
@@ -372,7 +385,10 @@ def main():
             n_ok += ok_est
             total_antes += antes_est
             total_despues += despues_est
-            print(f"{nombre or e['ID']}: {ok_est} imágenes · {mb(antes_est)} → {mb(despues_est)}", flush=True)
+            print(f"{nombre or e['ID']}: {ok_est} imágenes · {mb(antes_est)} → {mb(despues_est)}"
+                  + (f" · N° de acceso {tags.get('AccessionNumber') or '(sin número)'} · ábrelo en el visor diagnóstico"
+                     f" para revisarlo (dirección: /estudio/{e['ID']})" if a.solo_excluidos else ""),
+                  flush=True)
     est1 = _get("/statistics").json()
     print("-" * 60)
     try:
@@ -387,6 +403,18 @@ def main():
     print(f"Ya estaban comprimidas o no se achican: {n_ya} · Avisos: {n_err}")
     print(f"Espacio del PACS: {est0.get('TotalDiskSizeMB', '?')} MB → {est1.get('TotalDiskSizeMB', '?')} MB "
           f"· {time.time() - t0:.0f} s")
+    if not a.descomprimir_excluidos and not a.estudios and not a.solo_excluidos:
+        # Resultado para el correo de estado de las 08:00
+        if n_excl:
+            print(f"Sin comprimir a propósito ({', '.join(EXCLUIR)}): {n_excl} imágenes · {mb(bytes_excl)}")
+        try:
+            with open(os.path.join(os.environ.get("DATA_DIR", "/data"), "compresion-ultima.json"), "w") as f:
+                json.dump({"fecha": datetime.now().strftime("%Y-%m-%d %H:%M"), "imagenes": n_ok, "estudios": n_est,
+                           "antes": total_antes, "despues": total_despues, "ya": n_ya, "avisos": n_err,
+                           "excluidas": n_excl, "excluidas_bytes": bytes_excl, "excluir": EXCLUIR,
+                           "pacs_mb": est1.get("TotalDiskSizeMB"), "pacs_imagenes": est1.get("CountInstances")}, f)
+        except OSError as x:
+            print(f"  aviso: no se pudo guardar el resumen de la compresión: {x}")
     return 0
 
 

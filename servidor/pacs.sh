@@ -40,6 +40,7 @@
 #   pacs comprimir <nombre> --probar   solo el primer estudio pendiente, para ver cuánto ahorra
 #   pacs comprimir --reparar-visor  repara el caché del visor diagnóstico (error «Something went wrong»)
 #   pacs comprimir --descomprimir-fuji devuelve a sin comprimir las imágenes de CR Fujifilm (no se comprimen)
+#   pacs comprimir <nombre> --probar-fuji  prueba: comprime (verificado) un solo estudio de CR Fujifilm para revisarlo
 #   pacs auto-actualizar si|no|estado   el servidor revisa GitHub cada 5 minutos y, si hay una versión nueva
 #                              del PACS o de la agenda, se actualiza solo (viene activado)
 #   pacs base                  (interno) crea la red compartida y la entrada web HTTPS
@@ -737,6 +738,7 @@ cmd_comprimir() {
       --probar) extra="--estudios 1";;
       --noche) extra="--desde-horas 2";;    # tarea nocturna: solo exámenes que ya terminaron de llegar
       --descomprimir-fuji) extra="--descomprimir-excluidos";;   # devuelve a sin comprimir los CR Fujifilm
+      --probar-fuji) extra="--solo-excluidos --estudios 1";;    # prueba: comprime (verificado) un solo estudio CR Fujifilm
       --reparar-visor) extra="--reparar-visor";;   # borra el caché dañado del visor diagnóstico (error al abrir)
       todos) ;;
       *) objetivo="$a";;
