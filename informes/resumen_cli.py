@@ -214,7 +214,8 @@ def _caja(nom, c, avisos):
     medios = " · ".join(f"{k} {_pesos(v['monto'])}" for k, v in sorted(c.get("por_medio", {}).items(),
                                                                        key=lambda x: -x[1]["monto"]) if v["monto"])
     prev = ", ".join(f"{k} {v['cantidad']}" for k, v in sorted(c.get("por_prevision", {}).items()))
-    eq = ", ".join(f"{EQUIPOS.get(k, k)} {_pesos(v['monto'])}" for k, v in sorted(c.get("por_equipo", {}).items()))
+    nombres = c.get("nombres") or {}
+    eq = ", ".join(f"{EQUIPOS.get(k) or nombres.get(k) or k} {_pesos(v['monto'])}" for k, v in sorted(c.get("por_equipo", {}).items()))
     out = [f"{nom}: {_pesos(c.get('recaudado'))} recaudado en {c.get('atenciones', 0)} atenciones",
            f"{nom} · por medio de pago: {medios or 'sin montos'}"]
     if eq:
@@ -243,6 +244,21 @@ def _caja(nom, c, avisos):
                           + ", ".join(_fecha_cl(d['fecha'])[:5] for d in sin) + ")")
         if c.get("diferencias"):
             avisos.append(f"{nom}: diferencias de caja en el período por {_pesos(c['diferencias'])}")
+        return out
+    if c.get("cajas"):            # varias cajas, cada una con su cierre
+        for cj in c["cajas"]:
+            n2 = f"{nom} · caja {cj['nombre']}"
+            ci = cj.get("cierre")
+            if ci:
+                dif = ci.get("diferencia") or 0
+                out.append(f"{n2}: {_pesos(cj.get('recaudado'))} · cerrada{(' por ' + ci['por']) if ci.get('por') else ''}"
+                           + (" · sin diferencia" if not dif else f" · diferencia {_pesos(dif)}"))
+                if dif:
+                    avisos.append(f"{n2}: diferencia de caja de {_pesos(dif)} ({'sobra' if dif > 0 else 'falta'} efectivo)"
+                                  + (f" · {ci['observaciones']}" if ci.get("observaciones") else ""))
+            elif cj.get("atenciones"):
+                out.append(f"{n2}: {_pesos(cj.get('recaudado'))} · sin cerrar")
+                avisos.append(f"{n2}: no se cerró (efectivo esperado {_pesos(cj.get('efectivo_esperado'))})")
         return out
     ci = c.get("cierre")
     if ci:
