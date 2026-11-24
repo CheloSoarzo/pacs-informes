@@ -28,8 +28,12 @@ adm.post(A + "/api/usuarios", json={"usuario": "recep", "nombre": "Recepción", 
 us = {u["usuario"]: u for u in adm.get(A + "/api/usuarios").json()}
 chk(us["lector"]["agendas"] == "tc" and us["recep"]["agendas"] == "", "el usuario guarda sus agendas (vacío = todas)")
 
+# Desde la v1.1.66 el RUT es obligatorio y válido para cobrar: cada paciente de prueba lleva uno válido
+RUTS = {"Paciente TC": "12.345.678-5", "Paciente RX": "11.111.111-1"}
+
+
 def cita(h, eq, pac, notas=""):
-    return adm.post(A + "/api/citas", json={"fecha": hoy, "hora": h, "equipo": eq, "paciente": pac, "prevision": "Particular",
+    return adm.post(A + "/api/citas", json={"fecha": hoy, "hora": h, "equipo": eq, "paciente": pac, "rut": RUTS.get(pac, ""), "prevision": "Particular",
                                            "notas": notas, "examenes": [{"nombre": "Examen", "valor": 30000}]}).json()
 
 ctc, crx = cita("09:00", "tc", "Paciente TC", "Trae exámenes previos"), cita("09:15", "rx", "Paciente RX")
