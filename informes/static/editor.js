@@ -279,6 +279,22 @@
     'El informe quedará <b>«Pendiente de consulta»</b>: se guarda, pero no pasa a validación. ' +
     'Cuando aclares la duda con el radiólogo, ábrelo, corrígelo si hace falta y termínalo como siempre.',
     'Sí, dejar pendiente', 'prim', () => post(cfg.urls.pendiente, datos())));
+  // Cancelar borrador: se descarta lo escrito y el estudio vuelve a «Pendiente» (no pide texto mínimo)
+  const cb = $('#btn-cancelar-borrador');
+  cb && cb.addEventListener('click', () => {
+    if (activo) detener();
+    caja.hidden = false; caja.className = 'confirmar';
+    caja.innerHTML = `<p>Se <b>descarta este borrador</b> y el estudio vuelve a quedar pendiente. Lo escrito no se puede recuperar.</p>
+      <div class="fila"><button type="button" class="btn peligro" id="c-si">Sí, cancelar borrador</button>
+      <button type="button" class="btn" id="c-no">Volver</button></div>`;
+    $('#c-no').onclick = () => { caja.hidden = true; };
+    $('#c-si').onclick = async () => {
+      $('#c-si').disabled = true; clearTimeout(temporizador); cambios = false;
+      try { await post(cfg.urls.cancelarBorrador, {}); location.reload(); }
+      catch (e) { caja.className = 'confirmar error'; caja.textContent = e.message; }
+    };
+    $('#c-si').focus();
+  });
   const fi = $('#btn-firmar');
   fi && fi.addEventListener('click', () => confirmar(
     'Al validar, el informe queda firmado con tu nombre, se bloquea y queda disponible para el paciente.', '✓ Sí, validar y firmar', 'ok',

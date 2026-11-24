@@ -74,7 +74,7 @@ def estudio(estudio_id):
         "estudio.html", est=est, inf=inf if (inf and (ve_informe(u, inf) or puede(u, "redactar"))) else None,
         meta=meta, radiologo=radiologo, radiologos=radiologos(), series=series, plantillas=plantillas, dictante=dictante,
         frases=frases, dictados=dictados, notas=notas, entregas=entregas, link=link, url_link=url_link(link),
-        versiones=versiones, firmante=firmante, transcriptor=transcriptor, historial=historial,
+        versiones=versiones, puede_cancelar=_cancelable(inf), firmante=firmante, transcriptor=transcriptor, historial=historial,
         visor_ohif=f"{Config.PACS_PUBLIC_URL}/ohif/viewer?StudyInstanceUIDs={est['uid']}",
         visor_stone=f"{Config.PACS_PUBLIC_URL}/stone-webviewer/index.html?study={est['uid']}",
         whisper=bool(Config.WHISPER_URL), requiere_clave=Config.LINK_REQUIERE_CLAVE,
@@ -179,14 +179,52 @@ def _crear_o_actualizar(estudio_id, cuerpo, solicitante):
     return informe_por_estudio(estudio_id), None
 
 
+def _texto_vacio(cuerpo):
+    """True si el informe no tiene texto (el editor puede mandar solo etiquetas o espacios)."""
+    t = re.sub(r"<[^>]*>", " ", str(cuerpo or "")).replace("&nbsp;", " ")
+    return not t.strip()
+
+
+def _cancelable(inf):
+    """Un borrador se puede cancelar si nunca fue validado: sin versiones anteriores, sin PDF firmado y sin link."""
+    if not inf or inf["estado"] != "borrador" or (inf["archivo"] or ""):
+        return False
+    db = get_db()
+    if db.execute("SELECT 1 FROM informe_versiones WHERE informe_id=?", (inf["id"],)).fetchone():
+        return False
+    return not db.execute("SELECT 1 FROM links WHERE informe_id=?", (inf["id"],)).fetchone()
+
+
 @app.route("/estudio/<estudio_id>/guardar", methods=["POST"])
 @login_requerido("redactar")
 def guardar(estudio_id):
     data = request.get_json(silent=True) or {}
+    # Sin texto no se crea un borrador (abrir el editor y no escribir nada deja el estudio «Pendiente»)
+    if not informe_por_estudio(estudio_id) and _texto_vacio(data.get("cuerpo", "")):
+        estudio_visible(estudio_id)
+        return jsonify(ok=True, guardado=datetime.now().strftime("%H:%M:%S"), estado="pendiente")
     inf, err = _crear_o_actualizar(estudio_id, data.get("cuerpo", ""), data.get("solicitante"))
     if err:
         return jsonify(error=err), 409
     return jsonify(ok=True, guardado=datetime.now().strftime("%H:%M:%S"), estado=inf["estado"])
+
+
+@app.route("/estudio/<estudio_id>/cancelar-borrador", methods=["POST"])
+@login_requerido("redactar")
+def cancelar_borrador(estudio_id):
+    """Descarta un borrador que nunca se validó: el estudio vuelve a «Pendiente» (o «Por transcribir» si tiene
+    dictados, que quedan libres para que cualquiera los tome)."""
+    est = estudio_visible(estudio_id)
+    inf = informe_por_estudio(estudio_id)
+    if not _cancelable(inf):
+        return jsonify(error="Este informe no se puede cancelar: solo se cancelan borradores que nunca se validaron."), 409
+    db = get_db()
+    db.execute("DELETE FROM informes WHERE id=?", (inf["id"],))
+    db.execute("UPDATE dictados SET estado='pendiente', transcriptor_id=NULL, tomado_en=NULL "
+               "WHERE estudio_id=? AND estado='tomado'", (estudio_id,))
+    db.commit()
+    registrar("cancelar_borrador", f"informe {inf['id']} {est['paciente_id']} ({len(inf['cuerpo'] or '')} caracteres)")
+    return jsonify(ok=True)
 
 
 @app.route("/estudio/<estudio_id>/pendiente", methods=["POST"])

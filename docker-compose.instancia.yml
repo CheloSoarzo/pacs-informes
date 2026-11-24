@@ -102,6 +102,9 @@ services:
       # Dirección del PACS para el botón «Ver en el PACS» de la agenda
       PACS_PUBLICO_URL: ${PUBLIC_BASE_URL:-}
       ACCESION_PREFIJO: ${ACCESION_PREFIJO:-AG}
+      # Módulos (ficha clínica, turnos): se encienden desde la agenda con la clave de proveedor
+      CLAVE_PROVEEDOR_HASH: ${CLAVE_PROVEEDOR_HASH:-}
+      VIDEOS_MAX_MB: ${VIDEOS_MAX_MB:-500}
     volumes:
       - ${INSTANCIA_DIR}/data/agenda:/data
     networks:

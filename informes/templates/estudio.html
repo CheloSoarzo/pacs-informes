@@ -328,6 +328,10 @@
         <textarea id="cuerpo" spellcheck="true" lang="es" placeholder="Escribe, dicta o inserta una plantilla.">{{ inf.cuerpo if inf else '' }}</textarea>
         <div class="interino" id="interino" aria-live="polite"></div>
         <div class="fila botones-informe">
+          {% if puede_cancelar %}
+          <button class="btn peligro" id="btn-cancelar-borrador" type="button"
+                  title="Descarta este borrador: el estudio vuelve a quedar pendiente">Cancelar borrador</button>
+          {% endif %}
           <button class="btn" id="btn-previa" type="button">Vista previa PDF</button>
           <span class="espacio"></span>
           {% if puede('transcribir') or not puede('firmar') %}
@@ -569,6 +573,7 @@
       guardar: {{ url_for('guardar', estudio_id=est.id)|tojson }},
       enviarValidacion: {{ url_for('enviar_validacion', estudio_id=est.id)|tojson }},
       pendiente: {{ url_for('guardar_pendiente', estudio_id=est.id)|tojson }},
+      cancelarBorrador: {{ url_for('cancelar_borrador', estudio_id=est.id)|tojson }},
       firmar: {{ url_for('firmar', estudio_id=est.id)|tojson }},
       transcribir: {{ url_for('transcribir')|tojson }},
       subirDictado: {{ url_for('subir_dictado', estudio_id=est.id)|tojson }},

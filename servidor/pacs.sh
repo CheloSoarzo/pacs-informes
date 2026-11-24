@@ -29,6 +29,8 @@
 #   pacs agenda-importar <nombre> <archivo.db>   carga el respaldo de la agenda que estaba en Render
 #   pacs portal <dominio>      página de ingreso común (ej: examenes.inq.cl) con el acceso de pacientes y del personal
 #   pacs panel-clave [usuario] clave del panel de servidores (<portal>/panel): espacio, estudios e informes de cada PACS
+#   pacs clave-proveedor       genera la clave del usuario «raxio» (proveedor) de todas las agendas: entra como
+#                              administrador y es el único que enciende o apaga módulos (ficha clínica, tótem y turnos)
 #   pacs cuota <nombre> <GB>   espacio contratado de un PACS (se muestra en el panel; 0 = sin límite)
 #   pacs estado                actualiza los números del panel (lo hace cron cada 5 min)
 #   pacs dicom-modo <nombre> aetitle|ip   cómo acepta equipos: solo por AE Title (cualquier IP) o por AE Title + IP
@@ -132,13 +134,16 @@ $dom {
 EOF
       local ag; ag="$(leer "$INST/$n/.env" AGENDA_DOMINIO)"
       if [ -n "$ag" ]; then
+        # Con el módulo de turnos encendido se pueden subir videos para la pantalla de llamado
+        local limite=20MB
+        agenda_con_turnos "$n" && limite=600MB
         cat <<EOF
 
 # Agenda: $n
 $ag {
 	encode gzip
 	request_body {
-		max_size 20MB
+		max_size $limite
 	}
 	reverse_proxy $n-agenda:3000
 }
@@ -235,6 +240,17 @@ footer .rx{vertical-align:-2px;margin:0 3px 0 2px}
 <section class="personal"><h2>Personal</h2>$botones_s<a class="b panel-srv" href="/panel/">Panel de servidores</a></section>
 <footer>$(leer "$INST/servidor.env" PORTAL_DOMINIO || true) · Versión $(version_sistema) · © 2026 <a href="https://www.raxio.cl" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" class="rx" width="14" height="14" viewBox="-8 -8 263 256" aria-hidden="true"><path fill="currentColor" d="M0 0H138C200 0 232 30 232 86C232 130 207 157 159 165L107 116H134C156 116 168 107 168 88C168 69 156 61 134 61H0V0ZM0 61L61 122V240H0Z"/><path fill="#14B8A6" d="M25 77L147 240H247Z"/></svg>Raxio</a> by MSC26</footer></main></body></html>
 EOF
+}
+
+# La agenda escribe qué módulos tiene encendidos en data/agenda/modulos.json (al iniciar)
+agenda_con_turnos() { grep -q '"turnos":true' "$INST/$1/data/agenda/modulos.json" 2>/dev/null; }
+firma_modulos() { for n in $(instancias); do printf '%s:' "$n"; cat "$INST/$n/data/agenda/modulos.json" 2>/dev/null || true; done | sha256sum | cut -c1-16; }
+# Si cambió qué agendas tienen turnos, se rehace la configuración del proxy (lo revisa cron cada 5 minutos)
+revisar_modulos() {
+  local f; f="$(firma_modulos)"
+  [ "$f" = "$(cat "$INST/.modulos-firma" 2>/dev/null)" ] && return 0
+  echo "$f" > "$INST/.modulos-firma"
+  recargar_caddy || true
 }
 
 recargar_caddy() {
@@ -411,6 +427,7 @@ cmd_agenda() {
     clave="$(openssl rand -base64 12 | tr -d '/+=')"; poner "$e" AGENDA_ADMIN_CLAVE "$clave"
   fi
   poner "$e" AGENDA_DOMINIO "$d"
+  [ -n "$(leer "$INST/servidor.env" CLAVE_PROVEEDOR_HASH 2>/dev/null || true)" ] && poner "$e" CLAVE_PROVEEDOR_HASH "$(leer "$INST/servidor.env" CLAVE_PROVEEDOR_HASH)"
   dc "$n" up -d --build
   recargar_caddy
   echo
@@ -477,12 +494,41 @@ cmd_estado() {
     printf ']}\n'
   } > "$dir/.estado.json"
   mv "$dir/.estado.json" "$dir/estado.json"
+  revisar_modulos
   # Aviso inmediato (una vez al día) si el disco pasa del 80 %
   if [ "${total:-0}" -gt 0 ] && [ $(( 100 * usado / total )) -ge 80 ] && [ "$(cat /var/lib/pacs-aviso-disco 2>/dev/null)" != "$(date +%F)" ]; then
     date +%F > /var/lib/pacs-aviso-disco
     avisar "Disco del servidor al $(( 100 * usado / total )) %" "El disco del servidor está al $(( 100 * usado / total )) % de su capacidad.
 Conviene agregar un disco lento (HDD) en Vultr y mover las imágenes antiguas antes de que se llene."
   fi
+}
+
+# Usuario «raxio» (proveedor) de las agendas: el servidor genera la clave, la muestra UNA vez y guarda solo su huella
+cmd_clave_proveedor() {
+  local c h n
+  if [ -n "$(leer "$INST/servidor.env" CLAVE_PROVEEDOR_HASH 2>/dev/null || true)" ]; then
+    read -rp "Ya existe una clave de proveedor. ¿Generar una nueva? La anterior dejará de servir (s/n): " c
+    [ "$c" = "s" ] || [ "$c" = "S" ] || { echo "Sin cambios."; return; }
+  fi
+  c="$(openssl rand -base64 30 | tr -dc 'A-Za-z0-9' | cut -c1-20)"
+  [ ${#c} -eq 20 ] || error "no se pudo generar la clave"
+  h="$(printf '%s' "raxio:$c" | sha256sum | cut -d' ' -f1)"
+  touch "$INST/servidor.env"
+  poner "$INST/servidor.env" CLAVE_PROVEEDOR_HASH "$h"
+  for n in $(instancias); do
+    poner "$INST/$n/.env" CLAVE_PROVEEDOR_HASH "$h"
+    if [ -n "$(leer "$INST/$n/.env" AGENDA_DOMINIO)" ] && [ "$(leer "$INST/$n/.env" ACTIVO)" != "false" ]; then
+      dc "$n" up -d agenda >/dev/null && echo "  Agenda de $n: lista"
+    fi
+  done
+  echo
+  echo "=============================================="
+  echo " Usuario de proveedor para todas las agendas"
+  echo "   usuario: raxio"
+  echo "   clave:   $c"
+  echo " Guárdala ahora: no se vuelve a mostrar."
+  echo " En la agenda: Módulos → Encender / Apagar."
+  echo "=============================================="
 }
 
 cmd_panel_clave() {
@@ -1107,6 +1153,7 @@ case "$c" in
   agenda-importar) cmd_agenda_importar "$@";;
   portal) cmd_portal "$@"; cmd_estado;;
   panel-clave) cmd_panel_clave "$@";;
+  clave-proveedor) cmd_clave_proveedor;;
   cuota) cmd_cuota "$@";;
   estado) cmd_estado;;
   dicom-modo) cmd_dicom_modo "$@";;
