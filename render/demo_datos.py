@@ -18,7 +18,7 @@ from pydicom.uid import ExplicitVRLittleEndian, PYDICOM_IMPLEMENTATION_UID, gene
 from werkzeug.security import generate_password_hash
 
 ORTHANC = os.environ.get("ORTHANC_URL", "http://127.0.0.1:8042")
-APP = "http://127.0.0.1:8000"
+APP = os.environ.get("APP_URL", "http://127.0.0.1:8000")
 DB = os.path.join(os.environ.get("DATA_DIR", "/data"), "informes.db")
 
 CT, US, CR = "1.2.840.10008.5.1.4.1.1.2", "1.2.840.10008.5.1.4.1.1.6.1", "1.2.840.10008.5.1.4.1.1.1"
@@ -142,22 +142,25 @@ def torax(lateral):
 
 def cargar_estudios():
     hoy = date.today()
+    # Con DEMO_CENTRO (PACS de demostración en el servidor) todos los estudios son de ese centro
+    c1 = os.environ.get("DEMO_CENTRO", "").strip().upper() or "RANCAGUA"
+    c2 = os.environ.get("DEMO_CENTRO", "").strip().upper() or "INSI"
     f = lambda d: (hoy - timedelta(days=d)).strftime("%Y%m%d")
     estudios = [
         (("PEREZ SOTO^JUAN ANDRES", "12.345.678-5", "19700312", "M"),
-         dict(fecha=f(0), hora="093000", acc="D1001", desc="TC CEREBRO SIN CONTRASTE", centro="RANCAGUA",
+         dict(fecha=f(0), hora="093000", acc="D1001", desc="TC CEREBRO SIN CONTRASTE", centro=c1,
               solicitante="ROJAS^CAROLINA", mod="CT"),
          [("Axial 5 mm", 30, lambda k, t: corte_cerebro(k, t))], CT, dict(ww=80, wc=40)),
         (("SILVA CACERES^ROBERTO", "7.654.321-0", "19550120", "M"),
-         dict(fecha=f(1), hora="174500", acc="D1002", desc="TC ABDOMEN Y PELVIS C/C", centro="INSI",
+         dict(fecha=f(1), hora="174500", acc="D1002", desc="TC ABDOMEN Y PELVIS C/C", centro=c2,
               solicitante="VERA^FELIPE", mod="CT"),
          [("Portal 5 mm", 30, lambda k, t: corte_abdomen(k, t))], CT, dict(ww=400, wc=40)),
         (("GONZALEZ^MARIA JOSE", "9.876.543-2", "19881120", "F"),
-         dict(fecha=f(1), hora="151500", acc="D1003", desc="ECOGRAFIA ABDOMINAL", centro="INSI",
+         dict(fecha=f(1), hora="151500", acc="D1003", desc="ECOGRAFIA ABDOMINAL", centro=c2,
               solicitante="VERA^FELIPE", mod="US"),
          [("Abdomen", 8, lambda k, t: eco(k))], US, {}),
         (("MUÑOZ^CATALINA", "21.111.222-K", "20230105", "F"),
-         dict(fecha=f(2), hora="110000", acc="D1004", desc="RX TORAX PA Y LAT", centro="RANCAGUA",
+         dict(fecha=f(2), hora="110000", acc="D1004", desc="RX TORAX PA Y LAT", centro=c1,
               solicitante="ROJAS^CAROLINA", mod="CR"),
          [("PA", 1, lambda k, t: torax(False)), ("LAT", 1, lambda k, t: torax(True))], CR, dict(ww=4096, wc=2048)),
     ]
@@ -193,7 +196,8 @@ def crear_usuarios():
     usuarios = [
         # usuario, nombre, perfil, título, registro, centros, filtro_solicitante
         ("radiologo", "Dr. Andrés López", "radiologos", "Médico Radiólogo", "Reg. SIS 000000 (demo)", "", ""),
-        ("radiologo_insi", "Dra. Paula Reyes", "radiologos", "Médico Radiólogo", "Reg. SIS 000001 (demo)", "INSI", ""),
+        ("radiologo_insi", "Dra. Paula Reyes", "radiologos", "Médico Radiólogo", "Reg. SIS 000001 (demo)",
+         os.environ.get("DEMO_CENTRO", "").strip().upper() or "INSI", ""),
         ("transcripcionista", "Carla Muñoz", "transcripcionistas", "", "", "", ""),
         ("tecnologo", "TM Daniela Fuentes", "tecnologos", "Tecnóloga Médica", "", "", ""),
         ("secretaria", "Ana Secretaría", "secretarias", "", "", "", ""),

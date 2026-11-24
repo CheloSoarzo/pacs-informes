@@ -105,6 +105,8 @@ services:
       # Módulos (ficha clínica, turnos): se encienden desde la agenda con la clave de proveedor
       CLAVE_PROVEEDOR_HASH: ${CLAVE_PROVEEDOR_HASH:-}
       VIDEOS_MAX_MB: ${VIDEOS_MAX_MB:-500}
+      # Centro de demostración: la agenda carga médicos, pacientes y citas ficticios al encender la ficha clínica
+      DEMO_DATOS: ${DEMO_DATOS:-}
     volumes:
       - ${INSTANCIA_DIR}/data/agenda:/data
     networks:

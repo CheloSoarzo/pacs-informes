@@ -5,6 +5,11 @@
 #   pacs nueva <nombre> [--centro "Nombre visible"] [--dominio pacs.cliente.cl] [--puerto 46430] [--clave X]
 #              [--administra]   (PACS propio: su administrador puede actualizar el servidor desde la web.
 #                                No lo uses en PACS arrendados a terceros)
+#              [--demo]         (centro de DEMOSTRACIÓN para mostrar a clientes: no aparece en el portal común
+#                                de pacientes y su agenda carga médicos y pacientes ficticios)
+#   pacs demo-datos <nombre>   carga en un PACS de demostración 4 estudios de ejemplo y usuarios de prueba
+#   pacs eliminar <nombre>     borra por completo un PACS de DEMOSTRACIÓN (contenedores, datos, respaldos y puerto).
+#                              Los centros reales no se pueden borrar con este comando
 #   pacs lista                 PACS del servidor con su dirección, puerto DICOM, estado y espacio usado
 #   pacs iniciar <nombre>      / pacs detener <nombre>
 #   pacs logs <nombre>         registros de la app de ese PACS
@@ -159,6 +164,7 @@ EOF
       echo "	encode gzip"
       for n in $(instancias); do
         [ -n "$(leer "$INST/$n/.env" AGENDA_DOMINIO)" ] || continue
+        [ "$(leer "$INST/$n/.env" DEMO)" = "true" ] && continue
         echo "	redir /$n https://$(leer "$INST/$n/.env" DOMINIO)/paciente 302"
         echo "	redir /$n/ https://$(leer "$INST/$n/.env" DOMINIO)/paciente 302"
       done
@@ -204,6 +210,7 @@ generar_portal() {
   local f="$INST/caddy/portal/index.html" n botones_p="" botones_s=""
   for n in $(instancias); do
     [ "$(leer "$INST/$n/.env" ACTIVO)" = "false" ] && continue
+    [ "$(leer "$INST/$n/.env" DEMO)" = "true" ] && continue   # la demostración tiene su propia dirección
     local c d a l img=""; c="$(leer "$INST/$n/.env" CENTRO_NOMBRE | sed 's/[<>&"]//g')"; d="$(leer "$INST/$n/.env" DOMINIO)"; a="$(leer "$INST/$n/.env" AGENDA_DOMINIO)"
     l="$(logo_de "$n")"; [ -n "$l" ] && img="<span class=\"lg\"><img src=\"$l\" alt=\"\"></span>"
     [ -n "$a" ] && botones_p="$botones_p<a class=\"centro\" href=\"https://$d/paciente\">$img<span class=\"nm\">$c<small>Ver mis exámenes</small></span><span class=\"fl\" aria-hidden=\"true\">›</span></a>"
@@ -285,7 +292,7 @@ cmd_nueva() {
   local n="${1:-}"; shift || true
   [[ "$n" =~ ^[a-z][a-z0-9-]{1,19}$ ]] || error "nombre inválido: usa minúsculas, números o guiones (2 a 20 letras), ej: rancagua"
   [ -e "$INST/$n" ] && error "ya existe el PACS '$n'"
-  local centro="$n" dominio="" puerto="" clave="" administra=false
+  local centro="$n" dominio="" puerto="" clave="" administra=false demo=false
   while [ $# -gt 0 ]; do
     case "$1" in
       --centro) centro="$2"; shift 2;;
@@ -293,6 +300,7 @@ cmd_nueva() {
       --puerto) puerto="$2"; shift 2;;
       --clave) clave="$2"; shift 2;;
       --administra) administra=true; shift;;
+      --demo) demo=true; shift;;
       *) error "opción desconocida: $1";;
     esac
   done
@@ -307,6 +315,9 @@ cmd_nueva() {
 # PACS "$n" — creado por 'pacs nueva' el $(date '+%F %T')
 INSTANCIA=$n
 ACTIVO=true
+# DEMO=true: centro de demostración (fuera del portal común; la agenda carga datos ficticios)
+DEMO=$demo
+DEMO_DATOS=$demo
 ADMINISTRA_SERVIDOR=$administra
 DOMINIO=$dominio
 PUBLIC_BASE_URL=https://$dominio
@@ -370,6 +381,46 @@ PACS "$n" creado
   Clave inicial:  $clave   (cámbiala al entrar, en Mi cuenta)
   DICOM:          IP $(ip_publica)  puerto $puerto  AE Title $aet
 FIN
+  [ "$demo" = true ] && echo "  Demostración:   carga los estudios de ejemplo con: pacs demo-datos $n"
+  return 0
+}
+
+# Estudios de ejemplo (figuras sintéticas, pacientes ficticios) y usuarios de prueba en un PACS de demostración.
+# Corre en un contenedor temporal de Python (la app no trae numpy) dentro de la red de ese PACS.
+cmd_demo_datos() {
+  local n="${1:-}"; existe "$n"
+  [ "$(leer "$INST/$n/.env" DEMO)" = "true" ] || error "'$n' no es un PACS de demostración (se crea con: pacs nueva $n --demo)"
+  docker run --rm --network "pacs-${n}_default" \
+    -v "$INST/$n/data/informes:/data" -v "$CODIGO/render/demo_datos.py:/demo_datos.py:ro" \
+    -e ORTHANC_URL=http://orthanc:8042 -e APP_URL=http://informes:8000 -e DATA_DIR=/data \
+    -e ADMIN_PASSWORD="$(leer "$INST/$n/.env" ADMIN_PASSWORD)" -e DEMO_CENTRO="$(leer "$INST/$n/.env" CENTRO_NOMBRE)" \
+    python:3.12-slim sh -c "pip install -q --root-user-action=ignore --disable-pip-version-check numpy pydicom requests werkzeug && python /demo_datos.py"
+  echo "Listo: estudios de ejemplo en https://$(leer "$INST/$n/.env" DOMINIO)"
+  echo "Usuarios de prueba (radiologo, transcripcionista, tecnologo, secretaria, derivador): misma clave inicial que admin."
+}
+
+ufw_cerrar() {
+  if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw delete allow "$1/tcp" >/dev/null 2>&1 || true
+  fi
+}
+
+# Borra un PACS de demostración. Por seguridad, solo los creados con --demo y escribiendo su nombre para confirmar.
+cmd_eliminar() {
+  local n="${1:-}" c puerto
+  existe "$n"
+  [ "$(leer "$INST/$n/.env" DEMO)" = "true" ] || error "'$n' no es un PACS de demostración: este comando solo borra demos (para un centro real usa: pacs detener $n)"
+  echo "Se borrará el PACS de demostración '$n' con TODO su contenido: imágenes, informes, agenda y sus respaldos."
+  echo "Espacio que ocupa: $(du -sh "$INST/$n" 2>/dev/null | cut -f1)"
+  read -rp "Para confirmar escribe su nombre ($n): " c
+  [ "$c" = "$n" ] || { echo "Cancelado: no se borró nada."; return 0; }
+  puerto="$(leer "$INST/$n/.env" DICOM_PUERTO_PUBLICO)"
+  dc "$n" down -v --remove-orphans || true
+  rm -rf "${INST:?}/$n" "${RESPALDOS:?}/$n"
+  [ -n "$puerto" ] && ufw_cerrar "$puerto"
+  recargar_caddy
+  cmd_estado >/dev/null 2>&1 || true
+  echo "PACS de demostración '$n' eliminado. Ya puedes borrar sus registros DNS si no los vas a usar."
 }
 
 ufw_abrir() {
@@ -1129,6 +1180,8 @@ c="${1:-}"; shift || true
 case "$c" in
   base) cmd_base;;
   nueva) cmd_nueva "$@";;
+  demo-datos) cmd_demo_datos "$@";;
+  eliminar) cmd_eliminar "$@";;
   lista|"") cmd_lista;;
   iniciar) cmd_iniciar "$@";;
   detener) cmd_detener "$@";;
