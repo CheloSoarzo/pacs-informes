@@ -1003,6 +1003,7 @@ cmd_resumen_caja() {
     for c in $(instancias); do
       [ "$(leer "$INST/$c/.env" ACTIVO)" = "false" ] && continue
       [ -n "$(leer "$INST/$c/.env" AGENDA_DOMINIO)" ] || continue
+      [ "$(leer "$INST/$c/.env" DEMO)" = "true" ] && continue   # la demostración no va en el correo de caja
       local cj; cj="$(timeout 120 docker exec "pacs-$c-agenda-1" node --no-warnings scripts/resumen-caja.js $args 2>/dev/null | tail -n1 || true)"
       case "$cj" in "{"*"}") ;; *) cj='{"error":"sin respuesta de la agenda"}';; esac
       [ $primero = 1 ] || printf ','; primero=0

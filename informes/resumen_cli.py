@@ -202,6 +202,11 @@ def _texto_deposito(tj):
             + f" → debería depositarse {_pesos(tj.get('neto'))} " + ("en " if len(deps) > 3 else "el ") + f"{cuando} (aproximado)")
 
 
+def _total_dia(c):
+    """Total del día: lo recaudado en caja más lo que bonifican los bonos (Fonasa/isapre)."""
+    return (c.get("recaudado") or 0) + (c.get("bonificacion") or 0)
+
+
 def _caja(nom, c, avisos):
     """Líneas de caja de un centro (y avisos si la caja no se cerró o hay diferencia)."""
     if not c:
@@ -211,24 +216,25 @@ def _caja(nom, c, avisos):
         return []
     if not c.get("atenciones") and not c.get("cierre"):
         return [f"{nom}: sin pagos registrados"]
-    medios = " · ".join(f"{k} {_pesos(v['monto'])}" for k, v in sorted(c.get("por_medio", {}).items(),
-                                                                       key=lambda x: -x[1]["monto"]) if v["monto"])
+    # Total del día y su desglose: cada medio de pago y los bonos (la suma da el total)
+    desglose = [(k, v["monto"]) for k, v in sorted(c.get("por_medio", {}).items(), key=lambda x: -x[1]["monto"]) if v["monto"]]
+    if c.get("bonificacion"):
+        desglose.append(("Bonos (bonificación)", c.get("bonificacion")))
     prev = ", ".join(f"{k} {v['cantidad']}" for k, v in sorted(c.get("por_prevision", {}).items()))
     nombres = c.get("nombres") or {}
-    eq = ", ".join(f"{EQUIPOS.get(k) or nombres.get(k) or k} {_pesos(v['monto'])}" for k, v in sorted(c.get("por_equipo", {}).items()))
-    out = [f"{nom}: {_pesos(c.get('recaudado'))} recaudado en {c.get('atenciones', 0)} atenciones",
-           f"{nom} · por medio de pago: {medios or 'sin montos'}"]
+    eq = ", ".join(f"{EQUIPOS.get(k) or nombres.get(k) or k} {_pesos((v.get('monto') or 0) + (v.get('bonificacion') or 0))}"
+                   for k, v in sorted(c.get("por_equipo", {}).items()))
+    out = [f"{nom}: Total del día {_pesos(_total_dia(c))} en {c.get('atenciones', 0)} atenciones"]
+    out += [f"{nom} ·   • {k}: {_pesos(m)}" for k, m in desglose]
+    if c.get("descuentos"):
+        out.append(f"{nom} · descuentos aplicados: {_pesos(c.get('descuentos'))} (ya restados del total)")
     if eq:
         out.append(f"{nom} · por equipo: {eq}")
     if prev:
-        out.append(f"{nom} · previsión: {prev} · bonificación {_pesos(c.get('bonificacion'))}"
-                   + (f" · descuentos {_pesos(c.get('descuentos'))}" if c.get("descuentos") else ""))
+        out.append(f"{nom} · previsión: {prev}")
     ctr = c.get("contraste") or {}
     if ctr.get("cantidad"):
-        out.append(f"{nom} · medio de contraste: {ctr['cantidad']} · {_pesos(ctr.get('monto'))} (incluido en lo recaudado)")
-    ctr = c.get("contraste") or {}
-    if ctr.get("cantidad"):
-        out.append(f"{nom} · medio de contraste: {ctr['cantidad']} · {_pesos(ctr.get('monto'))} (incluido en lo recaudado)")
+        out.append(f"{nom} · medio de contraste: {ctr['cantidad']} · {_pesos(ctr.get('monto'))} (incluido en el total)")
     tj = c.get("tarjetas")
     if tj and tj.get("neto"):
         out.append(f"{nom} · {_texto_deposito(tj)}")
@@ -323,7 +329,7 @@ def armar(info):
     texto = f"Estado de los sistemas · {_fecha_cl(fecha)}\n\n" + \
         "".join(f"⚠️ {a}\n" for a in avisos) + "".join(f"✅ {x}\n" for x in lineas) + \
         (("\nCaja\n" + "".join(f"💵 {x}\n" for x in caja)) if caja else "") + \
-        f"\nVersión {info.get('version', '')} · © MSC26\n"
+        f"\nVersión {info.get('version', '')} · © 2026 Raxio by MSC26\n"
     filas = "".join(f'<tr><td style="padding:6px 8px;vertical-align:top">⚠️</td><td style="padding:6px 8px;color:#9A3412">'
                     f'<b>{html.escape(a)}</b></td></tr>' for a in avisos) + \
         "".join(f'<tr><td style="padding:6px 8px;vertical-align:top">✅</td><td style="padding:6px 8px">{html.escape(x)}</td></tr>'
@@ -335,7 +341,7 @@ def armar(info):
                  + "".join(f'<tr><td style="padding:5px 8px;vertical-align:top">💵</td><td style="padding:5px 8px">{html.escape(x)}</td></tr>'
                            for x in caja) + '</table>' if caja else '') +
               f'<p style="color:#64748B;font-size:12px;margin-top:16px">Versión {html.escape(info.get("version", ""))}'
-              f' · © MSC26</p></div>')
+              f' · © 2026 Raxio by MSC26</p></div>')
     return asunto, texto, cuerpo
 
 
@@ -357,6 +363,17 @@ def _titulos_caja(info):
     return f"Caja del día · {_fecha_cl(fecha)}", f"Caja {_fecha_cl(fecha)}", f"caja-{fecha}.pdf"
 
 
+def _fila_caja(t):
+    """Fila del correo de caja: el total destacado y el desglose (efectivo, débito, bonos…) con sangría."""
+    if t.startswith("Total del día"):
+        return f'<tr><td style="padding:6px 8px;font-size:16px"><b>{html.escape(t)}</b></td></tr>'
+    if t.startswith("• "):
+        k, _, v = t[2:].partition(": ")
+        return (f'<tr><td style="padding:2px 8px 2px 28px"><span style="display:inline-block;min-width:190px">{html.escape(k)}</span>'
+                f'<b>{html.escape(v)}</b></td></tr>')
+    return f'<tr><td style="padding:4px 8px;color:#475569">{html.escape(t)}</td></tr>'
+
+
 def armar_caja(info):
     """(asunto, texto, html) del correo de caja de las 20:00: la caja del día de cada centro."""
     fecha = info.get("fecha", date.today().isoformat())
@@ -365,27 +382,26 @@ def armar_caja(info):
         nom = p.get("centro") or "Centro"
         lineas = _caja(nom, p.get("caja"), avisos)
         c = p.get("caja") or {}
-        total += c.get("recaudado") or 0
+        total += _total_dia(c)
         aten += c.get("atenciones") or 0
         if lineas:
             bloques.append((nom, lineas))
     titulo, corto, _ = _titulos_caja(info)
     asunto = (f"⚠️ {corto} · {len(avisos)} aviso{'s' if len(avisos) != 1 else ''}" if avisos
               else f"💵 {corto}") + f" · {_pesos(total)}"
-    texto = f"{titulo}\n\nTotal de los centros: {_pesos(total)} en {aten} atenciones\n\n" + \
+    texto = f"{titulo}\n\nTotal del día de los centros: {_pesos(total)} en {aten} atenciones\n\n" + \
         "".join(f"⚠️ {a}\n" for a in avisos) + \
         "".join("\n" + "".join(f"💵 {x}\n" for x in ls) for _, ls in bloques) + \
-        f"\nVersión {info.get('version', '')} · © MSC26\n"
+        f"\nVersión {info.get('version', '')} · © 2026 Raxio by MSC26\n"
     filas_av = "".join(f'<tr><td style="padding:6px 8px">⚠️</td><td style="padding:6px 8px;color:#9A3412"><b>'
                        f'{html.escape(a)}</b></td></tr>' for a in avisos)
     cuerpo = (f'<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;font-size:15px;color:#1E293B;max-width:640px">'
               f'<h2 style="font-size:18px;margin:0 0 4px">{html.escape(titulo)}</h2>'
-              f'<p style="margin:0 0 12px;font-size:16px">Total de los centros: <b>{_pesos(total)}</b> en {aten} atenciones</p>'
+              f'<p style="margin:0 0 12px;font-size:16px">Total del día de los centros: <b>{_pesos(total)}</b> en {aten} atenciones</p>'
               + (f'<table style="border-collapse:collapse;width:100%">{filas_av}</table>' if avisos else '')
               + "".join(f'<h3 style="font-size:16px;margin:16px 0 4px">{html.escape(nom)}</h3><table style="border-collapse:collapse;width:100%">'
-                        + "".join(f'<tr><td style="padding:4px 8px">{html.escape(x.split(nom, 1)[-1].lstrip(" ·:"))}</td></tr>'
-                                  for x in ls) + '</table>' for nom, ls in bloques)
-              + f'<p style="color:#64748B;font-size:12px;margin-top:16px">Versión {html.escape(info.get("version", ""))} · © MSC26</p></div>')
+                        + "".join(_fila_caja(x.split(nom, 1)[-1].lstrip(" ·:")) for x in ls) + '</table>' for nom, ls in bloques)
+              + f'<p style="color:#64748B;font-size:12px;margin-top:16px">Versión {html.escape(info.get("version", ""))} · © 2026 Raxio by MSC26</p></div>')
     return asunto, texto, cuerpo
 
 
@@ -406,10 +422,10 @@ def pdf_caja(info):
           "c": ParagraphStyle("c", fontName="Helvetica", fontSize=8, leading=9.5),
           "a": ParagraphStyle("a", fontName="Helvetica-Bold", fontSize=9.5, leading=12, textColor=ROJO)}
     e = lambda x: html.escape(str(x or ""))  # noqa: E731
-    total = sum((p.get("caja") or {}).get("recaudado") or 0 for p in info.get("pacs", []))
+    total = sum(_total_dia(p.get("caja") or {}) for p in info.get("pacs", []))
     aten = sum((p.get("caja") or {}).get("atenciones") or 0 for p in info.get("pacs", []))
     flow = [Paragraph(e(titulo_doc), st["t"]),
-            Paragraph(f"Total de los centros: <b>{_pesos(total)}</b> en {aten} atenciones", st["n"])]
+            Paragraph(f"Total del día de los centros: <b>{_pesos(total)}</b> en {aten} atenciones (recaudado en caja + bonos)", st["n"])]
 
     def tabla(filas, anchos, cab=True, num_desde=None, estilos=()):
         t = Table(filas, colWidths=anchos, repeatRows=1 if cab else 0, hAlign="LEFT")
@@ -442,11 +458,10 @@ def pdf_caja(info):
             ultima = ["Efectivo contado", _pesos(ci["efectivo_contado"]) if ci else "caja sin cerrar",
                       "Diferencia", _pesos(ci["diferencia"]) if ci else "—"]
         ctr = c.get("contraste") or {}
-        ctr = c.get("contraste") or {}
-        res = [["Atenciones", c.get("atenciones", 0), "Valor total", _pesos(c.get("valor"))],
+        res = [["Atenciones", c.get("atenciones", 0), "Total del día", _pesos(_total_dia(c))],
                ["Recaudado", _pesos(c.get("recaudado")), "Bonificación", _pesos(c.get("bonificacion"))],
                ["Efectivo esperado", _pesos(c.get("efectivo_esperado")), "Descuentos", _pesos(c.get("descuentos"))],
-               ultima] + ([["Medio de contraste", f"{ctr['cantidad']} · {_pesos(ctr.get('monto'))}", "", ""]] if ctr.get("cantidad") else []) + ([["Medio de contraste", f"{ctr['cantidad']} · {_pesos(ctr.get('monto'))}", "", ""]] if ctr.get("cantidad") else [])
+               ultima] + ([["Medio de contraste", f"{ctr['cantidad']} · {_pesos(ctr.get('monto'))}", "", ""]] if ctr.get("cantidad") else [])
         flow.append(tabla(res, [38 * mm, 32 * mm, 30 * mm, 32 * mm], cab=False,
                           estilos=[("FONT", (0, 0), (0, -1), "Helvetica-Bold", 8.5), ("FONT", (2, 0), (2, -1), "Helvetica-Bold", 8.5),
                                    ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("ALIGN", (3, 0), (3, -1), "RIGHT")]))
@@ -522,12 +537,12 @@ def pdf_caja(info):
     def pie(canvas, doc):
         canvas.setFont("Helvetica", 7.5)
         canvas.setFillColor(colors.HexColor("#64748B"))
-        canvas.drawString(12 * mm, 8 * mm, f"{titulo_doc} · versión {info.get('version', '')} · © MSC26")
+        canvas.drawString(12 * mm, 8 * mm, f"{titulo_doc} · versión {info.get('version', '')} · © 2026 Raxio by MSC26")
         canvas.drawRightString(landscape(A4)[0] - 12 * mm, 8 * mm, f"Página {doc.page}")
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm,
-                            bottomMargin=14 * mm, title=titulo_doc, author="© MSC26")
+                            bottomMargin=14 * mm, title=titulo_doc, author="© 2026 Raxio by MSC26")
     doc.build(flow, onFirstPage=pie, onLaterPages=pie)
     return buf.getvalue()
 
@@ -558,11 +573,11 @@ def main():
             print(f"Caja enviada a {a.para}: {asunto}")
         elif a.accion == "aviso":
             texto = sys.stdin.read().strip()
-            correo.enviar_mensaje(a.para, f"⚠️ {a.asunto}", texto + "\n\n© MSC26", nombre_remitente="Sistemas HISRIS")
+            correo.enviar_mensaje(a.para, f"⚠️ {a.asunto}", texto + "\n\n© 2026 Raxio by MSC26", nombre_remitente="Sistemas HISRIS")
             print(f"Aviso enviado a {a.para}")
         elif a.accion == "probar":
             correo.enviar_mensaje(a.para, "✅ Prueba del correo de los sistemas",
-                                  "El correo saliente del PACS funciona. Desde ahora te llegará el resumen diario.\n\n© MSC26",
+                                  "El correo saliente del PACS funciona. Desde ahora te llegará el resumen diario.\n\n© 2026 Raxio by MSC26",
                                   nombre_remitente="Sistemas HISRIS")
             print(f"Correo de prueba enviado a {a.para}")
     except correo.CorreoError as e:
