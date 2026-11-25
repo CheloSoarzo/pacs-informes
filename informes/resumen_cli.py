@@ -226,6 +226,9 @@ def _caja(nom, c, avisos):
                    for k, v in sorted(c.get("por_equipo", {}).items()))
     out = [f"{nom}: Total del día {_pesos(_total_dia(c))} en {c.get('atenciones', 0)} atenciones"]
     out += [f"{nom} ·   • {k}: {_pesos(m)}" for k, m in desglose]
+    bx = c.get("bonos_externos") or {}
+    if bx.get("cantidad"):
+        out.append(f"{nom} · de los bonos, {bx['cantidad']} externo{'s' if bx['cantidad'] != 1 else ''} (comprado{'s' if bx['cantidad'] != 1 else ''} en Fonasa): {_pesos(bx.get('monto'))}")
     if c.get("descuentos"):
         out.append(f"{nom} · descuentos aplicados: {_pesos(c.get('descuentos'))} (ya restados del total)")
     if eq:
