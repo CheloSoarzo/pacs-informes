@@ -300,6 +300,25 @@ ecografías en JPEG) no se tocan.
 - Cada noche (01:15) cron repasa con verificación lo que haya quedado sin comprimir. Registro en
   `/var/log/pacs-comprimir.log`.
 
+### Disco frío (HDD) para los estudios antiguos
+
+Un disco HDD de Vultr (Block Storage), compartido por todos los PACS del servidor, montado en `/mnt/frio` con una
+carpeta por PACS. Cada mes se pasan ahí los estudios de meses anteriores: siguen apareciendo igual en la lista,
+el visor y el portal, solo se abren un poco más lento. Lo nuevo siempre llega al disco rápido.
+
+- Qué pasa: estudios de meses anteriores al mes en curso **ya informados** (firmados). Los pendientes se quedan
+  en el disco rápido hasta que se firmen. Los importados (antes del 01/10/2026, `FRIO_IMPORTADOS_HASTA`) pasan
+  siempre, y uno sin informe con más de 90 días (`FRIO_MAX_DIAS`) también.
+- `pacs disco-frio preparar`: formatea (solo si está vacío, pide escribir FORMATEAR) y monta el disco nuevo.
+- `pacs disco-frio activar <nombre>`: ese PACS empieza a usarlo (plugin Advanced Storage de Orthanc; reinicia
+  su Orthanc unos segundos). Los PACS que no lo activan no cambian.
+- `pacs disco-frio simular [nombre]`: qué se pasaría y cuánto pesa, sin mover nada.
+- `pacs disco-frio probar <nombre>`: pasa un solo estudio, para revisarlo en el visor.
+- `pacs disco-frio mover [nombre]`: pasa todo lo que corresponde. Cron: día 1 de cada mes a las 04:00.
+- `pacs disco-frio estado`: espacio de los dos discos y última pasada. El correo de las 08:00 muestra el disco
+  frío y avisa sobre el 80 %. El respaldo a Backblaze incluye el disco frío (`<pacs>/frio`).
+- Registro en `/var/log/pacs-disco-frio.log`.
+
 ### Actualización automática
 
 El servidor revisa GitHub cada 5 minutos (cron `pacs revisar`); si hay una versión nueva del PACS o de la agenda,

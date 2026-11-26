@@ -116,6 +116,14 @@ def datos(fecha):
             out["compresion"] = json.load(f)
     except (OSError, ValueError):
         pass
+    # Disco frío: lo escribe disco_frio.py cuando pasa estudios al HDD
+    try:
+        with open(os.path.join(Config.DATA_DIR, "disco-frio.json")) as f:
+            r = json.load(f)
+        h = [x for x in r.get("historial") or [] if not x.get("prueba")]
+        out["frio"] = {"estudios": len(r.get("movidos") or {}), "ultimo": h[-1] if h else None}
+    except (OSError, ValueError):
+        pass
     try:
         st = _get("/statistics")
         out["imagenes_mb"] = st.get("TotalDiskSizeMB")
@@ -139,6 +147,19 @@ def _mb(m):
     m = float(m or 0)
     t = f"{m / 1024:,.1f} GB" if m >= 1024 else f"{m:,.0f} MB"
     return t.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _linea_frio(nom, p, fecha, avisos, lineas):
+    """Solo el día que se pasaron estudios al disco frío (día 1 de cada mes) o si hubo problemas."""
+    u = (p.get("frio") or {}).get("ultimo")
+    if not u or (u.get("fecha") or "")[:10] < fecha:
+        return
+    txt = (f"{nom}: se pasaron al disco frío {u.get('estudios', 0)} estudios de meses anteriores "
+           f"({_gb(u.get('bytes') or 0)}) · {u.get('esperan', 0)} siguen en el disco rápido esperando informe")
+    lineas.append(txt)
+    if u.get("errores"):
+        avisos.append(f"{nom}: al pasar estudios al disco frío hubo {u['errores']} tandas con problemas "
+                      f"(se reintenta el próximo mes; detalle: /var/log/pacs-disco-frio.log)")
 
 
 def _linea_compresion(nom, p, fecha, avisos, lineas):
@@ -292,6 +313,11 @@ def armar(info):
     pct = round(100 * usado / total) if total else 0
     (avisos if pct >= 80 else lineas).append(
         f"Disco del servidor: {pct} % usado ({_gb(total - usado)} libres de {_gb(total)})")
+    ft, fu = srv.get("frio_total") or 0, srv.get("frio_usado") or 0
+    if ft:
+        fpct = round(100 * fu / ft)
+        (avisos if fpct >= 80 else lineas).append(
+            f"Disco frío (HDD): {fpct} % usado ({_gb(ft - fu)} libres de {_gb(ft)})")
     r = info.get("respaldo") or {}
     if not r.get("configurado"):
         avisos.append("Respaldo externo: no está configurado")
@@ -317,6 +343,7 @@ def armar(info):
             lineas.append(f"{nom}: {p.get('dictados_pendientes', 0)} dictados por transcribir · "
                           f"{p.get('por_validar', 0)} informes por validar")
         _linea_compresion(nom, p, fecha, avisos, lineas)
+        _linea_frio(nom, p, fecha, avisos, lineas)
         if p.get("visor_falla"):
             avisos.append(f"{nom}: {len(p['visor_falla'])} estudios del día que el visor diagnóstico no abre")
         hoy = datetime.strptime(fecha, "%Y-%m-%d").date()

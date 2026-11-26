@@ -48,6 +48,13 @@
 #   pacs comprimir --reparar-visor  repara el caché del visor diagnóstico (error «Something went wrong»)
 #   pacs comprimir --descomprimir-fuji devuelve a sin comprimir las imágenes de CR Fujifilm (si hubiera que volver atrás)
 #   pacs comprimir <nombre> --probar-fuji  prueba: comprime (verificado) un solo estudio de CR Fujifilm para revisarlo
+#   pacs disco-frio preparar   formatea (solo si está vacío) y monta en /mnt/frio el disco HDD agregado en Vultr
+#   pacs disco-frio activar <nombre>   el PACS empieza a usar el disco frío (reinicia su Orthanc ~1 minuto)
+#   pacs disco-frio simular [nombre]   muestra qué estudios se pasarían y cuánto pesan, sin mover nada
+#   pacs disco-frio probar <nombre>    pasa un solo estudio, para revisarlo en el visor
+#   pacs disco-frio mover [nombre]     pasa al HDD los estudios de meses anteriores ya informados
+#                              (cron: día 1 de cada mes a las 04:00). Se siguen viendo igual, un poco más lento
+#   pacs disco-frio estado     espacio del disco frío y última vez que se pasaron estudios
 #   pacs auto-actualizar si|no|estado   el servidor revisa GitHub cada 5 minutos y, si hay una versión nueva
 #                              del PACS o de la agenda, se actualiza solo (viene activado)
 #   pacs base                  (interno) crea la red compartida y la entrada web HTTPS
@@ -61,6 +68,7 @@ CRON_FILE="${PACS_CRON:-/etc/cron.d/pacs}"
 COMPOSE_INST="$CODIGO/docker-compose.instancia.yml"
 COMPOSE_PROXY="$CODIGO/docker-compose.proxy.yml"
 PUERTO_INICIAL=46429
+FRIO_BASE="${PACS_FRIO:-/mnt/frio}"   # disco frío (HDD de Vultr): una carpeta por PACS
 
 error() { echo "Error: $*" >&2; exit 1; }
 leer() { { grep -E "^$2=" "$1" 2>/dev/null || true; } | tail -n1 | cut -d= -f2-; }
@@ -72,8 +80,10 @@ dc() {  # docker compose de un PACS (con su agenda, si tiene)
   local n="$1"; shift
   local perfiles=""
   [ -n "$(leer "$INST/$n/.env" AGENDA_DOMINIO)" ] && perfiles="agenda"
-  INSTANCIA_DIR="$INST/$n" AGENDA_CODIGO="$AGENDA_CODIGO" COMPOSE_PROFILES="$perfiles" \
-    docker compose -p "pacs-$n" -f "$COMPOSE_INST" --env-file "$INST/$n/.env" "$@"
+  local extra=()   # disco frío (HDD) solo en los PACS que lo activaron
+  [ "$(leer "$INST/$n/.env" FRIO)" = "true" ] && extra=(-f "$CODIGO/docker-compose.frio.yml")
+  INSTANCIA_DIR="$INST/$n" AGENDA_CODIGO="$AGENDA_CODIGO" COMPOSE_PROFILES="$perfiles" FRIO_DIR="$FRIO_BASE/$n" \
+    docker compose -p "pacs-$n" -f "$COMPOSE_INST" "${extra[@]}" --env-file "$INST/$n/.env" "$@"
 }
 proxy() { INSTANCIAS_DIR="$INST" docker compose -p pacs-proxy -f "$COMPOSE_PROXY" "$@"; }
 # Transcripción automática de dictados (un solo contenedor para todos los PACS)
@@ -526,9 +536,14 @@ cmd_estado() {
   mkdir -p "$dir"
   copiar_logos
   read -r total usado <<<"$(df -B1 --output=size,used "$INST" | tail -n1)"
+  local frio="" ftotal=0 fusado=0
+  if mountpoint -q "$FRIO_BASE" 2>/dev/null; then
+    read -r ftotal fusado <<<"$(df -B1 --output=size,used "$FRIO_BASE" | tail -n1)"
+    frio=",\"frio_total\":${ftotal:-0},\"frio_usado\":${fusado:-0}"
+  fi
   {
-    printf '{"generado":"%s","version":"%s","servidor":{"ip":"%s","disco_total":%s,"disco_usado":%s},"pacs":[' \
-      "$(date '+%F %T')" "$(js "$(version_sistema)")" "$(js "$(ip_publica)")" "${total:-0}" "${usado:-0}"
+    printf '{"generado":"%s","version":"%s","servidor":{"ip":"%s","disco_total":%s,"disco_usado":%s%s},"pacs":[' \
+      "$(date '+%F %T')" "$(js "$(version_sistema)")" "$(js "$(ip_publica)")" "${total:-0}" "${usado:-0}" "$frio"
     for n in $(instancias); do
       local e="$INST/$n/.env" u datos creado cuota activo=true
       u="$(du -sb "$INST/$n/data" 2>/dev/null | cut -f1)"
@@ -551,6 +566,11 @@ cmd_estado() {
     date +%F > /var/lib/pacs-aviso-disco
     avisar "Disco del servidor al $(( 100 * usado / total )) %" "El disco del servidor está al $(( 100 * usado / total )) % de su capacidad.
 Conviene agregar un disco lento (HDD) en Vultr y mover las imágenes antiguas antes de que se llene."
+  fi
+  if [ "${ftotal:-0}" -gt 0 ] && [ $(( 100 * fusado / ftotal )) -ge 80 ] && [ "$(cat /var/lib/pacs-aviso-frio 2>/dev/null)" != "$(date +%F)" ]; then
+    date +%F > /var/lib/pacs-aviso-frio
+    avisar "Disco frío al $(( 100 * fusado / ftotal )) %" "El disco frío (HDD) está al $(( 100 * fusado / ftotal )) % de su capacidad.
+Agrándalo desde el panel de Vultr (Block Storage → Resize) y luego corre: sudo resize2fs \$(findmnt -no SOURCE $FRIO_BASE)"
   fi
 }
 
@@ -752,6 +772,10 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 15 20 * * 6 root pacs resumen-caja --semana >> /var/log/pacs-resumen.log 2>&1
 30 20 28-31 * * root pacs resumen-caja --mes --solo-fin-de-mes >> /var/log/pacs-resumen.log 2>&1
 0 5 1 * * root pacs respaldo-probar >> /var/log/pacs-respaldo.log 2>&1
+# Día 1 de cada mes 04:00: los estudios de meses anteriores ya informados pasan al disco frío (si está activo)
+0 4 1 * * root pacs disco-frio mover --cron >> /var/log/pacs-disco-frio.log 2>&1
+# Domingo 04:30: borra versiones viejas de Docker que quedan de las actualizaciones (no toca nada en uso)
+30 4 * * 0 root docker image prune -af --filter until=168h >/dev/null 2>&1; docker builder prune -af --filter until=168h >/dev/null 2>&1
 CRON
   if [ "$CRON_FILE" = /etc/cron.d/pacs ]; then rm -f /etc/cron.d/pacs-firewall /etc/cron.d/pacs-respaldo; fi
 }
@@ -1060,6 +1084,14 @@ respaldo_remoto() {
     # Imágenes: los archivos que guarda Orthanc (el índice va en las bases).
     # Solo las que llevan al menos 3 horas guardadas: la compresión de las 02:00 toma estudios con 2 horas sin cambios,
     # así un estudio que llega de madrugada no se sube sin comprimir; se sube la noche siguiente, ya comprimido.
+    # Disco frío primero: así un estudio que pasó al HDD ya está arriba antes de que se borre de «imagenes»
+    if [ "$(leer "$INST/$n/.env" FRIO)" = "true" ] && [ -d "$FRIO_BASE/$n" ]; then
+      if mountpoint -q "$FRIO_BASE"; then
+        rclone sync "$FRIO_BASE/$n" "${REMOTO}$n/frio" "${opciones[@]}" 2>&1 | tail -3 || fallas=$((fallas+1))
+      else
+        echo "[$n] el disco frío no está montado en $FRIO_BASE: no se respalda"; fallas=$((fallas+1))
+      fi
+    fi
     [ -d "$INST/$n/data/orthanc" ] && { rclone sync "$INST/$n/data/orthanc" "${REMOTO}$n/imagenes" --min-age 3h "${opciones[@]}" 2>&1 \
       | tail -3 || fallas=$((fallas+1)); }
     # Informes: audios de los dictados, logos, firmas (la base va aparte, copiada sin cortes)
@@ -1177,6 +1209,159 @@ Revisar: pacs respaldo-probar"
   [ "$mal" = 0 ]
 }
 
+# ---------- Disco frío (HDD de Vultr) ----------
+# Un solo disco para todos los PACS, montado en /mnt/frio, con una carpeta por PACS. Cada mes se pasan ahí los
+# estudios de meses anteriores ya informados (informes/disco_frio.py). Se siguen viendo igual, un poco más lento.
+frio_py() {  # frio_py <nombre> <args...>: corre disco_frio.py dentro de la app de ese PACS
+  local n="$1"; shift
+  docker exec "pacs-$n-informes-1" python disco_frio.py "$@"
+}
+frio_activo() { [ "$(leer "$INST/$1/.env" FRIO)" = "true" ]; }
+
+cmd_disco_frio() {
+  local accion="${1:-estado}"; shift || true
+  case "$accion" in
+    preparar) frio_preparar "$@";;
+    activar) frio_activar "$@";;
+    desactivar) frio_desactivar "$@";;
+    simular) frio_recorrer --simular "$@";;
+    probar) [ -n "${1:-}" ] || error "uso: pacs disco-frio probar <nombre>"; frio_recorrer --probar "$@";;
+    mover) frio_recorrer --mover "$@";;
+    estado) frio_estado;;
+    *) error "uso: pacs disco-frio preparar|activar <nombre>|simular [nombre]|probar <nombre>|mover [nombre]|estado";;
+  esac
+}
+
+frio_preparar() {
+  if mountpoint -q "$FRIO_BASE"; then
+    echo "El disco frío ya está montado en $FRIO_BASE:"; df -h "$FRIO_BASE" | tail -n1
+    for n in $(instancias); do mkdir -p "$FRIO_BASE/$n"; done
+    return 0
+  fi
+  local raiz d cand=() disco="${1:-}"
+  raiz="$(lsblk -no PKNAME "$(findmnt -no SOURCE /)" 2>/dev/null | head -n1)"
+  if [ -z "$disco" ]; then
+    # Discos sin particiones, sin montar y que no son el del sistema
+    while read -r d; do
+      [ "$(basename "$d")" = "$raiz" ] && continue
+      [ "$(lsblk -no NAME "$d" | wc -l)" = 1 ] || continue
+      [ -z "$(lsblk -no MOUNTPOINT "$d" | tr -d '[:space:]')" ] || continue
+      cand+=("$d")
+    done < <(lsblk -dpno NAME,TYPE | awk '$2=="disk"{print $1}')
+    [ "${#cand[@]}" -gt 0 ] || error "no veo el disco nuevo. En Vultr: Block Storage → el disco «frio» → Attach a este servidor"
+    if [ "${#cand[@]}" -gt 1 ]; then
+      lsblk -dpo NAME,SIZE,TYPE "${cand[@]}"
+      error "hay más de un disco libre: indica cuál, ej. pacs disco-frio preparar ${cand[0]}"
+    fi
+    disco="${cand[0]}"
+  fi
+  [ -b "$disco" ] || error "$disco no es un disco"
+  [ "$(basename "$disco")" != "$raiz" ] || error "$disco es el disco del sistema"
+  local tipo; tipo="$(blkid -o value -s TYPE "$disco" 2>/dev/null || true)"
+  echo "Disco: $disco · $(lsblk -dno SIZE "$disco") · formato actual: ${tipo:-ninguno (vacío)}"
+  if [ -z "$tipo" ]; then
+    echo "Se va a FORMATEAR (ext4). Es el disco nuevo y vacío; nada más del servidor se toca."
+    local r; read -rp "Escribe FORMATEAR para seguir: " r
+    [ "$r" = "FORMATEAR" ] || error "cancelado"
+    mkfs.ext4 -q -L frio -m 1 "$disco" || error "no se pudo formatear"
+  elif [ "$tipo" != "ext4" ]; then
+    error "el disco ya tiene datos ($tipo): no se toca. Revísalo antes"
+  else
+    echo "Ya tiene formato ext4: se monta tal como está (no se borra nada)."
+  fi
+  local uuid; uuid="$(blkid -o value -s UUID "$disco")"
+  mkdir -p "$FRIO_BASE"
+  # nofail: si algún día el disco no está, el servidor arranca igual
+  grep -q "UUID=$uuid " /etc/fstab || echo "UUID=$uuid $FRIO_BASE ext4 defaults,nofail,noatime 0 2" >> /etc/fstab
+  systemctl daemon-reload 2>/dev/null || true
+  mount "$FRIO_BASE" || error "no se pudo montar en $FRIO_BASE"
+  for n in $(instancias); do mkdir -p "$FRIO_BASE/$n"; done
+  echo "Listo: disco frío montado en $FRIO_BASE"; df -h "$FRIO_BASE" | tail -n1
+  echo "Siguiente paso, PACS por PACS: pacs disco-frio activar <nombre>   (primero la demo para probar)"
+}
+
+frio_activar() {
+  local n="${1:-}"; existe "$n"
+  mountpoint -q "$FRIO_BASE" || error "el disco frío no está montado (pacs disco-frio preparar)"
+  [ -f "$CODIGO/docker-compose.frio.yml" ] || error "falta docker-compose.frio.yml (pacs actualizar)"
+  mkdir -p "$FRIO_BASE/$n"
+  poner "$INST/$n/.env" FRIO true
+  echo "Reiniciando el Orthanc de $n (unos segundos sin recibir estudios; los equipos reintentan solos)..."
+  dc "$n" up -d orthanc
+  local i
+  for i in $(seq 40); do
+    sleep 3
+    if docker exec "pacs-$n-informes-1" python -c "import disco_frio,sys; sys.exit(0 if disco_frio.plugin_activo() else 1)" 2>/dev/null; then
+      echo "Listo: $n ya puede usar el disco frío. Lo nuevo se sigue guardando en el disco rápido."
+      echo "Para ver qué se pasaría: pacs disco-frio simular $n   · para probar con un estudio: pacs disco-frio probar $n"
+      return 0
+    fi
+  done
+  echo "El Orthanc de $n no activó el disco frío: se vuelve atrás."
+  poner "$INST/$n/.env" FRIO false
+  dc "$n" up -d orthanc
+  error "no se activó. Revisa: docker logs pacs-$n-orthanc-1 --tail 50"
+}
+
+frio_desactivar() {
+  local n="${1:-}" movidos; existe "$n"
+  frio_activo "$n" || { echo "$n no tiene el disco frío activo."; return 0; }
+  movidos="$(frio_py "$n" --contar 2>/dev/null || echo error)"
+  [ "$movidos" = 0 ] || error "$n ya tiene estudios en el disco frío ($movidos): si se desactiva, dejarían de abrirse"
+  poner "$INST/$n/.env" FRIO false
+  dc "$n" up -d orthanc
+  echo "Disco frío desactivado en $n."
+}
+
+frio_recorrer() {
+  local modo="$1" objetivo="" cron="" n hubo=""; shift
+  for a in "$@"; do case "$a" in --cron) cron=1;; *) objetivo="$a";; esac; done
+  if [ "$modo" != "--simular" ]; then
+    mountpoint -q "$FRIO_BASE" || {
+      [ -n "$cron" ] && ! grep -q "^FRIO=true" "$INST"/*/.env 2>/dev/null && return 0   # nadie lo usa todavía
+      avisar "Disco frío no montado" "El disco frío no está montado en $FRIO_BASE: este mes no se pasaron estudios.
+Revisa en Vultr que el disco siga conectado y corre: sudo mount $FRIO_BASE"
+      error "el disco frío no está montado en $FRIO_BASE"; }
+    exec 8>/var/lock/pacs-disco-frio.lock
+    flock -n 8 || { echo "Ya se están pasando estudios al disco frío."; return 0; }
+    exec 9>/var/lock/pacs-comprimir.lock
+    flock -w 10800 9 || error "la compresión lleva más de 3 horas: se reintenta otro día"   # no a la vez que la compresión
+  fi
+  for n in $(instancias); do
+    [ -n "$objetivo" ] && [ "$n" != "$objetivo" ] && continue
+    [ "$(leer "$INST/$n/.env" ACTIVO)" = "false" ] && continue
+    if [ "$modo" != "--simular" ] && ! frio_activo "$n"; then
+      [ -n "$objetivo" ] && error "$n no tiene el disco frío activo (pacs disco-frio activar $n)"
+      continue
+    fi
+    hubo=1
+    echo "== $n · $(date '+%d/%m/%Y %H:%M')"
+    frio_py "$n" "$modo" || echo "[$n] no terminó bien"
+  done
+  [ -n "$hubo" ] || [ -n "$cron" ] || [ -z "$objetivo" ] || error "no existe el PACS «$objetivo» (mira: pacs lista)"
+  if [ "$modo" != "--simular" ] && mountpoint -q "$FRIO_BASE"; then
+    df -h "$FRIO_BASE" | awk 'NR==2 {print "Disco frío: usado " $3 " de " $2 " (libre " $4 ")"}'
+  fi
+}
+
+frio_estado() {
+  if mountpoint -q "$FRIO_BASE"; then
+    df -h "$FRIO_BASE" | awk 'NR==2 {print "Disco frío: usado " $3 " de " $2 " (libre " $4 ", " $5 ")"}'
+  else
+    echo "Disco frío: no está montado en $FRIO_BASE (pacs disco-frio preparar)"
+  fi
+  df -h "$INST" | awk 'NR==2 {print "Disco rápido del servidor: usado " $3 " de " $2 " (libre " $4 ", " $5 ")"}'
+  local n
+  for n in $(instancias); do
+    if frio_activo "$n"; then
+      printf '  %-12s activo · en el HDD: %s · %s\n' "$n" "$(du -sh "$FRIO_BASE/$n" 2>/dev/null | cut -f1)" \
+        "$(frio_py "$n" --ultimo 2>/dev/null || echo 'sin datos')"
+    else
+      printf '  %-12s sin disco frío\n' "$n"
+    fi
+  done
+}
+
 c="${1:-}"; shift || true
 case "$c" in
   base) cmd_base;;
@@ -1213,6 +1398,7 @@ case "$c" in
   dicom-modo) cmd_dicom_modo "$@";;
   dictado-ia) cmd_dictado_ia "$@";;
   comprimir) cmd_comprimir "$@";;
+  disco-frio) cmd_disco_frio "$@";;
   auto-actualizar) cmd_auto_actualizar "$@";;
   *) sed -n '2,30p' "$0"; exit 1;;
 esac

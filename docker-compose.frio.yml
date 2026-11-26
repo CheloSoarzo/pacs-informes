@@ -1,0 +1,27 @@
+# Disco frío (HDD) de un PACS: se suma a docker-compose.instancia.yml solo en los PACS que lo tienen activo
+# (FRIO=true en su .env, con `pacs disco-frio activar <nombre>`). Los demás PACS no cambian en nada.
+#
+# Orthanc sigue guardando lo nuevo en el disco rápido ("rapido" = su carpeta de siempre). Cada mes,
+# `pacs disco-frio mover` pasa los estudios de meses anteriores ya informados a "frio" (plugin Advanced Storage):
+# siguen apareciendo igual en la lista, el visor y el portal, solo se abren un poco más lento.
+# Los archivos guardados antes de activar el plugin se siguen leyendo desde la carpeta de siempre.
+
+services:
+  orthanc:
+    volumes:
+      - ${FRIO_DIR}:/var/lib/orthanc/frio
+    environment:
+      ADVANCED_STORAGE_PLUGIN_ENABLED: "true"
+      ORTHANC_JSON: |
+        {
+          "AdvancedStorage": {
+            "Enable": true,
+            "MultipleStorages": {
+              "Storages": {
+                "rapido": "/var/lib/orthanc/db",
+                "frio": "/var/lib/orthanc/frio"
+              },
+              "CurrentWriteStorage": "rapido"
+            }
+          }
+        }
